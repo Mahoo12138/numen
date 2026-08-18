@@ -56,7 +56,15 @@ describe('Numen runtime', () => {
       checks: {
         database: { migrationVersion: 5 },
         automations: { ready: true, count: 1 },
-        connections: { ready: true, total: 0, enabled: 0, unavailable: 0 },
+        connections: {
+          ready: true,
+          total: 0,
+          enabled: 0,
+          unavailable: 0,
+          starting: 0,
+          runtimeReady: 0,
+          errors: 0,
+        },
         scheduler: {
           ready: true,
           queuedRuns: 0,

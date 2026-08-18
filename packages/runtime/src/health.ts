@@ -24,6 +24,9 @@ export interface ReadinessDocument {
       total: number
       enabled: number
       unavailable: number
+      starting: number
+      runtimeReady: number
+      errors: number
     }
     automations: {
       ready: boolean

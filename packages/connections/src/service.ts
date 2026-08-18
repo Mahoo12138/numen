@@ -15,6 +15,28 @@ export interface ConnectionAdapterDefinition<Config = Record<string, NumenValue>
   credentialType?: string
 }
 
+export interface ConnectionRuntime {
+  close?(): void | Promise<void>
+}
+
+export interface ConnectionAdapterOpenContext {
+  connection: Connection
+  signal: AbortSignal
+}
+
+export interface ConnectionAdapterProvider {
+  open(context: ConnectionAdapterOpenContext): Promise<ConnectionRuntime | void>
+}
+
+export type ConnectionRuntimeStatus = 'STOPPED' | 'STARTING' | 'READY' | 'ERROR' | 'STOPPING'
+
+export interface ConnectionRuntimeState {
+  connectionId: string
+  status: ConnectionRuntimeStatus
+  generation?: number
+  error?: string
+}
+
 export interface Connection {
   id: string
   name: string
@@ -49,6 +71,25 @@ export interface ConnectionHealth {
   total: number
   enabled: number
   unavailable: number
+  starting: number
+  runtimeReady: number
+  errors: number
+}
+
+interface AdapterEntry {
+  definition: ConnectionAdapterDefinition
+  provider?: ConnectionAdapterProvider
+}
+
+interface ActiveRuntime {
+  connectionId: string
+  generation: number
+  provider: ConnectionAdapterProvider
+  controller: AbortController
+  status: Exclude<ConnectionRuntimeStatus, 'STOPPED'>
+  runtime?: ConnectionRuntime
+  error?: string
+  stopTask?: Promise<void>
 }
 
 interface ConnectionRow {
@@ -102,16 +143,20 @@ export class ConnectionService extends Service {
   static inject = ['database']
 
   private ready = false
-  private readonly adapters = new Map<string, ConnectionAdapterDefinition>()
+  private readonly adapters = new Map<string, AdapterEntry>()
+  private readonly runtimes = new Map<string, ActiveRuntime>()
 
   constructor(ctx: Context) {
     super(ctx, 'connections')
   }
 
   async *[Service.init]() {
+    this.ctx.on('numen/connection-change', () => this.queueReconcile())
     this.ready = true
-    yield () => {
+    this.queueReconcile()
+    yield async () => {
       this.ready = false
+      await Promise.all([...this.runtimes.values()].map(runtime => this.stopRuntime(runtime)))
       this.adapters.clear()
     }
   }
@@ -124,7 +169,7 @@ export class ConnectionService extends Service {
     const key = adapterKey(definition)
     if (this.adapters.has(key)) throw new Error(`connection adapter already defined: ${key}`)
     return owner.effect(() => {
-      this.adapters.set(key, definition)
+      this.adapters.set(key, { definition })
       this.emitAdapterConnections(definition)
       return () => {
         this.adapters.delete(key)
@@ -133,12 +178,37 @@ export class ConnectionService extends Service {
     }, `connections.defineAdapter(${JSON.stringify(key)})`)
   }
 
+  provideAdapter(
+    owner: Context,
+    ref: ConnectionAdapterRef,
+    provider: ConnectionAdapterProvider,
+  ): () => void {
+    const key = adapterKey(ref)
+    const entry = this.adapters.get(key)
+    if (!entry) throw new Error(`connection adapter not found: ${key}`)
+    if (entry.provider) throw new Error(`connection adapter provider already registered: ${key}`)
+    return owner.effect(() => {
+      entry.provider = provider
+      this.emitAdapterConnections(ref)
+      return () => {
+        delete entry.provider
+        this.emitAdapterConnections(ref)
+      }
+    }, `connections.provideAdapter(${JSON.stringify(key)})`)
+  }
+
   getAdapter(ref: ConnectionAdapterRef): ConnectionAdapterDefinition | undefined {
-    return this.adapters.get(adapterKey(ref))
+    return this.adapters.get(adapterKey(ref))?.definition
   }
 
   listAdapters(): ConnectionAdapterDefinition[] {
-    return [...this.adapters.values()].sort((a, b) => adapterKey(a).localeCompare(adapterKey(b)))
+    return [...this.adapters.values()]
+      .map(entry => entry.definition)
+      .sort((a, b) => adapterKey(a).localeCompare(adapterKey(b)))
+  }
+
+  resolveAdapterProvider(ref: ConnectionAdapterRef): ConnectionAdapterProvider | undefined {
+    return this.adapters.get(adapterKey(ref))?.provider
   }
 
   create(input: CreateConnectionInput): Connection {
@@ -219,12 +289,53 @@ export class ConnectionService extends Service {
 
   health(): ConnectionHealth {
     const connections = this.list()
+    const runtimes = [...this.runtimes.values()]
     return {
       ready: this.ready,
       total: connections.length,
       enabled: connections.filter(connection => connection.enabled).length,
       unavailable: connections.filter(connection => connection.enabled && !connection.adapterAvailable).length,
+      starting: runtimes.filter(runtime => runtime.status === 'STARTING').length,
+      runtimeReady: runtimes.filter(runtime => runtime.status === 'READY').length,
+      errors: runtimes.filter(runtime => runtime.status === 'ERROR').length,
     }
+  }
+
+  getRuntimeState(connectionId: string): ConnectionRuntimeState {
+    const runtime = this.runtimes.get(connectionId)
+    if (!runtime) return { connectionId, status: 'STOPPED' }
+    return {
+      connectionId,
+      status: runtime.status,
+      generation: runtime.generation,
+      ...(runtime.error ? { error: runtime.error } : {}),
+    }
+  }
+
+  async reconcile(): Promise<void> {
+    const connections = new Map(this.list().map(connection => [connection.id, connection]))
+    const stops: Promise<void>[] = []
+    for (const runtime of this.runtimes.values()) {
+      const connection = connections.get(runtime.connectionId)
+      const provider = connection ? this.resolveAdapterProvider(connection.adapter) : undefined
+      if (
+        !connection?.enabled
+        || !provider
+        || provider !== runtime.provider
+        || connection.generation !== runtime.generation
+      ) {
+        stops.push(this.stopRuntime(runtime))
+      }
+    }
+    await Promise.all(stops)
+
+    const starts: Promise<void>[] = []
+    for (const connection of connections.values()) {
+      if (!connection.enabled || this.runtimes.has(connection.id)) continue
+      const provider = this.resolveAdapterProvider(connection.adapter)
+      if (provider) starts.push(this.openRuntime(connection, provider))
+    }
+    await Promise.all(starts)
   }
 
   private requireAdapter(ref: ConnectionAdapterRef): ConnectionAdapterDefinition {
@@ -265,7 +376,7 @@ export class ConnectionService extends Service {
       ...(row.credential_id ? { credentialId: row.credential_id } : {}),
       enabled: !!row.enabled,
       generation: row.generation,
-      adapterAvailable: this.adapters.has(adapterKey(adapter)),
+      adapterAvailable: !!this.adapters.get(adapterKey(adapter))?.provider,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }
@@ -276,6 +387,61 @@ export class ConnectionService extends Service {
       SELECT id FROM connections WHERE adapter_id = ? AND adapter_version = ?
     `).all(ref.id, ref.version) as Array<{ id: string }>
     for (const row of rows) this.ctx.emit('numen/connection-change', row.id)
+  }
+
+  private queueReconcile(): void {
+    if (!this.ready) return
+    queueMicrotask(() => {
+      this.reconcile().catch(() => undefined)
+    })
+  }
+
+  private async openRuntime(connection: Connection, provider: ConnectionAdapterProvider): Promise<void> {
+    const runtime: ActiveRuntime = {
+      connectionId: connection.id,
+      generation: connection.generation,
+      provider,
+      controller: new AbortController(),
+      status: 'STARTING',
+    }
+    this.runtimes.set(connection.id, runtime)
+    try {
+      const opened = await provider.open({ connection, signal: runtime.controller.signal })
+      const current = this.get(connection.id)
+      if (
+        runtime.controller.signal.aborted
+        || this.runtimes.get(connection.id) !== runtime
+        || !current?.enabled
+        || current.generation !== runtime.generation
+        || this.resolveAdapterProvider(current.adapter) !== provider
+      ) {
+        await opened?.close?.()
+        if (this.runtimes.get(connection.id) === runtime) this.runtimes.delete(connection.id)
+        return
+      }
+      runtime.runtime = opened ?? {}
+      runtime.status = 'READY'
+    } catch (error) {
+      if (runtime.controller.signal.aborted || this.runtimes.get(connection.id) !== runtime) return
+      runtime.status = 'ERROR'
+      runtime.error = error instanceof Error ? error.message : String(error)
+    }
+  }
+
+  private stopRuntime(runtime: ActiveRuntime): Promise<void> {
+    if (runtime.stopTask) return runtime.stopTask
+    const task = (async () => {
+      if (this.runtimes.get(runtime.connectionId) !== runtime) return
+      runtime.status = 'STOPPING'
+      if (!runtime.controller.signal.aborted) runtime.controller.abort()
+      try {
+        await runtime.runtime?.close?.()
+      } finally {
+        if (this.runtimes.get(runtime.connectionId) === runtime) this.runtimes.delete(runtime.connectionId)
+      }
+    })()
+    runtime.stopTask = task
+    return task
   }
 }
 
