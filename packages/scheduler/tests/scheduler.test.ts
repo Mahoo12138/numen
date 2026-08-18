@@ -32,6 +32,16 @@ function actionDefinition(retrySafe = true): CapabilityDefinition {
   }
 }
 
+const triggerDefinition: CapabilityDefinition = {
+  id: 'test:event',
+  version: 1,
+  kind: 'trigger',
+  title: 'Event',
+  input: z.object({ channel: z.string().required() }),
+  output: z.object({ value: z.string().required() }),
+  semantics: { sideEffect: false, idempotent: true, retrySafe: true },
+}
+
 async function createContext(
   databasePath: string,
   definition = actionDefinition(),
@@ -41,6 +51,7 @@ async function createContext(
   await root.plugin(DatabaseService, { path: databasePath })
   await root.plugin(CapabilityRegistry)
   root.capabilities.define(root, definition)
+  root.capabilities.define(root, triggerDefinition)
   if (invoke) {
     root.capabilities.provide(root, definition, {
       async invoke({ input, signal }) {
@@ -88,6 +99,59 @@ const linearSource: AutomationSource = {
 }
 
 describe('SchedulerService', () => {
+  it('durably accepts and deduplicates active trigger emissions', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'numen-scheduler-'))
+    directories.push(directory)
+    const root = await createContext(join(directory, 'numen.db'), actionDefinition(), async input => input)
+    const source: AutomationSource = {
+      triggers: [{
+        id: 'event',
+        capability: { id: 'test:event', version: 1 },
+        config: { channel: 'updates' },
+      }],
+      flow: {
+        type: 'capability',
+        id: 'record',
+        capability: { id: 'test:record', version: 1 },
+        input: { value: { type: 'ref', path: 'trigger.value' } },
+      },
+    }
+    const automationId = publish(root, source)
+    const automation = root.automations.setEnabled(automationId, true)
+    const binding = {
+      automationId,
+      revisionId: automation.activeRevisionId!,
+      activationGeneration: automation.activationGeneration,
+      triggerId: 'event',
+      capability: { id: 'test:event', version: 1 },
+      config: { channel: 'updates' },
+      connectionIds: {},
+    }
+
+    const accepted = root.scheduler.acceptTrigger(binding, {
+      data: { value: 'durable' },
+      eventId: 'event-1',
+      subject: 'subject-1',
+      checkpoint: { cursor: 1 },
+    })
+    expect(accepted).toMatchObject({ status: 'accepted', runId: expect.any(String) })
+    expect(root.scheduler.acceptTrigger(binding, {
+      data: { value: 'ignored duplicate' },
+      eventId: 'event-1',
+    })).toEqual({ status: 'duplicate', runId: accepted.runId })
+    expect(root.scheduler.acceptTrigger({ ...binding, activationGeneration: binding.activationGeneration - 1 }, {
+      data: { value: 'stale' },
+      eventId: 'event-2',
+    })).toEqual({ status: 'stale' })
+    expect((root.database.db.prepare('SELECT COUNT(*) AS count FROM trigger_events').get() as { count: number }).count)
+      .toBe(1)
+
+    await root.scheduler.dispatchUntilIdle()
+    expect(root.scheduler.getRun(accepted.runId!)?.status).toBe('COMPLETED')
+    expect(root.scheduler.getRun(accepted.runId!)?.trigger).toEqual({ value: 'durable' })
+    await root.fiber.dispose()
+  })
+
   it('executes Core IR durably, resolves step refs, waits, and journals every transition', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'numen-scheduler-'))
     directories.push(directory)

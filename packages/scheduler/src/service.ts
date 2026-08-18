@@ -11,6 +11,9 @@ import {
   type NumenValue,
   type Run,
   type RunEvent,
+  type TriggerAcceptance,
+  type TriggerBinding,
+  type TriggerEmission,
 } from '@numen/core'
 import '@numen/database'
 import { Service, type Context } from 'cordis'
@@ -225,6 +228,88 @@ export class SchedulerService extends Service {
     })
     if (this.autoDispatch) this.kick()
     return this.getRun(runId)!
+  }
+
+  acceptTrigger(binding: TriggerBinding, emission: TriggerEmission): TriggerAcceptance {
+    if (!isNumenValue(emission.data)) throw new TypeError('trigger data must be a Numen value')
+    if (emission.checkpoint !== undefined && !isNumenValue(emission.checkpoint)) {
+      throw new TypeError('trigger checkpoint must be a Numen value')
+    }
+    if (emission.eventId !== undefined && !emission.eventId.trim()) {
+      throw new TypeError('trigger eventId must not be empty')
+    }
+    if (emission.subject !== undefined && !emission.subject.trim()) {
+      throw new TypeError('trigger subject must not be empty')
+    }
+    const acceptedAt = new Date().toISOString()
+    const occurredAt = emission.occurredAt === undefined
+      ? acceptedAt
+      : new Date(emission.occurredAt).toISOString()
+    let accepted = false
+    const result = this.ctx.database.transaction((): TriggerAcceptance => {
+      const automation = this.ctx.database.db.prepare(`
+        SELECT enabled, active_revision_id, activation_generation
+        FROM automations WHERE id = ?
+      `).get(binding.automationId) as {
+        enabled: number
+        active_revision_id: string | null
+        activation_generation: number
+      } | undefined
+      if (
+        !automation?.enabled
+        || automation.active_revision_id !== binding.revisionId
+        || automation.activation_generation !== binding.activationGeneration
+      ) {
+        return { status: 'stale' }
+      }
+
+      if (emission.eventId !== undefined) {
+        const duplicate = this.ctx.database.db.prepare(`
+          SELECT run_id FROM trigger_events
+          WHERE revision_id = ? AND trigger_id = ? AND event_id = ?
+        `).get(binding.revisionId, binding.triggerId, emission.eventId) as { run_id: string } | undefined
+        if (duplicate) return { status: 'duplicate', runId: duplicate.run_id }
+      }
+
+      const runId = id('run')
+      const eventRowId = id('trigger')
+      this.ctx.database.db.prepare(`
+        INSERT INTO runs (
+          id, automation_id, revision_id, status, trigger_json, input_json, created_at
+        ) VALUES (?, ?, ?, 'QUEUED', ?, '{}', ?)
+      `).run(runId, binding.automationId, binding.revisionId, JSON.stringify(emission.data), acceptedAt)
+      this.ctx.database.db.prepare(`
+        INSERT INTO trigger_events (
+          id, automation_id, revision_id, activation_generation, trigger_id,
+          capability_id, capability_version, event_id, subject, data_json,
+          checkpoint_json, occurred_at, accepted_at, run_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        eventRowId,
+        binding.automationId,
+        binding.revisionId,
+        binding.activationGeneration,
+        binding.triggerId,
+        binding.capability.id,
+        binding.capability.version,
+        emission.eventId ?? null,
+        emission.subject ?? null,
+        JSON.stringify(emission.data),
+        emission.checkpoint === undefined ? null : JSON.stringify(emission.checkpoint),
+        occurredAt,
+        acceptedAt,
+        runId,
+      )
+      this.appendEvent(runId, 'RunAccepted', {
+        source: 'trigger',
+        triggerId: binding.triggerId,
+        ...(emission.eventId === undefined ? {} : { eventId: emission.eventId }),
+      }, acceptedAt)
+      accepted = true
+      return { status: 'accepted', runId }
+    })
+    if (accepted && this.autoDispatch) this.kick()
+    return result
   }
 
   cancelRun(runId: string, reason: CancellationReason = 'USER'): Run {

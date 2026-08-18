@@ -131,6 +131,36 @@ export const coreMigrations: readonly Migration[] = [
       `)
     },
   },
+  {
+    version: 4,
+    name: 'durable-trigger-events',
+    up(database) {
+      database.exec(`
+        CREATE TABLE trigger_events (
+          id TEXT PRIMARY KEY,
+          automation_id TEXT NOT NULL REFERENCES automations(id),
+          revision_id TEXT NOT NULL REFERENCES automation_revisions(id),
+          activation_generation INTEGER NOT NULL,
+          trigger_id TEXT NOT NULL,
+          capability_id TEXT NOT NULL,
+          capability_version INTEGER NOT NULL,
+          event_id TEXT,
+          subject TEXT,
+          data_json TEXT NOT NULL,
+          checkpoint_json TEXT,
+          occurred_at TEXT NOT NULL,
+          accepted_at TEXT NOT NULL,
+          run_id TEXT NOT NULL UNIQUE REFERENCES runs(id) ON DELETE CASCADE
+        );
+
+        CREATE UNIQUE INDEX trigger_events_dedupe_idx
+          ON trigger_events(revision_id, trigger_id, event_id)
+          WHERE event_id IS NOT NULL;
+        CREATE INDEX trigger_events_automation_idx
+          ON trigger_events(automation_id, accepted_at DESC);
+      `)
+    },
+  },
 ]
 
 export function runMigrations(

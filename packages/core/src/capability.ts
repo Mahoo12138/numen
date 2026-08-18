@@ -44,6 +44,7 @@ export interface TriggerBinding {
   revisionId: string
   activationGeneration: number
   triggerId: string
+  capability: CapabilityRef
   config: Record<string, NumenValue>
   connectionIds: Record<string, string>
 }
