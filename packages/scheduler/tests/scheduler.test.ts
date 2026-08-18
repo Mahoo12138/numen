@@ -35,7 +35,7 @@ function actionDefinition(retrySafe = true): CapabilityDefinition {
 async function createContext(
   databasePath: string,
   definition = actionDefinition(),
-  invoke?: (input: NumenValue) => Promise<NumenValue>,
+  invoke?: (input: NumenValue, signal: AbortSignal) => Promise<NumenValue>,
 ): Promise<Context> {
   const root = new Context()
   await root.plugin(DatabaseService, { path: databasePath })
@@ -43,8 +43,8 @@ async function createContext(
   root.capabilities.define(root, definition)
   if (invoke) {
     root.capabilities.provide(root, definition, {
-      async invoke({ input }) {
-        return invoke(input)
+      async invoke({ input, signal }) {
+        return invoke(input, signal)
       },
     })
   }
@@ -223,6 +223,140 @@ describe('SchedulerService', () => {
     })
     await restarted.scheduler.dispatchUntilIdle()
     expect(restarted.scheduler.getRun(run.id)?.status).toBe('RUNNING')
+    await restarted.fiber.dispose()
+  })
+
+  it('retries known failures as new Attempts and eventually completes', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'numen-scheduler-'))
+    directories.push(directory)
+    let calls = 0
+    const root = await createContext(join(directory, 'numen.db'), actionDefinition(), async input => {
+      calls += 1
+      if (calls < 3) throw new Error(`transient failure ${calls}`)
+      return input
+    })
+    const automationId = publish(root, {
+      triggers: [],
+      flow: {
+        type: 'capability',
+        id: 'record',
+        capability: { id: 'test:record', version: 1 },
+        input: { value: { type: 'literal', value: 'retry' } },
+        policy: { retry: { maxAttempts: 3, backoffMs: 0 } },
+      },
+    })
+
+    const run = root.scheduler.startManual(automationId)
+    await root.scheduler.dispatchUntilIdle()
+
+    expect(root.scheduler.getRun(run.id)?.status).toBe('COMPLETED')
+    expect(calls).toBe(3)
+    expect(root.scheduler.listAttempts(run.id).map(attempt => attempt.status))
+      .toEqual(['FAILED', 'FAILED', 'SUCCEEDED'])
+    expect(root.scheduler.listEvents(run.id).filter(event => event.type === 'ExecutionRetryScheduled'))
+      .toHaveLength(2)
+    await root.fiber.dispose()
+  })
+
+  it('blocks an unsafe timed-out Attempt as OUTCOME_UNKNOWN instead of retrying', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'numen-scheduler-'))
+    directories.push(directory)
+    const root = await createContext(join(directory, 'numen.db'), actionDefinition(false), async (_input, signal) => {
+      return new Promise((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+      })
+    })
+    const automationId = publish(root, {
+      triggers: [],
+      flow: {
+        type: 'capability',
+        id: 'record',
+        capability: { id: 'test:record', version: 1 },
+        input: { value: { type: 'literal', value: 'timeout' } },
+        policy: { timeoutMs: 5 },
+      },
+    })
+
+    const run = root.scheduler.startManual(automationId)
+    await root.scheduler.dispatchUntilIdle()
+
+    expect(root.scheduler.getRun(run.id)?.status).toBe('RUNNING')
+    expect(root.scheduler.listAttempts(run.id).map(attempt => attempt.status)).toEqual(['TIMED_OUT'])
+    expect(root.scheduler.listExecutions(run.id)[0]).toMatchObject({
+      status: 'BLOCKED',
+      blockedReason: 'OUTCOME_UNKNOWN',
+    })
+    await root.fiber.dispose()
+  })
+
+  it('propagates cancellation to an active invocation and persists terminal state', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'numen-scheduler-'))
+    directories.push(directory)
+    let markStarted: (() => void) | undefined
+    const started = new Promise<void>(resolve => {
+      markStarted = resolve
+    })
+    const root = await createContext(join(directory, 'numen.db'), actionDefinition(), async (_input, signal) => {
+      markStarted?.()
+      return new Promise((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+      })
+    })
+    const automationId = publish(root, {
+      triggers: [],
+      flow: {
+        type: 'capability',
+        id: 'record',
+        capability: { id: 'test:record', version: 1 },
+        input: { value: { type: 'literal', value: 'cancel' } },
+      },
+    })
+    const run = root.scheduler.startManual(automationId)
+    const dispatch = root.scheduler.dispatchUntilIdle()
+    await started
+
+    expect(root.scheduler.cancelRun(run.id)).toMatchObject({ status: 'CANCELLED', cancelReason: 'USER' })
+    await dispatch
+
+    expect(root.scheduler.listAttempts(run.id).map(attempt => attempt.status)).toEqual(['ABORTED'])
+    expect(root.scheduler.listExecutions(run.id).map(execution => execution.status)).toEqual(['CANCELLED'])
+    expect(root.scheduler.listEvents(run.id).map(event => event.type)).toEqual(expect.arrayContaining([
+      'RunCancellationRequested',
+      'ExecutionCancelled',
+      'RunCancelled',
+    ]))
+    await root.fiber.dispose()
+  })
+
+  it('finishes durable cancellation intent during restart recovery', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'numen-scheduler-'))
+    directories.push(directory)
+    const databasePath = join(directory, 'numen.db')
+    const root = await createContext(databasePath)
+    const automationId = publish(root, {
+      triggers: [],
+      flow: {
+        type: 'capability',
+        id: 'record',
+        capability: { id: 'test:record', version: 1 },
+        input: { value: { type: 'literal', value: 'recover-cancel' } },
+      },
+    })
+    const run = root.scheduler.startManual(automationId)
+    await root.scheduler.dispatchUntilIdle()
+    expect(root.scheduler.listExecutions(run.id)[0]?.status).toBe('BLOCKED')
+    root.database.db.prepare(`
+      UPDATE runs SET status = 'CANCELLING', cancel_reason = 'SHUTDOWN' WHERE id = ?
+    `).run(run.id)
+    await root.fiber.dispose()
+
+    const restarted = await createContext(databasePath)
+    expect(restarted.scheduler.getRun(run.id)).toMatchObject({
+      status: 'CANCELLED',
+      cancelReason: 'SHUTDOWN',
+    })
+    expect(restarted.scheduler.listExecutions(run.id)[0]?.status).toBe('CANCELLED')
+    expect(restarted.scheduler.listEvents(run.id).at(-1)?.type).toBe('RunCancelled')
     await restarted.fiber.dispose()
   })
 })

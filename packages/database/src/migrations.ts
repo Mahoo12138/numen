@@ -121,6 +121,16 @@ export const coreMigrations: readonly Migration[] = [
       `)
     },
   },
+  {
+    version: 3,
+    name: 'run-cancellation-intent',
+    up(database) {
+      database.exec(`
+        ALTER TABLE runs ADD COLUMN cancel_reason TEXT;
+        CREATE INDEX runs_cancelling_idx ON runs(status, created_at);
+      `)
+    },
+  },
 ]
 
 export function runMigrations(

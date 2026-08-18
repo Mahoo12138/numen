@@ -4,6 +4,8 @@ import {
   isNumenValue,
   type Attempt,
   type AutomationRevision,
+  type CancellationReason,
+  type ContractSnapshotCapability,
   type CoreInstruction,
   type Execution,
   type NumenValue,
@@ -36,6 +38,7 @@ interface RunRow {
   trigger_json: string
   input_json: string
   group_key: string | null
+  cancel_reason: CancellationReason | null
   created_at: string
   started_at: string | null
   finished_at: string | null
@@ -98,6 +101,7 @@ function mapRun(row: RunRow): Run {
     trigger: parseJson(row.trigger_json),
     input: parseJson(row.input_json),
     ...(row.group_key ? { groupKey: row.group_key } : {}),
+    ...(row.cancel_reason ? { cancelReason: row.cancel_reason } : {}),
     createdAt: row.created_at,
     ...(row.started_at ? { startedAt: row.started_at } : {}),
     ...(row.finished_at ? { finishedAt: row.finished_at } : {}),
@@ -151,11 +155,29 @@ function errorValue(error: unknown): NumenValue {
   return { name: 'Error', message: String(error) }
 }
 
+class InvocationTimeoutError extends Error {
+  override name = 'InvocationTimeoutError'
+}
+
+class InvocationCancelledError extends Error {
+  override name = 'InvocationCancelledError'
+
+  constructor(public readonly reason: CancellationReason) {
+    super(`invocation cancelled: ${reason}`)
+  }
+}
+
+interface ActiveInvocation {
+  runId: string
+  controller: AbortController
+}
+
 export class SchedulerService extends Service {
   static inject = ['database', 'capabilities', 'automations']
 
   private ready = false
   private dispatchTask: Promise<number> | undefined
+  private readonly activeInvocations = new Map<string, ActiveInvocation>()
   private readonly autoDispatch: boolean
   private readonly sweepIntervalMs: number
 
@@ -166,6 +188,7 @@ export class SchedulerService extends Service {
   }
 
   async *[Service.init]() {
+    this.recoverCancellations()
     this.recoverInterruptedWork()
     this.ready = true
     let timer: NodeJS.Timeout | undefined
@@ -201,6 +224,25 @@ export class SchedulerService extends Service {
       this.appendEvent(runId, 'RunAccepted', { source: 'manual' }, now)
     })
     if (this.autoDispatch) this.kick()
+    return this.getRun(runId)!
+  }
+
+  cancelRun(runId: string, reason: CancellationReason = 'USER'): Run {
+    const existing = this.getRun(runId)
+    if (!existing) throw new Error(`run not found: ${runId}`)
+    if (existing.status === 'COMPLETED' || existing.status === 'FAILED' || existing.status === 'CANCELLED') {
+      return existing
+    }
+    const now = new Date().toISOString()
+    this.ctx.database.transaction(() => {
+      const result = this.ctx.database.db.prepare(`
+        UPDATE runs SET status = 'CANCELLING', cancel_reason = ?
+        WHERE id = ? AND status IN ('QUEUED', 'RUNNING')
+      `).run(reason, runId)
+      if (result.changes) this.appendEvent(runId, 'RunCancellationRequested', { reason }, now)
+    })
+    const cancellationReason = (this.getRun(runId)?.cancelReason as CancellationReason | undefined) ?? reason
+    this.propagateCancellation(runId, cancellationReason)
     return this.getRun(runId)!
   }
 
@@ -262,10 +304,11 @@ export class SchedulerService extends Service {
     let transitions = 0
     while (transitions < maxTransitions) {
       let progressed = false
+      const cancelled = this.reconcileCancellations()
       const resumed = this.resumeDueTimers()
       const unblocked = this.reconcileBlockedExecutions()
-      if (resumed || unblocked) {
-        transitions += resumed + unblocked
+      if (cancelled || resumed || unblocked) {
+        transitions += cancelled + resumed + unblocked
         progressed = true
       }
       if (this.admitOneRun()) {
@@ -379,12 +422,17 @@ export class SchedulerService extends Service {
 
   private async execute(execution: Execution): Promise<void> {
     try {
-      const { run, instruction } = this.getRevisionForExecution(execution)
+      const { run, revision, instruction } = this.getRevisionForExecution(execution)
       const bindings = this.createBindings(run)
       switch (instruction.op) {
-        case 'invoke':
-          await this.invokeCapability(execution, instruction, bindings)
+        case 'invoke': {
+          const contract = revision.contractSnapshot.capabilities.find(item => (
+            capabilityKey(item) === capabilityKey(instruction.capability)
+          ))
+          if (!contract) throw new Error(`frozen capability contract not found: ${capabilityKey(instruction.capability)}`)
+          await this.invokeCapability(execution, instruction, bindings, contract)
           break
+        }
         case 'branch': {
           const condition = evaluateExpression(instruction.condition, bindings)
           if (typeof condition !== 'boolean') throw new Error('branch condition must evaluate to boolean')
@@ -417,6 +465,7 @@ export class SchedulerService extends Service {
     execution: Execution,
     instruction: Extract<CoreInstruction, { op: 'invoke' }>,
     bindings: EvaluationBindings,
+    contract: ContractSnapshotCapability,
   ): Promise<void> {
     const status = this.ctx.capabilities.get(instruction.capability)
     const provider = this.ctx.capabilities.resolveProvider<NumenValue, NumenValue>(instruction.capability)
@@ -429,6 +478,7 @@ export class SchedulerService extends Service {
     if (!isNumenValue(resolvedInput)) throw new Error('capability input normalized to a non-Numen value')
 
     const attemptId = id('attempt')
+    let attemptNumber = 0
     const now = new Date().toISOString()
     const claimed = this.ctx.database.transaction(() => {
       const result = this.ctx.database.db.prepare(`
@@ -441,6 +491,7 @@ export class SchedulerService extends Service {
       const { number } = this.ctx.database.db.prepare(`
         SELECT COALESCE(MAX(number), 0) + 1 AS number FROM attempts WHERE execution_id = ?
       `).get(execution.id) as { number: number }
+      attemptNumber = number
       this.ctx.database.db.prepare(`
         INSERT INTO attempts (
           id, execution_id, number, status, provider_ref, started_at
@@ -451,18 +502,65 @@ export class SchedulerService extends Service {
     })
     if (!claimed) return
 
+    const controller = new AbortController()
+    this.activeInvocations.set(execution.id, { runId: execution.runId, controller })
+    const timeoutMs = instruction.policy?.timeoutMs ?? contract.semantics.defaultTimeoutMs
     try {
-      const output = await provider.invoke({
-        input: resolvedInput,
-        connectionIds: instruction.connection ? { default: instruction.connection } : {},
-        signal: new AbortController().signal,
-        idempotencyKey: attemptId,
-      })
+      const output = await this.invokeWithGuards(() => provider.invoke({
+          input: resolvedInput,
+          connectionIds: instruction.connection ? { default: instruction.connection } : {},
+          signal: controller.signal,
+          idempotencyKey: attemptId,
+        }), controller, timeoutMs)
       const validatedOutput = status.definition.output(output)
       if (!isNumenValue(validatedOutput)) throw new Error('capability output is not a Numen value')
       this.completeInvocation(execution, attemptId, instruction.next, validatedOutput)
     } catch (error) {
-      this.failInvocation(execution, attemptId, errorValue(error))
+      if (error instanceof InvocationCancelledError) return
+      const timedOut = error instanceof InvocationTimeoutError
+      this.settleFailedInvocation(
+        execution,
+        attemptId,
+        attemptNumber,
+        instruction,
+        contract.semantics.retrySafe,
+        timedOut ? 'TIMED_OUT' : 'FAILED',
+        errorValue(error),
+      )
+    } finally {
+      this.activeInvocations.delete(execution.id)
+    }
+  }
+
+  private async invokeWithGuards<T>(
+    invoke: () => Promise<T>,
+    controller: AbortController,
+    timeoutMs?: number,
+  ): Promise<T> {
+    let timer: NodeJS.Timeout | undefined
+    let onAbort: (() => void) | undefined
+    const aborted = new Promise<never>((_resolve, reject) => {
+      onAbort = () => {
+        const reason = controller.signal.reason
+        reject(reason instanceof Error ? reason : new InvocationCancelledError('USER'))
+      }
+      if (controller.signal.aborted) {
+        onAbort()
+      } else {
+        controller.signal.addEventListener('abort', onAbort, { once: true })
+      }
+    })
+    if (timeoutMs !== undefined) {
+      timer = setTimeout(() => {
+        controller.abort(new InvocationTimeoutError(`capability timed out after ${timeoutMs}ms`))
+      }, timeoutMs)
+      timer.unref()
+    }
+    try {
+      return await Promise.race([Promise.resolve().then(invoke), aborted])
+    } finally {
+      if (timer) clearTimeout(timer)
+      if (onAbort) controller.signal.removeEventListener('abort', onAbort)
     }
   }
 
@@ -482,21 +580,77 @@ export class SchedulerService extends Service {
     })
   }
 
-  private failInvocation(execution: Execution, attemptId: string, error: NumenValue): void {
+  private settleFailedInvocation(
+    execution: Execution,
+    attemptId: string,
+    attemptNumber: number,
+    instruction: Extract<CoreInstruction, { op: 'invoke' }>,
+    retrySafe: boolean,
+    attemptStatus: 'FAILED' | 'TIMED_OUT',
+    error: NumenValue,
+  ): void {
     const now = new Date().toISOString()
+    const retry = instruction.policy?.retry
+    const canRetry = retrySafe && attemptNumber < (retry?.maxAttempts ?? 1)
+    const outcomeUnknown = attemptStatus === 'TIMED_OUT' && !retrySafe
+    const attemptEvent = attemptStatus === 'TIMED_OUT' ? 'AttemptTimedOut' : 'AttemptFailed'
     this.ctx.database.transaction(() => {
-      this.ctx.database.db.prepare(`
-        UPDATE attempts SET status = 'FAILED', error_json = ?, finished_at = ?
+      const attemptResult = this.ctx.database.db.prepare(`
+        UPDATE attempts SET status = ?, error_json = ?, finished_at = ?
         WHERE id = ? AND status = 'RUNNING'
-      `).run(JSON.stringify(error), now, attemptId)
-      this.ctx.database.db.prepare(`
-        UPDATE executions SET status = 'FAILED', output_json = ?, updated_at = ?
+      `).run(attemptStatus, JSON.stringify(error), now, attemptId)
+      if (!attemptResult.changes) return
+      this.appendEvent(execution.runId, attemptEvent, { attemptId, executionId: execution.id, error }, now)
+
+      if (outcomeUnknown) {
+        const result = this.ctx.database.db.prepare(`
+          UPDATE executions
+          SET status = 'BLOCKED', blocked_reason = 'OUTCOME_UNKNOWN', output_json = ?, updated_at = ?
+          WHERE id = ? AND status = 'RUNNING'
+        `).run(JSON.stringify(error), now, execution.id)
+        if (result.changes) {
+          this.appendEvent(execution.runId, 'ExecutionBlocked', {
+            executionId: execution.id,
+            reason: 'OUTCOME_UNKNOWN',
+            details: { attemptId, error },
+          }, now)
+        }
+        return
+      }
+
+      if (canRetry) {
+        const backoffMs = (retry?.backoffMs ?? 0) * (2 ** (attemptNumber - 1))
+        const wakeAt = new Date(Date.now() + backoffMs).toISOString()
+        const result = this.ctx.database.db.prepare(`
+          UPDATE executions
+          SET status = 'WAITING', blocked_reason = 'RETRY_BACKOFF', wake_at = ?, output_json = ?, updated_at = ?
+          WHERE id = ? AND status = 'RUNNING'
+        `).run(wakeAt, JSON.stringify(error), now, execution.id)
+        if (result.changes) {
+          this.appendEvent(execution.runId, 'ExecutionRetryScheduled', {
+            executionId: execution.id,
+            attemptId,
+            nextAttempt: attemptNumber + 1,
+            wakeAt,
+          }, now)
+        }
+        return
+      }
+
+      const executionStatus = attemptStatus === 'TIMED_OUT' ? 'TIMED_OUT' : 'FAILED'
+      const result = this.ctx.database.db.prepare(`
+        UPDATE executions SET status = ?, output_json = ?, updated_at = ?
         WHERE id = ? AND status = 'RUNNING'
-      `).run(JSON.stringify(error), now, execution.id)
+      `).run(executionStatus, JSON.stringify(error), now, execution.id)
+      if (!result.changes) return
       this.ctx.database.db.prepare(`
         UPDATE runs SET status = 'FAILED', finished_at = ? WHERE id = ? AND status = 'RUNNING'
       `).run(now, execution.runId)
-      this.appendEvent(execution.runId, 'AttemptFailed', { attemptId, executionId: execution.id, error }, now)
+      this.appendEvent(execution.runId, 'ExecutionFailed', {
+        executionId: execution.id,
+        status: executionStatus,
+        error,
+      }, now)
       this.appendEvent(execution.runId, 'RunFailed', { executionId: execution.id, error }, now)
     })
   }
@@ -599,6 +753,20 @@ export class SchedulerService extends Service {
     let count = 0
     for (const row of rows) {
       const execution = mapExecution(row)
+      if (row.blocked_reason === 'RETRY_BACKOFF') {
+        const changed = this.ctx.database.transaction(() => {
+          const result = this.ctx.database.db.prepare(`
+            UPDATE executions
+            SET status = 'RUNNABLE', blocked_reason = NULL, wake_at = NULL, updated_at = ?
+            WHERE id = ? AND status = 'WAITING' AND blocked_reason = 'RETRY_BACKOFF'
+          `).run(now, execution.id)
+          if (!result.changes) return false
+          this.appendEvent(execution.runId, 'ExecutionRetryReady', { executionId: execution.id }, now)
+          return true
+        })
+        if (changed) count += 1
+        continue
+      }
       const { instruction } = this.getRevisionForExecution(execution)
       if (instruction.op !== 'suspend') continue
       const changed = this.ctx.database.transaction(() => {
@@ -642,11 +810,68 @@ export class SchedulerService extends Service {
     return count
   }
 
+  private propagateCancellation(runId: string, reason: CancellationReason): boolean {
+    for (const active of this.activeInvocations.values()) {
+      if (active.runId === runId && !active.controller.signal.aborted) {
+        active.controller.abort(new InvocationCancelledError(reason))
+      }
+    }
+    const rows = this.ctx.database.db.prepare(`
+      SELECT * FROM executions
+      WHERE run_id = ? AND status IN ('RUNNABLE', 'RUNNING', 'WAITING', 'BLOCKED', 'CANCELLING')
+      ORDER BY created_at, id
+    `).all(runId) as ExecutionRow[]
+    const now = new Date().toISOString()
+    return this.ctx.database.transaction(() => {
+      this.ctx.database.db.prepare(`
+        UPDATE attempts
+        SET status = 'ABORTED', error_json = ?, finished_at = ?
+        WHERE status = 'RUNNING' AND execution_id IN (
+          SELECT id FROM executions WHERE run_id = ?
+        )
+      `).run(JSON.stringify({ reason }), now, runId)
+      for (const row of rows) {
+        const result = this.ctx.database.db.prepare(`
+          UPDATE executions
+          SET status = 'CANCELLED', blocked_reason = NULL, wake_at = NULL, updated_at = ?
+          WHERE id = ? AND status IN ('RUNNABLE', 'RUNNING', 'WAITING', 'BLOCKED', 'CANCELLING')
+        `).run(now, row.id)
+        if (result.changes) {
+          this.appendEvent(runId, 'ExecutionCancelled', { executionId: row.id, reason }, now)
+        }
+      }
+      const result = this.ctx.database.db.prepare(`
+        UPDATE runs SET status = 'CANCELLED', cancel_reason = ?, finished_at = ?
+        WHERE id = ? AND status = 'CANCELLING'
+      `).run(reason, now, runId)
+      if (!result.changes) return false
+      this.appendEvent(runId, 'RunCancelled', { reason }, now)
+      return true
+    })
+  }
+
+  private reconcileCancellations(): number {
+    const rows = this.ctx.database.db.prepare(`
+      SELECT id, cancel_reason FROM runs WHERE status = 'CANCELLING' ORDER BY created_at, id
+    `).all() as Array<{ id: string; cancel_reason: CancellationReason | null }>
+    let count = 0
+    for (const row of rows) {
+      if (this.propagateCancellation(row.id, row.cancel_reason ?? 'USER')) count += 1
+    }
+    return count
+  }
+
+  private recoverCancellations(): void {
+    this.reconcileCancellations()
+  }
+
   private recoverInterruptedWork(): void {
     const attempts = this.ctx.database.db.prepare(`
       SELECT attempts.*, executions.run_id, executions.instruction_id
-      FROM attempts JOIN executions ON executions.id = attempts.execution_id
-      WHERE attempts.status = 'RUNNING' AND executions.status = 'RUNNING'
+      FROM attempts
+      JOIN executions ON executions.id = attempts.execution_id
+      JOIN runs ON runs.id = executions.run_id
+      WHERE attempts.status = 'RUNNING' AND executions.status = 'RUNNING' AND runs.status = 'RUNNING'
       ORDER BY attempts.started_at, attempts.id
     `).all() as Array<AttemptRow & { run_id: string; instruction_id: string }>
 
@@ -677,7 +902,8 @@ export class SchedulerService extends Service {
 
     const internal = this.ctx.database.db.prepare(`
       SELECT executions.* FROM executions
-      WHERE executions.status = 'RUNNING'
+      JOIN runs ON runs.id = executions.run_id
+      WHERE executions.status = 'RUNNING' AND runs.status = 'RUNNING'
         AND NOT EXISTS (
           SELECT 1 FROM attempts
           WHERE attempts.execution_id = executions.id AND attempts.status = 'RUNNING'

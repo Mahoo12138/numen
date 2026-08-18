@@ -275,12 +275,31 @@ export function compileAutomation(source: AutomationSource, capabilities: Capabi
         }
         const definition = resolveCapability(control.capability, control.id, 'step', control.connection)
         if (definition) validateCapabilityInput(definition, input, control.id)
+        const policy = control.policy
+        if (policy !== undefined && (!policy || typeof policy !== 'object' || Array.isArray(policy))) {
+          report({ severity: 'error', code: 'INVOCATION_POLICY_INVALID', message: 'Invocation policy must be an object.', source: { nodeId: control.id, fieldPath: 'policy' } })
+        }
+        if (policy?.timeoutMs !== undefined && (!Number.isSafeInteger(policy.timeoutMs) || policy.timeoutMs < 1)) {
+          report({ severity: 'error', code: 'TIMEOUT_INVALID', message: 'policy.timeoutMs must be a positive integer.', source: { nodeId: control.id, fieldPath: 'policy.timeoutMs' } })
+        }
+        if (policy?.retry) {
+          if (!Number.isSafeInteger(policy.retry.maxAttempts) || policy.retry.maxAttempts < 1) {
+            report({ severity: 'error', code: 'RETRY_ATTEMPTS_INVALID', message: 'retry.maxAttempts must be a positive integer.', source: { nodeId: control.id, fieldPath: 'policy.retry.maxAttempts' } })
+          }
+          if (policy.retry.backoffMs !== undefined && (!Number.isSafeInteger(policy.retry.backoffMs) || policy.retry.backoffMs < 0)) {
+            report({ severity: 'error', code: 'RETRY_BACKOFF_INVALID', message: 'retry.backoffMs must be a non-negative integer.', source: { nodeId: control.id, fieldPath: 'policy.retry.backoffMs' } })
+          }
+          if (policy.retry.maxAttempts > 1 && definition && !definition.semantics.retrySafe) {
+            report({ severity: 'error', code: 'RETRY_UNSAFE', message: `${capabilityKey(control.capability)} is not safe to retry.`, source: { nodeId: control.id, fieldPath: 'policy.retry' } })
+          }
+        }
         instructions[control.id] = {
           op: 'invoke',
           id: control.id,
           capability: control.capability,
           ...(control.connection ? { connection: control.connection } : {}),
           input: { type: 'object', entries: input },
+          ...(policy ? { policy } : {}),
           next,
         }
         return control.id

@@ -103,4 +103,20 @@ describe('automation compiler', () => {
       flow: { type: 'block', id: 'flow' },
     } as unknown as AutomationSource, resolver)).toThrow(AutomationCompileError)
   })
+
+  it('rejects retry policies for capabilities whose contract is not retry-safe', () => {
+    const retrying = structuredClone(source)
+    const flow = retrying.flow
+    if (flow.type !== 'block' || flow.steps[0]?.type !== 'capability') throw new Error('invalid fixture')
+    flow.steps[0].policy = { retry: { maxAttempts: 2 } }
+
+    try {
+      compileAutomation(retrying, resolver)
+      throw new Error('expected compilation to fail')
+    } catch (error) {
+      expect(error).toBeInstanceOf(AutomationCompileError)
+      expect((error as AutomationCompileError).diagnostics)
+        .toContainEqual(expect.objectContaining({ code: 'RETRY_UNSAFE' }))
+    }
+  })
 })

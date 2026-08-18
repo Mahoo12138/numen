@@ -28,6 +28,17 @@ export type AttemptStatus =
   | 'INTERRUPTED'
   | 'OUTCOME_UNKNOWN'
 
+export type CancellationReason =
+  | 'USER'
+  | 'PARENT'
+  | 'RACE'
+  | 'TIMEOUT'
+  | 'PROVIDER_DISPOSED'
+  | 'CONNECTION_DISPOSED'
+  | 'RECONFIGURED'
+  | 'SHUTDOWN'
+  | 'CREDENTIAL_ROTATED'
+
 export interface Run {
   id: string
   automationId: string
@@ -36,6 +47,7 @@ export interface Run {
   trigger: NumenValue
   input: Record<string, NumenValue>
   groupKey?: string
+  cancelReason?: CancellationReason
   createdAt: string
   startedAt?: string
   finishedAt?: string

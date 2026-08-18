@@ -14,6 +14,15 @@ export interface CapabilitySource {
   capability: CapabilityRef
   connection?: string
   input: Record<string, ValueExpr>
+  policy?: InvocationPolicy
+}
+
+export interface InvocationPolicy {
+  timeoutMs?: number
+  retry?: {
+    maxAttempts: number
+    backoffMs?: number
+  }
 }
 
 export interface BlockSource {
@@ -63,7 +72,15 @@ export interface CapabilityRef {
 }
 
 export type CoreInstruction =
-  | { op: 'invoke'; id: string; capability: CapabilityRef; connection?: string; input: ValueExpr; next?: string }
+  | {
+    op: 'invoke'
+    id: string
+    capability: CapabilityRef
+    connection?: string
+    input: ValueExpr
+    policy?: InvocationPolicy
+    next?: string
+  }
   | { op: 'eval'; id: string; expression: ValueExpr; assign: string; next?: string }
   | { op: 'branch'; id: string; condition: ValueExpr; then: string; else: string }
   | {
