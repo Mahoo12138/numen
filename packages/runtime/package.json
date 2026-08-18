@@ -19,6 +19,7 @@
     "@numen/config": "workspace:*",
     "@numen/connections": "workspace:*",
     "@numen/credentials": "workspace:*",
+    "@numen/resources": "workspace:*",
     "@numen/core": "workspace:*",
     "@numen/database": "workspace:*",
     "@numen/scheduler": "workspace:*",

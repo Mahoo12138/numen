@@ -5,6 +5,7 @@ import { AutomationService } from '@numen/automation'
 import { createRuntimeEntries, loadConfig, type LoadedConfig, type RuntimeEntry } from '@numen/config'
 import { ConnectionService } from '@numen/connections'
 import { CredentialService } from '@numen/credentials'
+import { ResourceService } from '@numen/resources'
 import { CapabilityRegistry } from '@numen/core'
 import { DatabaseService } from '@numen/database'
 import { SchedulerService } from '@numen/scheduler'
@@ -32,6 +33,7 @@ const builtins = {
   database: DatabaseService,
   capabilities: CapabilityRegistry,
   credentials: CredentialService,
+  resources: ResourceService,
   connections: ConnectionService,
   automations: AutomationService,
   scheduler: SchedulerService,

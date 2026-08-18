@@ -7,6 +7,8 @@ plugins:
     path: .numen/numen.db
   capabilities: {}
   credentials: {}
+  resources:
+    path: .numen/resources
   connections: {}
   automations: {}
   scheduler: {}

@@ -207,6 +207,55 @@ export const coreMigrations: readonly Migration[] = [
       `)
     },
   },
+  {
+    version: 7,
+    name: 'resource-lifecycle',
+    up(database) {
+      database.exec(`
+        CREATE TABLE resources (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          media_type TEXT NOT NULL,
+          size INTEGER NOT NULL CHECK (size >= 0),
+          digest TEXT NOT NULL,
+          store_id TEXT NOT NULL,
+          state TEXT NOT NULL CHECK (state IN ('STAGED', 'COMMITTED', 'DELETING', 'GONE')),
+          staged_expires_at TEXT,
+          gc_after TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          gone_at TEXT
+        );
+
+        CREATE INDEX resources_gc_idx
+          ON resources(state, staged_expires_at, gc_after);
+        CREATE INDEX resources_digest_idx
+          ON resources(digest, state);
+
+        CREATE TABLE resource_owners (
+          resource_id TEXT NOT NULL REFERENCES resources(id) ON DELETE CASCADE,
+          owner_type TEXT NOT NULL,
+          owner_id TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          PRIMARY KEY (resource_id, owner_type, owner_id)
+        );
+
+        CREATE INDEX resource_owners_owner_idx
+          ON resource_owners(owner_type, owner_id);
+
+        CREATE TABLE resource_leases (
+          id TEXT PRIMARY KEY,
+          resource_id TEXT NOT NULL REFERENCES resources(id) ON DELETE CASCADE,
+          holder TEXT NOT NULL,
+          expires_at TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        );
+
+        CREATE INDEX resource_leases_expiry_idx
+          ON resource_leases(resource_id, expires_at);
+      `)
+    },
+  },
 ]
 
 export function runMigrations(

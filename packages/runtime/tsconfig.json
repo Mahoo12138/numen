@@ -12,6 +12,7 @@
     { "path": "../database" },
     { "path": "../connections" },
     { "path": "../credentials" },
+    { "path": "../resources" },
     { "path": "../automation" },
     { "path": "../scheduler" },
     { "path": "../triggers" }
