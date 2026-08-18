@@ -105,6 +105,9 @@ importers:
       '@numen/scheduler':
         specifier: workspace:*
         version: link:../scheduler
+      '@numen/triggers':
+        specifier: workspace:*
+        version: link:../triggers
       cordis:
         specifier: ^4.0.0-rc.8
         version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
@@ -124,6 +127,28 @@ importers:
         specifier: ^4.0.0-rc.8
         version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
     devDependencies:
+      schemastery:
+        specifier: ^3.18.0
+        version: 3.18.0
+
+  packages/triggers:
+    dependencies:
+      '@numen/automation':
+        specifier: workspace:*
+        version: link:../automation
+      '@numen/core':
+        specifier: workspace:*
+        version: link:../core
+      '@numen/scheduler':
+        specifier: workspace:*
+        version: link:../scheduler
+      cordis:
+        specifier: ^4.0.0-rc.8
+        version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
+    devDependencies:
+      '@numen/database':
+        specifier: workspace:*
+        version: link:../database
       schemastery:
         specifier: ^3.18.0
         version: 3.18.0

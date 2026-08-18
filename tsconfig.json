@@ -6,6 +6,7 @@
     { "path": "packages/database" },
     { "path": "packages/automation" },
     { "path": "packages/scheduler" },
+    { "path": "packages/triggers" },
     { "path": "packages/runtime" },
     { "path": "packages/cli" }
   ]

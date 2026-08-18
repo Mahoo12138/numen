@@ -73,6 +73,10 @@ declare module 'cordis' {
   interface Context {
     automations: AutomationService
   }
+
+  interface Events {
+    'numen/automation-change'(automationId: string): void
+  }
 }
 
 function defaultSource(): AutomationSource {
@@ -291,6 +295,7 @@ export class AutomationService extends Service {
         WHERE id = ?
       `).run(revisionId, now, automationId)
     })
+    this.ctx.emit('numen/automation-change', automationId)
     return this.get(automationId)!
   }
 
@@ -304,6 +309,7 @@ export class AutomationService extends Service {
     if (result.changes === 0 && !this.get(automationId)) {
       throw new AutomationNotFoundError(`automation not found: ${automationId}`)
     }
+    if (result.changes) this.ctx.emit('numen/automation-change', automationId)
     return this.get(automationId)!
   }
 }

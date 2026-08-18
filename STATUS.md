@@ -33,6 +33,8 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Retry attempts modeled as new Attempts on the same Execution
 - [x] Unsafe timeout fencing as OUTCOME_UNKNOWN
 - [x] Durable Run cancellation intent, active invocation abort, and restart recovery
+- [x] Trigger Provider lifecycle and Active Revision subscription ownership
+- [x] Durable Trigger acceptance with generation fencing and event deduplication
 
 ## Milestone 3 — Completed
 
@@ -42,28 +44,27 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 
 ## In Progress — Milestone 4
 
-- [ ] Trigger subscription and durable event acceptance
+- [x] Trigger subscription and durable event acceptance
 - [x] Retry policy and timeout handling
 - [x] Cancellation intent, propagation, and recovery
 - [ ] Parallel/Race/ForEach structured concurrency
 
 ## Next
 
-1. Trigger subscription and durable event acceptance
-2. Connection, Credential, and Resource services
-3. Parallel/Race/ForEach structured concurrency
-4. Typed Console Query/Action/Subscription protocol
-5. Browser Cordis Runtime and the first Workbench UI
+1. Connection, Credential, and Resource services
+2. Parallel/Race/ForEach structured concurrency
+3. Typed Console Query/Action/Subscription protocol
+4. Browser Cordis Runtime and the first Workbench UI
 
 ## Verification Baseline
 
 ```text
 Typecheck: passing
 Build: passing
-Tests: 7 files, 21 tests passing
+Tests: 8 files, 25 tests passing
 CLI config validate: passing
 CLI doctor: passing
-SQLite schema migration: v3
+SQLite schema migration: v4
 ```
 
 Run locally with:
@@ -80,6 +81,6 @@ pnpm dev
 - The current compiler supports Block, Capability, If, and timer Wait controls. Block output lowering is diagnosed as unsupported.
 - Drafts may remain invalid; authoritative validation happens during Publish.
 - The current Scheduler executes the Core IR subset emitted by the compiler, including retry, timeout, cancellation, and recovery. Parallel/Race/ForEach structured concurrency remains planned work.
-- Manual Runs are supported; Trigger subscriptions and durable external event acceptance are not implemented yet.
+- Manual Runs and event Trigger subscriptions are supported. State Trigger transition detection, filtering, debounce, and throttle remain planned work.
 - The npm organization/scope is still an architecture placeholder.
 - No arbitrary JavaScript evaluation, distributed scheduling, plugin sandbox, or multi-user authorization is implemented.

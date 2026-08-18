@@ -26,6 +26,7 @@ describe('Numen runtime', () => {
         capabilities: {},
         automations: {},
         scheduler: { autoDispatch: false },
+        triggers: {},
         server: { host: '127.0.0.1', port: 0 },
         health: {},
         readiness: {},
@@ -60,6 +61,12 @@ describe('Numen runtime', () => {
           runnableExecutions: 0,
           waitingExecutions: 0,
           blockedExecutions: 0,
+        },
+        triggers: {
+          ready: true,
+          desiredSubscriptions: 0,
+          activeSubscriptions: 0,
+          unavailableSubscriptions: 0,
         },
       },
     })

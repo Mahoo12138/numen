@@ -1,5 +1,5 @@
 {
-  "name": "@numen/runtime",
+  "name": "@numen/triggers",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -11,16 +11,16 @@
       "default": "./dist/index.js"
     }
   },
-  "dependencies": {
-    "@cordisjs/plugin-loader": "^1.0.0-rc.5",
-    "@cordisjs/plugin-logger-console": "^1.0.0",
-    "@cordisjs/plugin-server": "^1.7.0",
-    "@numen/automation": "workspace:*",
-    "@numen/config": "workspace:*",
-    "@numen/core": "workspace:*",
-    "@numen/database": "workspace:*",
-    "@numen/scheduler": "workspace:*",
-    "@numen/triggers": "workspace:*",
+  "peerDependencies": {
     "cordis": "^4.0.0-rc.8"
+  },
+  "dependencies": {
+    "@numen/automation": "workspace:*",
+    "@numen/core": "workspace:*",
+    "@numen/scheduler": "workspace:*"
+  },
+  "devDependencies": {
+    "@numen/database": "workspace:*",
+    "schemastery": "^3.18.0"
   }
 }

@@ -6,6 +6,7 @@ import { createRuntimeEntries, loadConfig, type LoadedConfig, type RuntimeEntry 
 import { CapabilityRegistry } from '@numen/core'
 import { DatabaseService } from '@numen/database'
 import { SchedulerService } from '@numen/scheduler'
+import { TriggerService } from '@numen/triggers'
 import { Context } from 'cordis'
 import { sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -30,6 +31,7 @@ const builtins = {
   capabilities: CapabilityRegistry,
   automations: AutomationService,
   scheduler: SchedulerService,
+  triggers: TriggerService,
   server: Server,
   health: healthPlugin,
   readiness: readinessPlugin,

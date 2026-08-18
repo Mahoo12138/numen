@@ -30,6 +30,12 @@ export interface ReadinessDocument {
       waitingExecutions: number
       blockedExecutions: number
     }
+    triggers: {
+      ready: boolean
+      desiredSubscriptions: number
+      activeSubscriptions: number
+      unavailableSubscriptions: number
+    }
   }
 }
 
@@ -83,6 +89,7 @@ export function readinessPlugin(ctx: Context): void {
           count: ctx.automations.count(),
         },
         scheduler: ctx.scheduler.health(),
+        triggers: ctx.triggers.health(),
       },
     }
     response.status = document.status === 'ready' ? 200 : 503
@@ -90,4 +97,4 @@ export function readinessPlugin(ctx: Context): void {
   })
 }
 
-readinessPlugin.inject = ['server', 'database', 'capabilities', 'automations', 'scheduler']
+readinessPlugin.inject = ['server', 'database', 'capabilities', 'automations', 'scheduler', 'triggers']
