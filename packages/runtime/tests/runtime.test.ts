@@ -24,8 +24,8 @@ describe('Numen runtime', () => {
       plugins: {
         database: { path: 'data/numen.db' },
         capabilities: {},
-        connections: {},
         credentials: {},
+        connections: {},
         automations: {},
         scheduler: { autoDispatch: false },
         triggers: {},

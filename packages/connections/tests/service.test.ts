@@ -1,8 +1,10 @@
 import { DatabaseService } from '@numen/database'
+import { CredentialService, type CredentialTypeDefinition } from '@numen/credentials'
 import { Context } from 'cordis'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { randomBytes } from 'node:crypto'
 import z from 'schemastery'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
@@ -15,6 +17,7 @@ const directories: string[] = []
 
 afterEach(async () => {
   await Promise.all(directories.splice(0).map(path => rm(path, { recursive: true, force: true })))
+  delete process.env[masterKeyEnv]
 })
 
 const adapter: ConnectionAdapterDefinition = {
@@ -24,9 +27,19 @@ const adapter: ConnectionAdapterDefinition = {
   config: z.object({ baseUrl: z.string().required() }),
 }
 
+const credentialType: CredentialTypeDefinition = {
+  id: 'test:token',
+  version: 1,
+  title: 'Token',
+  secret: z.object({ token: z.string().required() }),
+}
+
+const masterKeyEnv = 'NUMEN_CONNECTION_TEST_MASTER_KEY'
+
 async function createContext(path: string, defineAdapter = true): Promise<Context> {
   const root = new Context()
   await root.plugin(DatabaseService, { path })
+  await root.plugin(CredentialService, { keyId: 'connection-test', masterKeyEnv })
   await root.plugin(ConnectionService)
   if (defineAdapter) {
     root.connections.defineAdapter(root, adapter)
@@ -51,7 +64,6 @@ describe('ConnectionService', () => {
       name: 'Primary API',
       adapter,
       config: { baseUrl: 'https://example.test' },
-      credentialId: 'cred_primary',
     })
     expect(created).toMatchObject({
       enabled: false,
@@ -205,6 +217,50 @@ describe('ConnectionService', () => {
     await firstReconcile
     expect(staleCloses).toBe(1)
     expect(root.connections.getRuntimeState(created.id)).toMatchObject({ status: 'READY', generation: 2 })
+    await root.fiber.dispose()
+  })
+
+  it('recreates a runtime with a fixed snapshot after credential rotation', async () => {
+    process.env[masterKeyEnv] = randomBytes(32).toString('base64')
+    const root = await createContext(':memory:', false)
+    root.credentials.defineType(root, credentialType)
+    const authAdapter: ConnectionAdapterDefinition = {
+      ...adapter,
+      id: 'test:authenticated-http',
+      credentialType: credentialType.id,
+    }
+    root.connections.defineAdapter(root, authAdapter)
+    const snapshots: Array<{ version: number; token: string }> = []
+    let closes = 0
+    root.connections.provideAdapter(root, authAdapter, {
+      async open({ credential }) {
+        if (!credential) throw new Error('credential snapshot missing')
+        snapshots.push({
+          version: credential.secretVersion,
+          token: credential.value.token as string,
+        })
+        return { close: () => { closes += 1 } }
+      },
+    })
+    const credential = root.credentials.create('API token', credentialType, { token: 'first' })
+    const connection = root.connections.create({
+      name: 'Authenticated API',
+      adapter: authAdapter,
+      config: { baseUrl: 'https://secure.example.test' },
+      credentialId: credential.id,
+      enabled: true,
+    })
+    await root.connections.reconcile()
+    expect(snapshots).toEqual([{ version: 1, token: 'first' }])
+
+    root.credentials.rotate(credential.id, 1, { token: 'second' })
+    await root.connections.reconcile()
+    expect(root.connections.get(connection.id)?.generation).toBe(2)
+    expect(snapshots).toEqual([
+      { version: 1, token: 'first' },
+      { version: 2, token: 'second' },
+    ])
+    expect(closes).toBe(1)
     await root.fiber.dispose()
   })
 })

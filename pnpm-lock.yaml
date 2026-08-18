@@ -66,6 +66,9 @@ importers:
       '@numen/core':
         specifier: workspace:*
         version: link:../core
+      '@numen/credentials':
+        specifier: workspace:*
+        version: link:../credentials
       '@numen/database':
         specifier: workspace:*
         version: link:../database

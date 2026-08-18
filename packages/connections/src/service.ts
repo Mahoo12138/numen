@@ -1,4 +1,6 @@
 import { isNumenValue, isResourceRef, type NumenValue } from '@numen/core'
+import '@numen/credentials'
+import type { CredentialSecretSnapshot } from '@numen/credentials'
 import '@numen/database'
 import { Service, type Context } from 'cordis'
 import { randomUUID } from 'node:crypto'
@@ -22,6 +24,7 @@ export interface ConnectionRuntime {
 export interface ConnectionAdapterOpenContext {
   connection: Connection
   signal: AbortSignal
+  credential?: CredentialSecretSnapshot
 }
 
 export interface ConnectionAdapterProvider {
@@ -140,7 +143,7 @@ function assertConfig(value: unknown): asserts value is Record<string, NumenValu
 }
 
 export class ConnectionService extends Service {
-  static inject = ['database']
+  static inject = ['database', 'credentials']
 
   private ready = false
   private readonly adapters = new Map<string, AdapterEntry>()
@@ -152,6 +155,7 @@ export class ConnectionService extends Service {
 
   async *[Service.init]() {
     this.ctx.on('numen/connection-change', () => this.queueReconcile())
+    this.ctx.on('numen/credential-change', credentialId => this.handleCredentialChange(credentialId))
     this.ready = true
     this.queueReconcile()
     yield async () => {
@@ -216,6 +220,7 @@ export class ConnectionService extends Service {
     if (!name) throw new TypeError('connection name is required')
     const definition = this.requireAdapter(input.adapter)
     const config = this.validateConfig(definition, input.config)
+    this.validateCredential(definition, input.credentialId)
     const connectionId = `conn_${randomUUID().replaceAll('-', '')}`
     const now = new Date().toISOString()
     this.ctx.database.db.prepare(`
@@ -258,6 +263,7 @@ export class ConnectionService extends Service {
     if (!name) throw new TypeError('connection name is required')
     const config = input.config === undefined ? current.config : this.validateConfig(definition, input.config)
     const credentialId = input.credentialId === undefined ? current.credentialId : (input.credentialId ?? undefined)
+    this.validateCredential(definition, credentialId)
     const now = new Date().toISOString()
     const result = this.ctx.database.db.prepare(`
       UPDATE connections
@@ -354,6 +360,19 @@ export class ConnectionService extends Service {
     return config
   }
 
+  private validateCredential(definition: ConnectionAdapterDefinition, credentialId?: string): void {
+    if (!definition.credentialType) {
+      if (credentialId) throw new TypeError(`adapter ${adapterKey(definition)} does not accept credentials`)
+      return
+    }
+    if (!credentialId) throw new TypeError(`adapter ${adapterKey(definition)} requires a credential`)
+    const credential = this.ctx.credentials.get(credentialId)
+    if (!credential) throw new Error(`credential not found: ${credentialId}`)
+    if (credential.type.id !== definition.credentialType) {
+      throw new TypeError(`credential ${credentialId} has type ${credential.type.id}, expected ${definition.credentialType}`)
+    }
+  }
+
   private requireConnection(connectionId: string): Connection {
     const connection = this.get(connectionId)
     if (!connection) throw new ConnectionNotFoundError(`connection not found: ${connectionId}`)
@@ -406,7 +425,14 @@ export class ConnectionService extends Service {
     }
     this.runtimes.set(connection.id, runtime)
     try {
-      const opened = await provider.open({ connection, signal: runtime.controller.signal })
+      const credential = connection.credentialId
+        ? this.ctx.credentials.readSecretSnapshot(connection.credentialId)
+        : undefined
+      const opened = await provider.open({
+        connection,
+        signal: runtime.controller.signal,
+        ...(credential ? { credential } : {}),
+      })
       const current = this.get(connection.id)
       if (
         runtime.controller.signal.aborted
@@ -442,6 +468,19 @@ export class ConnectionService extends Service {
     })()
     runtime.stopTask = task
     return task
+  }
+
+  private handleCredentialChange(credentialId: string): void {
+    const rows = this.ctx.database.db.prepare(`
+      SELECT id FROM connections WHERE credential_id = ?
+    `).all(credentialId) as Array<{ id: string }>
+    if (!rows.length) return
+    const now = new Date().toISOString()
+    this.ctx.database.db.prepare(`
+      UPDATE connections SET generation = generation + 1, updated_at = ?
+      WHERE credential_id = ?
+    `).run(now, credentialId)
+    for (const row of rows) this.ctx.emit('numen/connection-change', row.id)
   }
 }
 

@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@numen/core": "workspace:*",
+    "@numen/credentials": "workspace:*",
     "@numen/database": "workspace:*"
   },
   "devDependencies": {

@@ -31,8 +31,8 @@ export interface NumenApplication {
 const builtins = {
   database: DatabaseService,
   capabilities: CapabilityRegistry,
-  connections: ConnectionService,
   credentials: CredentialService,
+  connections: ConnectionService,
   automations: AutomationService,
   scheduler: SchedulerService,
   triggers: TriggerService,
