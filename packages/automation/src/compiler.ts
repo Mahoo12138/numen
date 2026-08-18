@@ -364,6 +364,41 @@ export function compileAutomation(source: AutomationSource, capabilities: Capabi
         }
         return control.id
       }
+      case 'race': {
+        if (!Array.isArray(control.branches) || control.branches.length < 2) {
+          report({
+            severity: 'error',
+            code: 'RACE_BRANCHES_INVALID',
+            message: 'Race requires at least two block branches.',
+            source: { nodeId: control.id, fieldPath: 'branches' },
+          })
+          return next
+        }
+        const joinId = `__${control.id}.join`
+        instructions[joinId] = { op: 'join', id: joinId, mode: 'first_success', next }
+        const branches = control.branches.map((branch, index) => {
+          if (!branch || branch.type !== 'block') {
+            report({
+              severity: 'error',
+              code: 'RACE_BRANCH_INVALID',
+              message: 'Each Race branch must be a block.',
+              source: { nodeId: control.id, fieldPath: `branches.${index}` },
+            })
+            return `__${control.id}.branch.${index}.complete`
+          }
+          const terminalId = `__${control.id}.branch.${index}.complete`
+          instructions[terminalId] = { op: 'scope_complete', id: terminalId }
+          return compileControl(branch, terminalId)
+        })
+        instructions[control.id] = {
+          op: 'fork',
+          id: control.id,
+          mode: 'first_success',
+          branches,
+          join: joinId,
+        }
+        return control.id
+      }
       default:
         report({ severity: 'error', code: 'UNKNOWN_CONTROL', message: `Unknown control type: ${(control as { type?: string }).type ?? 'missing'}`, source: { nodeId: controlId } })
         return next

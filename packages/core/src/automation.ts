@@ -53,7 +53,13 @@ export interface ParallelSource {
   branches: BlockSource[]
 }
 
-export type ControlSource = CapabilitySource | BlockSource | IfSource | WaitSource | ParallelSource
+export interface RaceSource {
+  type: 'race'
+  id: string
+  branches: BlockSource[]
+}
+
+export type ControlSource = CapabilitySource | BlockSource | IfSource | WaitSource | ParallelSource | RaceSource
 
 export interface TriggerSource {
   id: string
@@ -96,9 +102,9 @@ export type CoreInstruction =
     config: { until?: ValueExpr; durationMs?: ValueExpr }
     next?: string
   }
-  | { op: 'fork'; id: string; mode: 'all'; branches: string[]; join: string }
+  | { op: 'fork'; id: string; mode: 'all' | 'first_success'; branches: string[]; join: string }
   | { op: 'scope_complete'; id: string }
-  | { op: 'join'; id: string; mode: 'all'; next?: string }
+  | { op: 'join'; id: string; mode: 'all' | 'first_success'; next?: string }
   | { op: 'complete'; id: string; output?: ValueExpr }
   | { op: 'fail'; id: string; error: ValueExpr }
 

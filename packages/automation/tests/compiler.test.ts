@@ -173,4 +173,32 @@ describe('automation compiler', () => {
       next: '__complete',
     })
   })
+
+  it('lowers Race into a first-success Fork and Join', () => {
+    const race: AutomationSource = {
+      triggers: [],
+      flow: {
+        type: 'race',
+        id: 'fastest',
+        branches: [
+          { type: 'block', id: 'first-branch', steps: [] },
+          { type: 'block', id: 'second-branch', steps: [] },
+        ],
+      },
+    }
+    const result = compileAutomation(race, resolver)
+    expect(result.plan.instructions.fastest).toEqual({
+      op: 'fork',
+      id: 'fastest',
+      mode: 'first_success',
+      branches: ['__fastest.branch.0.complete', '__fastest.branch.1.complete'],
+      join: '__fastest.join',
+    })
+    expect(result.plan.instructions['__fastest.join']).toEqual({
+      op: 'join',
+      id: '__fastest.join',
+      mode: 'first_success',
+      next: '__complete',
+    })
+  })
 })
