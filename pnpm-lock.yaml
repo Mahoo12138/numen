@@ -114,6 +114,18 @@ importers:
         specifier: ^4.0.0-rc.8
         version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
 
+  packages/resources:
+    dependencies:
+      '@numen/core':
+        specifier: workspace:*
+        version: link:../core
+      '@numen/database':
+        specifier: workspace:*
+        version: link:../database
+      cordis:
+        specifier: ^4.0.0-rc.8
+        version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
+
   packages/runtime:
     dependencies:
       '@cordisjs/plugin-loader':

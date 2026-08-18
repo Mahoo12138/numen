@@ -6,6 +6,7 @@
     { "path": "packages/database" },
     { "path": "packages/connections" },
     { "path": "packages/credentials" },
+    { "path": "packages/resources" },
     { "path": "packages/automation" },
     { "path": "packages/scheduler" },
     { "path": "packages/triggers" },

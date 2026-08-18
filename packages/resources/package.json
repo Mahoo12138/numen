@@ -1,0 +1,21 @@
+{
+  "name": "@numen/resources",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "peerDependencies": {
+    "cordis": "^4.0.0-rc.8"
+  },
+  "dependencies": {
+    "@numen/core": "workspace:*",
+    "@numen/database": "workspace:*"
+  }
+}
