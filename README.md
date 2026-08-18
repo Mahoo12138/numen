@@ -1,6 +1,6 @@
 # Numen
 
-Numen is a Cordis-native, plugin-first personal automation runtime. This repository is in its first implementation milestone: host/configuration loading, durable SQLite storage, stable capability contracts, and a minimal operational HTTP surface.
+Numen is a Cordis-native, plugin-first personal automation runtime. The current implementation includes host/configuration loading, durable SQLite storage, stable capability contracts, Automation Draft authoring, deterministic Core IR compilation, immutable Revision publishing, activation, and a durable single-node Scheduler with Run/Execution/Attempt journaling and recovery.
 
 ## Prerequisites
 
@@ -19,7 +19,7 @@ pnpm dev
 The default server listens on `http://127.0.0.1:5140`. Operational endpoints:
 
 - `GET /api/health` — process liveness
-- `GET /api/ready` — database and contract-registry readiness
+- `GET /api/ready` — database, contract-registry, and Automation service readiness
 
 CLI commands:
 

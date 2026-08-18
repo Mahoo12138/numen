@@ -1,13 +1,15 @@
 import Loader, { type EntryOptions } from '@cordisjs/plugin-loader'
 import LoggerConsole from '@cordisjs/plugin-logger-console'
 import Server from '@cordisjs/plugin-server'
+import { AutomationService } from '@numen/automation'
 import { createRuntimeEntries, loadConfig, type LoadedConfig, type RuntimeEntry } from '@numen/config'
 import { CapabilityRegistry } from '@numen/core'
 import { DatabaseService } from '@numen/database'
+import { SchedulerService } from '@numen/scheduler'
 import { Context } from 'cordis'
 import { sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { healthPlugin } from './health.js'
+import { healthPlugin, readinessPlugin } from './health.js'
 
 export interface StartRuntimeOptions {
   configPath?: string
@@ -26,8 +28,11 @@ export interface NumenApplication {
 const builtins = {
   database: DatabaseService,
   capabilities: CapabilityRegistry,
+  automations: AutomationService,
+  scheduler: SchedulerService,
   server: Server,
   health: healthPlugin,
+  readiness: readinessPlugin,
 } as const
 
 function toCordisEntry(entry: RuntimeEntry): EntryOptions {

@@ -4,6 +4,8 @@
     { "path": "packages/config" },
     { "path": "packages/core" },
     { "path": "packages/database" },
+    { "path": "packages/automation" },
+    { "path": "packages/scheduler" },
     { "path": "packages/runtime" },
     { "path": "packages/cli" }
   ]

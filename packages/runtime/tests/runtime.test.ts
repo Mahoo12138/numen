@@ -24,14 +24,24 @@ describe('Numen runtime', () => {
       plugins: {
         database: { path: 'data/numen.db' },
         capabilities: {},
+        automations: {},
+        scheduler: { autoDispatch: false },
         server: { host: '127.0.0.1', port: 0 },
         health: {},
+        readiness: {},
       },
     })
 
     const application = await startRuntime({ configPath })
     applications.push(application)
     const baseUrl = application.serverUrl!
+    const created = application.context.automations.create({ name: 'Runtime smoke test' })
+    const revision = application.context.automations.publishDraft(created.automation.id, 1)
+    application.context.automations.activateRevision(created.automation.id, revision.id)
+    application.context.automations.setEnabled(created.automation.id, true)
+    const run = application.context.scheduler.startManual(created.automation.id)
+    await application.context.scheduler.dispatchUntilIdle()
+    expect(application.context.scheduler.getRun(run.id)?.status).toBe('COMPLETED')
 
     const health = await fetch(`${baseUrl}/api/health`)
     expect(health.status).toBe(200)
@@ -41,7 +51,17 @@ describe('Numen runtime', () => {
     expect(ready.status).toBe(200)
     expect(await ready.json()).toMatchObject({
       status: 'ready',
-      checks: { database: { migrationVersion: 1 } },
+      checks: {
+        database: { migrationVersion: 2 },
+        automations: { ready: true, count: 1 },
+        scheduler: {
+          ready: true,
+          queuedRuns: 0,
+          runnableExecutions: 0,
+          waitingExecutions: 0,
+          blockedExecutions: 0,
+        },
+      },
     })
   })
 })

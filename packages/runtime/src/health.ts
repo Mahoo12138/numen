@@ -19,6 +19,17 @@ export interface ReadinessDocument {
       definitions: number
       providers: number
     }
+    automations: {
+      ready: boolean
+      count: number
+    }
+    scheduler: {
+      ready: boolean
+      queuedRuns: number
+      runnableExecutions: number
+      waitingExecutions: number
+      blockedExecutions: number
+    }
   }
 }
 
@@ -32,6 +43,11 @@ export function healthPlugin(ctx: Context): void {
     } satisfies HealthDocument)
   })
 
+}
+
+healthPlugin.inject = ['server']
+
+export function readinessPlugin(ctx: Context): void {
   ctx.server.get('/api/ready', async (_request, response) => {
     let databaseReady = false
     let migrationVersion: number | undefined
@@ -62,6 +78,11 @@ export function healthPlugin(ctx: Context): void {
           definitions: statuses.length,
           providers: statuses.filter(status => status.providerAvailable).length,
         },
+        automations: {
+          ready: true,
+          count: ctx.automations.count(),
+        },
+        scheduler: ctx.scheduler.health(),
       },
     }
     response.status = document.status === 'ready' ? 200 : 503
@@ -69,4 +90,4 @@ export function healthPlugin(ctx: Context): void {
   })
 }
 
-healthPlugin.inject = ['server', 'database', 'capabilities']
+readinessPlugin.inject = ['server', 'database', 'capabilities', 'automations', 'scheduler']

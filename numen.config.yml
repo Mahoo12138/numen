@@ -6,7 +6,10 @@ plugins:
   database:
     path: .numen/numen.db
   capabilities: {}
+  automations: {}
+  scheduler: {}
   server:
     host: 127.0.0.1
     port: 5140
   health: {}
+  readiness: {}

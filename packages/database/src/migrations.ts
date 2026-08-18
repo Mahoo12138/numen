@@ -111,6 +111,16 @@ export const coreMigrations: readonly Migration[] = [
       `)
     },
   },
+  {
+    version: 2,
+    name: 'execution-block-reason',
+    up(database) {
+      database.exec(`
+        ALTER TABLE executions ADD COLUMN blocked_reason TEXT;
+        CREATE INDEX executions_blocked_idx ON executions(status, blocked_reason, updated_at);
+      `)
+    },
+  },
 ]
 
 export function runMigrations(

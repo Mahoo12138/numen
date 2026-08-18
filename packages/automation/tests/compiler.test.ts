@@ -1,0 +1,106 @@
+import type { AutomationSource, CapabilityDefinition, CapabilityStatus } from '@numen/core'
+import z from 'schemastery'
+import { describe, expect, it } from 'vitest'
+import { AutomationCompileError, compileAutomation } from '../src/index.js'
+
+const triggerDefinition: CapabilityDefinition = {
+  id: 'test:manual',
+  version: 1,
+  kind: 'trigger',
+  title: 'Manual trigger',
+  input: z.object({ source: z.string().required() }),
+  output: z.object({}),
+  semantics: { sideEffect: false, idempotent: true, retrySafe: true },
+}
+
+const actionDefinition: CapabilityDefinition = {
+  id: 'test:send',
+  version: 1,
+  kind: 'action',
+  title: 'Send message',
+  input: z.object({ message: z.string().required() }),
+  output: z.object({ delivered: z.boolean().required() }),
+  semantics: { sideEffect: true, idempotent: false, retrySafe: false },
+}
+
+const definitions = new Map<string, CapabilityDefinition>([
+  ['test:manual@1', triggerDefinition],
+  ['test:send@1', actionDefinition],
+])
+
+const resolver = {
+  get(ref: { id: string; version: number }): CapabilityStatus | undefined {
+    const definition = definitions.get(`${ref.id}@${ref.version}`)
+    return definition ? { definition, providerAvailable: false } : undefined
+  },
+}
+
+const source: AutomationSource = {
+  triggers: [{
+    id: 'manual-trigger',
+    capability: { id: 'test:manual', version: 1 },
+    config: { source: 'test' },
+  }],
+  flow: {
+    type: 'block',
+    id: 'flow',
+    steps: [
+      {
+        type: 'capability',
+        id: 'send-message',
+        capability: { id: 'test:send', version: 1 },
+        input: { message: { type: 'literal', value: 'Hello' } },
+      },
+      {
+        type: 'wait',
+        id: 'short-wait',
+        durationMs: { type: 'literal', value: 1000 },
+      },
+    ],
+  },
+}
+
+describe('automation compiler', () => {
+  it('lowers structured source into deterministic Core IR and snapshots contracts', () => {
+    const result = compileAutomation(source, resolver)
+    expect(result.plan.entry).toBe('send-message')
+    expect(result.plan.instructions['send-message']).toMatchObject({ op: 'invoke', next: 'short-wait' })
+    expect(result.plan.instructions['short-wait']).toMatchObject({ op: 'suspend', next: '__complete' })
+    expect(result.dependencyManifest.capabilities.map(item => item.id)).toEqual(['test:manual', 'test:send'])
+    expect(result.contractSnapshot.capabilities).toHaveLength(2)
+  })
+
+  it('blocks publishing when a contract or required field is missing', () => {
+    const invalid: AutomationSource = {
+      triggers: [],
+      flow: {
+        type: 'capability',
+        id: 'broken',
+        capability: { id: 'missing:action', version: 1 },
+        input: {},
+      },
+    }
+    expect(() => compileAutomation(invalid, resolver)).toThrow(AutomationCompileError)
+
+    const missingInput = structuredClone(source)
+    const flow = missingInput.flow
+    if (flow.type !== 'block' || flow.steps[0]?.type !== 'capability') throw new Error('invalid fixture')
+    flow.steps[0].input = {}
+    try {
+      compileAutomation(missingInput, resolver)
+      throw new Error('expected compilation to fail')
+    } catch (error) {
+      expect(error).toBeInstanceOf(AutomationCompileError)
+      expect((error as AutomationCompileError).diagnostics).toContainEqual(expect.objectContaining({ code: 'INPUT_REQUIRED' }))
+    }
+  })
+
+  it('returns structural diagnostics for untrusted draft JSON', () => {
+    expect(() => compileAutomation({ triggers: [] } as unknown as AutomationSource, resolver))
+      .toThrow(AutomationCompileError)
+    expect(() => compileAutomation({
+      triggers: [],
+      flow: { type: 'block', id: 'flow' },
+    } as unknown as AutomationSource, resolver)).toThrow(AutomationCompileError)
+  })
+})
