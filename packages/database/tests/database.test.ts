@@ -27,7 +27,8 @@ describe('DatabaseService', () => {
     expect(tables).toContain('run_events')
     expect(tables).toContain('trigger_events')
     expect(tables).toContain('connections')
-    expect(root.database.health()).toMatchObject({ ready: true, migrationVersion: 5 })
+    expect(tables).toContain('credentials')
+    expect(root.database.health()).toMatchObject({ ready: true, migrationVersion: 6 })
     expect(runMigrations(root.database.db)).toBe(0)
 
     await root.fiber.dispose()
@@ -38,7 +39,7 @@ describe('DatabaseService', () => {
     await root.plugin(DatabaseService, { path: ':memory:' })
 
     expect(() => runMigrations(root.database.db, [{
-      version: 6,
+      version: 7,
       name: 'broken',
       up(database) {
         database.exec('CREATE TABLE should_rollback (id TEXT);')

@@ -184,6 +184,29 @@ export const coreMigrations: readonly Migration[] = [
       `)
     },
   },
+  {
+    version: 6,
+    name: 'encrypted-credentials',
+    up(database) {
+      database.exec(`
+        CREATE TABLE credentials (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          type_id TEXT NOT NULL,
+          type_version INTEGER NOT NULL,
+          ciphertext BLOB NOT NULL,
+          nonce BLOB NOT NULL,
+          key_id TEXT NOT NULL,
+          secret_version INTEGER NOT NULL DEFAULT 1,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+
+        CREATE INDEX credentials_type_idx
+          ON credentials(type_id, type_version, updated_at DESC);
+      `)
+    },
+  },
 ]
 
 export function runMigrations(

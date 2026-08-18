@@ -28,6 +28,12 @@ export interface ReadinessDocument {
       runtimeReady: number
       errors: number
     }
+    credentials: {
+      ready: boolean
+      encryptionConfigured: boolean
+      count: number
+      unavailableTypes: number
+    }
     automations: {
       ready: boolean
       count: number
@@ -94,6 +100,7 @@ export function readinessPlugin(ctx: Context): void {
           providers: statuses.filter(status => status.providerAvailable).length,
         },
         connections: ctx.connections.health(),
+        credentials: ctx.credentials.health(),
         automations: {
           ready: true,
           count: ctx.automations.count(),
@@ -107,4 +114,4 @@ export function readinessPlugin(ctx: Context): void {
   })
 }
 
-readinessPlugin.inject = ['server', 'database', 'capabilities', 'connections', 'automations', 'scheduler', 'triggers']
+readinessPlugin.inject = ['server', 'database', 'capabilities', 'connections', 'credentials', 'automations', 'scheduler', 'triggers']

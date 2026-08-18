@@ -55,7 +55,7 @@ export async function runCli(argv = process.argv.slice(2), io = defaultIo): Prom
   const command = positionals[0]
   if (command === 'config' && positionals[1] === 'validate') {
     const loaded = await loadConfig(values.config)
-    createRuntimeEntries(loaded.config, new Set(['database', 'capabilities', 'connections', 'automations', 'scheduler', 'triggers', 'server', 'health', 'readiness']))
+    createRuntimeEntries(loaded.config, new Set(['database', 'capabilities', 'connections', 'credentials', 'automations', 'scheduler', 'triggers', 'server', 'health', 'readiness']))
     io.out(`valid: ${loaded.filename}`)
     return 0
   }
@@ -64,7 +64,7 @@ export async function runCli(argv = process.argv.slice(2), io = defaultIo): Prom
     const loaded = await loadConfig(values.config)
     const entries = createRuntimeEntries(
       loaded.config,
-      new Set(['database', 'capabilities', 'connections', 'automations', 'scheduler', 'triggers', 'server', 'health', 'readiness']),
+      new Set(['database', 'capabilities', 'connections', 'credentials', 'automations', 'scheduler', 'triggers', 'server', 'health', 'readiness']),
       values.safe,
     )
     let writable = true

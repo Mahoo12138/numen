@@ -37,6 +37,7 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Durable Trigger acceptance with generation fencing and event deduplication
 - [x] Durable Connection configuration with Adapter contracts and optimistic generation
 - [x] Connection Runtime open/close lifecycle with generation-fenced recreation
+- [x] Encrypted Credential payload storage with metadata-only reads and versioned rotation
 
 ## Milestone 3 — Completed
 
@@ -53,7 +54,7 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 
 ## Next
 
-1. Credential and Resource services
+1. Credential-to-Connection runtime snapshots and Resource services
 2. Parallel/Race/ForEach structured concurrency
 3. Typed Console Query/Action/Subscription protocol
 4. Browser Cordis Runtime and the first Workbench UI
@@ -63,10 +64,10 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 ```text
 Typecheck: passing
 Build: passing
-Tests: 9 files, 30 tests passing
+Tests: 10 files, 33 tests passing
 CLI config validate: passing
 CLI doctor: passing
-SQLite schema migration: v5
+SQLite schema migration: v6
 ```
 
 Run locally with:
@@ -85,5 +86,6 @@ pnpm dev
 - The current Scheduler executes the Core IR subset emitted by the compiler, including retry, timeout, cancellation, and recovery. Parallel/Race/ForEach structured concurrency remains planned work.
 - Manual Runs and event Trigger subscriptions are supported. State Trigger transition detection, filtering, debounce, and throttle remain planned work.
 - Connection desired state, Adapter contracts, and generation-fenced Runtime recreation are operational; automatic reconnect policy and Credential binding are not implemented yet.
+- Credential payloads use authenticated encryption with environment-provided keys; key-ring migration and external vault providers remain planned work.
 - The npm organization/scope is still an architecture placeholder.
 - No arbitrary JavaScript evaluation, distributed scheduling, plugin sandbox, or multi-user authorization is implemented.

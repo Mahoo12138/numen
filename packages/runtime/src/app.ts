@@ -4,6 +4,7 @@ import Server from '@cordisjs/plugin-server'
 import { AutomationService } from '@numen/automation'
 import { createRuntimeEntries, loadConfig, type LoadedConfig, type RuntimeEntry } from '@numen/config'
 import { ConnectionService } from '@numen/connections'
+import { CredentialService } from '@numen/credentials'
 import { CapabilityRegistry } from '@numen/core'
 import { DatabaseService } from '@numen/database'
 import { SchedulerService } from '@numen/scheduler'
@@ -31,6 +32,7 @@ const builtins = {
   database: DatabaseService,
   capabilities: CapabilityRegistry,
   connections: ConnectionService,
+  credentials: CredentialService,
   automations: AutomationService,
   scheduler: SchedulerService,
   triggers: TriggerService,

@@ -25,6 +25,7 @@ describe('Numen runtime', () => {
         database: { path: 'data/numen.db' },
         capabilities: {},
         connections: {},
+        credentials: {},
         automations: {},
         scheduler: { autoDispatch: false },
         triggers: {},
@@ -54,7 +55,7 @@ describe('Numen runtime', () => {
     expect(await ready.json()).toMatchObject({
       status: 'ready',
       checks: {
-        database: { migrationVersion: 5 },
+        database: { migrationVersion: 6 },
         automations: { ready: true, count: 1 },
         connections: {
           ready: true,
@@ -64,6 +65,12 @@ describe('Numen runtime', () => {
           starting: 0,
           runtimeReady: 0,
           errors: 0,
+        },
+        credentials: {
+          ready: true,
+          encryptionConfigured: false,
+          count: 0,
+          unavailableTypes: 0,
         },
         scheduler: {
           ready: true,
