@@ -47,7 +47,13 @@ export interface WaitSource {
   durationMs?: ValueExpr
 }
 
-export type ControlSource = CapabilitySource | BlockSource | IfSource | WaitSource
+export interface ParallelSource {
+  type: 'parallel'
+  id: string
+  branches: BlockSource[]
+}
+
+export type ControlSource = CapabilitySource | BlockSource | IfSource | WaitSource | ParallelSource
 
 export interface TriggerSource {
   id: string
@@ -90,6 +96,9 @@ export type CoreInstruction =
     config: { until?: ValueExpr; durationMs?: ValueExpr }
     next?: string
   }
+  | { op: 'fork'; id: string; mode: 'all'; branches: string[]; join: string }
+  | { op: 'scope_complete'; id: string }
+  | { op: 'join'; id: string; mode: 'all'; next?: string }
   | { op: 'complete'; id: string; output?: ValueExpr }
   | { op: 'fail'; id: string; error: ValueExpr }
 

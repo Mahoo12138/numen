@@ -119,4 +119,58 @@ describe('automation compiler', () => {
         .toContainEqual(expect.objectContaining({ code: 'RETRY_UNSAFE' }))
     }
   })
+
+  it('lowers Parallel branches into deterministic Fork, scope terminals, and Join', () => {
+    const parallel: AutomationSource = {
+      triggers: [],
+      flow: {
+        type: 'parallel',
+        id: 'parallel-work',
+        branches: [
+          {
+            type: 'block',
+            id: 'left-branch',
+            steps: [{
+              type: 'capability',
+              id: 'left-send',
+              capability: { id: 'test:send', version: 1 },
+              input: { message: { type: 'literal', value: 'left' } },
+            }],
+          },
+          {
+            type: 'block',
+            id: 'right-branch',
+            steps: [{
+              type: 'capability',
+              id: 'right-send',
+              capability: { id: 'test:send', version: 1 },
+              input: { message: { type: 'literal', value: 'right' } },
+            }],
+          },
+        ],
+      },
+    }
+
+    const result = compileAutomation(parallel, resolver)
+    expect(result.plan.entry).toBe('parallel-work')
+    expect(result.plan.instructions['parallel-work']).toEqual({
+      op: 'fork',
+      id: 'parallel-work',
+      mode: 'all',
+      branches: ['left-send', 'right-send'],
+      join: '__parallel-work.join',
+    })
+    expect(result.plan.instructions['left-send']).toMatchObject({
+      next: '__parallel-work.branch.0.complete',
+    })
+    expect(result.plan.instructions['right-send']).toMatchObject({
+      next: '__parallel-work.branch.1.complete',
+    })
+    expect(result.plan.instructions['__parallel-work.join']).toEqual({
+      op: 'join',
+      id: '__parallel-work.join',
+      mode: 'all',
+      next: '__complete',
+    })
+  })
 })

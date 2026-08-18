@@ -329,6 +329,41 @@ export function compileAutomation(source: AutomationSource, capabilities: Capabi
         }
         return control.id
       }
+      case 'parallel': {
+        if (!Array.isArray(control.branches) || control.branches.length < 2) {
+          report({
+            severity: 'error',
+            code: 'PARALLEL_BRANCHES_INVALID',
+            message: 'Parallel requires at least two block branches.',
+            source: { nodeId: control.id, fieldPath: 'branches' },
+          })
+          return next
+        }
+        const joinId = `__${control.id}.join`
+        instructions[joinId] = { op: 'join', id: joinId, mode: 'all', next }
+        const branches = control.branches.map((branch, index) => {
+          if (!branch || branch.type !== 'block') {
+            report({
+              severity: 'error',
+              code: 'PARALLEL_BRANCH_INVALID',
+              message: 'Each Parallel branch must be a block.',
+              source: { nodeId: control.id, fieldPath: `branches.${index}` },
+            })
+            return `__${control.id}.branch.${index}.complete`
+          }
+          const terminalId = `__${control.id}.branch.${index}.complete`
+          instructions[terminalId] = { op: 'scope_complete', id: terminalId }
+          return compileControl(branch, terminalId)
+        })
+        instructions[control.id] = {
+          op: 'fork',
+          id: control.id,
+          mode: 'all',
+          branches,
+          join: joinId,
+        }
+        return control.id
+      }
       default:
         report({ severity: 'error', code: 'UNKNOWN_CONTROL', message: `Unknown control type: ${(control as { type?: string }).type ?? 'missing'}`, source: { nodeId: controlId } })
         return next
