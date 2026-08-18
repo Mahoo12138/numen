@@ -39,6 +39,38 @@ export interface CapabilityProvider<Input = NumenValue, Output = NumenValue> {
   invoke(invocation: CapabilityInvocation<Input>): Promise<Output>
 }
 
+export interface TriggerBinding {
+  automationId: string
+  revisionId: string
+  activationGeneration: number
+  triggerId: string
+  config: Record<string, NumenValue>
+  connectionIds: Record<string, string>
+}
+
+export interface TriggerEmission<Output = NumenValue> {
+  data: Output
+  occurredAt?: string
+  eventId?: string
+  subject?: string
+  checkpoint?: NumenValue
+}
+
+export interface TriggerAcceptance {
+  status: 'accepted' | 'duplicate' | 'stale'
+  runId?: string
+}
+
+export interface TriggerActivation<Output = NumenValue> {
+  binding: TriggerBinding
+  signal: AbortSignal
+  emit(emission: TriggerEmission<Output>): Promise<TriggerAcceptance>
+}
+
+export interface TriggerProvider<Output = NumenValue> {
+  activate(activation: TriggerActivation<Output>): void | (() => void)
+}
+
 export interface CapabilityStatus {
   definition: CapabilityDefinition
   providerAvailable: boolean
@@ -47,6 +79,7 @@ export interface CapabilityStatus {
 interface RegistryEntry {
   definition: CapabilityDefinition
   provider?: CapabilityProvider
+  triggerProvider?: TriggerProvider
 }
 
 declare module 'cordis' {
@@ -100,6 +133,9 @@ export class CapabilityRegistry extends Service {
     const key = capabilityKey(ref)
     const entry = this.entries.get(key)
     if (!entry) throw new Error(`capability definition missing: ${key}`)
+    if (entry.definition.kind === 'trigger') {
+      throw new Error(`trigger capability requires provideTrigger(): ${key}`)
+    }
     if (entry.provider) throw new Error(`capability provider already registered: ${key}`)
 
     return owner.effect(() => {
@@ -112,19 +148,52 @@ export class CapabilityRegistry extends Service {
     }, `capabilities.provide(${JSON.stringify(key)})`)
   }
 
+  provideTrigger<Output>(
+    owner: Context,
+    ref: CapabilityRef,
+    provider: TriggerProvider<Output>,
+  ): () => void {
+    const key = capabilityKey(ref)
+    const entry = this.entries.get(key)
+    if (!entry) throw new Error(`capability definition missing: ${key}`)
+    if (entry.definition.kind !== 'trigger') {
+      throw new Error(`capability is not a trigger: ${key}`)
+    }
+    if (entry.triggerProvider) throw new Error(`trigger provider already registered: ${key}`)
+
+    return owner.effect(() => {
+      entry.triggerProvider = provider as TriggerProvider
+      this.ctx.emit('numen/capability-change', ref)
+      return () => {
+        delete entry.triggerProvider
+        this.ctx.emit('numen/capability-change', ref)
+      }
+    }, `capabilities.provideTrigger(${JSON.stringify(key)})`)
+  }
+
   get(ref: CapabilityRef): CapabilityStatus | undefined {
     const entry = this.entries.get(capabilityKey(ref))
     if (!entry) return
-    return { definition: entry.definition, providerAvailable: !!entry.provider }
+    return {
+      definition: entry.definition,
+      providerAvailable: entry.definition.kind === 'trigger' ? !!entry.triggerProvider : !!entry.provider,
+    }
   }
 
   resolveProvider<Input, Output>(ref: CapabilityRef): CapabilityProvider<Input, Output> | undefined {
     return this.entries.get(capabilityKey(ref))?.provider as CapabilityProvider<Input, Output> | undefined
   }
 
+  resolveTriggerProvider<Output>(ref: CapabilityRef): TriggerProvider<Output> | undefined {
+    return this.entries.get(capabilityKey(ref))?.triggerProvider as TriggerProvider<Output> | undefined
+  }
+
   list(): CapabilityStatus[] {
     return [...this.entries.values()]
-      .map(entry => ({ definition: entry.definition, providerAvailable: !!entry.provider }))
+      .map(entry => ({
+        definition: entry.definition,
+        providerAvailable: entry.definition.kind === 'trigger' ? !!entry.triggerProvider : !!entry.provider,
+      }))
       .sort((a, b) => capabilityKey(a.definition).localeCompare(capabilityKey(b.definition)))
   }
 }

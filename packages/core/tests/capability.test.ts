@@ -41,4 +41,33 @@ describe('CapabilityRegistry', () => {
     expect(() => root.capabilities.define(root, definition)).toThrow('already defined')
     await root.fiber.dispose()
   })
+
+  it('tracks trigger providers separately from invocation providers', async () => {
+    const root = new Context()
+    await root.plugin(CapabilityRegistry)
+    const trigger: CapabilityDefinition = {
+      id: 'test:event',
+      version: 1,
+      kind: 'trigger',
+      title: 'Test event',
+      input: z.object({ channel: z.string().required() }),
+      output: z.object({ value: z.string().required() }),
+      semantics: { sideEffect: false, idempotent: true, retrySafe: true },
+    }
+    root.capabilities.define(root, trigger)
+    expect(() => root.capabilities.provide(root, trigger, {
+      async invoke({ input }) {
+        return input
+      },
+    })).toThrow('requires provideTrigger')
+
+    const dispose = root.capabilities.provideTrigger(root, trigger, {
+      activate() {},
+    })
+    expect(root.capabilities.get(trigger)).toMatchObject({ providerAvailable: true })
+    expect(root.capabilities.resolveTriggerProvider(trigger)).toBeDefined()
+    dispose()
+    expect(root.capabilities.get(trigger)).toMatchObject({ providerAvailable: false })
+    await root.fiber.dispose()
+  })
 })
