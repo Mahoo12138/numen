@@ -2,6 +2,7 @@ import '@numen/automation'
 import {
   capabilityKey,
   isNumenValue,
+  isResourceRef,
   type Attempt,
   type AutomationRevision,
   type CancellationReason,
@@ -16,6 +17,7 @@ import {
   type TriggerEmission,
 } from '@numen/core'
 import '@numen/database'
+import '@numen/resources'
 import { Service, type Context } from 'cordis'
 import { randomUUID } from 'node:crypto'
 import { evaluateExpression, type EvaluationBindings } from './evaluator.js'
@@ -176,7 +178,7 @@ interface ActiveInvocation {
 }
 
 export class SchedulerService extends Service {
-  static inject = ['database', 'capabilities', 'automations']
+  static inject = ['database', 'capabilities', 'automations', 'resources']
 
   private ready = false
   private dispatchTask: Promise<number> | undefined
@@ -660,6 +662,7 @@ export class SchedulerService extends Service {
         WHERE id = ? AND status = 'RUNNING'
       `).run(JSON.stringify(output), now, execution.id)
       if (!result.changes) return
+      this.commitOutputResources(execution, output)
       this.appendEvent(execution.runId, 'ExecutionCompleted', { executionId: execution.id, output }, now)
       if (next) this.createExecution(execution.runId, next, execution.id)
     })
@@ -748,6 +751,7 @@ export class SchedulerService extends Service {
         WHERE id = ? AND status = 'RUNNABLE'
       `).run(JSON.stringify(output), now, execution.id)
       if (!result.changes) return
+      this.commitOutputResources(execution, output)
       this.appendEvent(execution.runId, 'ExecutionCompleted', { executionId: execution.id, output }, now)
       if (next) this.createExecution(execution.runId, next, execution.id)
     })
@@ -761,6 +765,7 @@ export class SchedulerService extends Service {
         WHERE id = ? AND status = 'RUNNABLE'
       `).run(JSON.stringify(output), now, execution.id)
       if (!result.changes) return
+      this.commitOutputResources(execution, output)
       this.ctx.database.db.prepare(`
         UPDATE runs SET status = 'COMPLETED', finished_at = ? WHERE id = ? AND status = 'RUNNING'
       `).run(now, execution.runId)
@@ -1003,6 +1008,27 @@ export class SchedulerService extends Service {
         `).run(now, row.id)
         this.appendEvent(row.run_id, 'ExecutionRecovered', { executionId: row.id }, now)
       })
+    }
+  }
+
+  private commitOutputResources(execution: Execution, output: NumenValue): void {
+    const resourceIds = new Set<string>()
+    const visit = (value: NumenValue): void => {
+      if (isResourceRef(value)) {
+        resourceIds.add(value.$resource)
+        return
+      }
+      if (Array.isArray(value)) {
+        for (const item of value) visit(item)
+        return
+      }
+      if (value && typeof value === 'object') {
+        for (const item of Object.values(value)) visit(item)
+      }
+    }
+    visit(output)
+    for (const resourceId of resourceIds) {
+      this.ctx.resources.commitOwner(resourceId, { type: 'execution', id: execution.id })
     }
   }
 }

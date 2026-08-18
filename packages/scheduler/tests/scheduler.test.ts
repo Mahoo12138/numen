@@ -6,10 +6,11 @@ import {
   type NumenValue,
 } from '@numen/core'
 import { DatabaseService } from '@numen/database'
+import { ResourceService } from '@numen/resources'
 import { Context } from 'cordis'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import z from 'schemastery'
 import { afterEach, describe, expect, it } from 'vitest'
 import { SchedulerService } from '../src/index.js'
@@ -60,6 +61,7 @@ async function createContext(
     })
   }
   await root.plugin(AutomationService)
+  await root.plugin(ResourceService, { path: join(dirname(databasePath), 'resources') })
   await root.plugin(SchedulerService, { autoDispatch: false })
   return root
 }
@@ -99,6 +101,57 @@ const linearSource: AutomationSource = {
 }
 
 describe('SchedulerService', () => {
+  it('commits ResourceRef outputs to an Execution owner in the success transaction', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'numen-scheduler-'))
+    directories.push(directory)
+    const root = await createContext(join(directory, 'numen.db'))
+    const resource = await root.resources.stage({
+      name: 'Capability output',
+      mediaType: 'text/plain',
+      content: Buffer.from('owned output'),
+    })
+    const resourceCapability: CapabilityDefinition = {
+      id: 'test:resource',
+      version: 1,
+      kind: 'action',
+      title: 'Return resource',
+      input: z.object({}),
+      output: z.object({ resource: z.object({ $resource: z.string().required() }) }),
+      semantics: { sideEffect: false, idempotent: true, retrySafe: true },
+    }
+    let outputRef = resource.ref
+    root.capabilities.define(root, resourceCapability)
+    root.capabilities.provide(root, resourceCapability, {
+      async invoke() {
+        return { resource: outputRef }
+      },
+    })
+    const automationId = publish(root, {
+      triggers: [],
+      flow: {
+        type: 'capability',
+        id: 'resource-step',
+        capability: resourceCapability,
+        input: {},
+      },
+    })
+    const run = root.scheduler.startManual(automationId)
+    await root.scheduler.dispatchUntilIdle()
+
+    expect(root.scheduler.getRun(run.id)?.status).toBe('COMPLETED')
+    expect(root.resources.get(resource.id)?.state).toBe('COMMITTED')
+    const execution = root.scheduler.listExecutions(run.id).find(item => item.instructionId === 'resource-step')!
+    expect(root.resources.listOwners(resource.id)).toEqual([{ type: 'execution', id: execution.id }])
+
+    outputRef = { $resource: 'res_missing' }
+    const invalidRun = root.scheduler.startManual(automationId)
+    await root.scheduler.dispatchUntilIdle()
+    expect(root.scheduler.getRun(invalidRun.id)?.status).toBe('FAILED')
+    expect(root.scheduler.listAttempts(invalidRun.id).map(attempt => attempt.status)).toEqual(['FAILED'])
+    expect(root.scheduler.listExecutions(invalidRun.id)[0]?.status).toBe('FAILED')
+    await root.fiber.dispose()
+  })
+
   it('durably accepts and deduplicates active trigger emissions', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'numen-scheduler-'))
     directories.push(directory)

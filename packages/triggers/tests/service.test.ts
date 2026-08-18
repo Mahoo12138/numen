@@ -5,6 +5,7 @@ import {
   type TriggerActivation,
 } from '@numen/core'
 import { DatabaseService } from '@numen/database'
+import { ResourceService } from '@numen/resources'
 import { SchedulerService } from '@numen/scheduler'
 import { Context } from 'cordis'
 import { mkdtemp, rm } from 'node:fs/promises'
@@ -58,6 +59,7 @@ describe('TriggerService', () => {
       },
     })
     await root.plugin(AutomationService)
+    await root.plugin(ResourceService, { path: join(directory, 'resources') })
     await root.plugin(SchedulerService, { autoDispatch: false })
     await root.plugin(TriggerService)
 
@@ -100,11 +102,14 @@ describe('TriggerService', () => {
   })
 
   it('waits for an unavailable provider and subscribes when it appears', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'numen-triggers-'))
+    directories.push(directory)
     const root = new Context()
     await root.plugin(DatabaseService, { path: ':memory:' })
     await root.plugin(CapabilityRegistry)
     root.capabilities.define(root, definition)
     await root.plugin(AutomationService)
+    await root.plugin(ResourceService, { path: join(directory, 'resources') })
     await root.plugin(SchedulerService, { autoDispatch: false })
     await root.plugin(TriggerService)
     const created = root.automations.create({ name: 'Late provider', source })

@@ -179,6 +179,9 @@ importers:
       '@numen/database':
         specifier: workspace:*
         version: link:../database
+      '@numen/resources':
+        specifier: workspace:*
+        version: link:../resources
       cordis:
         specifier: ^4.0.0-rc.8
         version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
@@ -205,6 +208,9 @@ importers:
       '@numen/database':
         specifier: workspace:*
         version: link:../database
+      '@numen/resources':
+        specifier: workspace:*
+        version: link:../resources
       schemastery:
         specifier: ^3.18.0
         version: 3.18.0

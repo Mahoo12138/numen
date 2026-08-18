@@ -212,7 +212,7 @@ export class ResourceService extends Service {
   commitOwner(resourceId: string, owner: ResourceOwner): ResourceMetadata {
     this.validateOwner(owner)
     const now = new Date().toISOString()
-    this.ctx.database.transaction(() => {
+    const commit = () => {
       const resource = this.requireResource(resourceId)
       if (resource.state !== 'STAGED' && resource.state !== 'COMMITTED') {
         throw new Error(`resource cannot be committed from ${resource.state}`)
@@ -226,7 +226,9 @@ export class ResourceService extends Service {
         SET state = 'COMMITTED', staged_expires_at = NULL, gc_after = NULL, updated_at = ?
         WHERE id = ? AND state IN ('STAGED', 'COMMITTED')
       `).run(now, resourceId)
-    })
+    }
+    if (this.ctx.database.db.inTransaction) commit()
+    else this.ctx.database.transaction(commit)
     return this.get(resourceId)!
   }
 

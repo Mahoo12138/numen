@@ -21,6 +21,7 @@
   },
   "devDependencies": {
     "@numen/database": "workspace:*",
+    "@numen/resources": "workspace:*",
     "schemastery": "^3.18.0"
   }
 }

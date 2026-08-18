@@ -41,6 +41,7 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Credential-to-Connection fixed runtime snapshots and rotation-driven recreation
 - [x] Content-addressed local Resource Store with atomic deduplication
 - [x] Resource STAGED/COMMITTED/DELETING/GONE lifecycle, Owner, Lease, and recovery GC
+- [x] Scheduler ResourceRef output validation and transactional Execution ownership
 
 ## Milestone 3 — Completed
 
@@ -57,17 +58,16 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 
 ## Next
 
-1. Scheduler ResourceRef ownership commit and output integration
-2. Parallel/Race/ForEach structured concurrency
-3. Typed Console Query/Action/Subscription protocol
-4. Browser Cordis Runtime and the first Workbench UI
+1. Parallel/Race/ForEach structured concurrency
+2. Typed Console Query/Action/Subscription protocol
+3. Browser Cordis Runtime and the first Workbench UI
 
 ## Verification Baseline
 
 ```text
 Typecheck: passing
 Build: passing
-Tests: 12 files, 40 tests passing
+Tests: 12 files, 41 tests passing
 CLI config validate: passing
 CLI doctor: passing
 SQLite schema migration: v7
@@ -90,6 +90,6 @@ pnpm dev
 - Manual Runs and event Trigger subscriptions are supported. State Trigger transition detection, filtering, debounce, and throttle remain planned work.
 - Connection desired state, Adapter contracts, generation-fenced Runtime recreation, and Credential snapshots are operational; automatic reconnect policy remains planned work.
 - Credential payloads use authenticated encryption with environment-provided keys; key-ring migration and external vault providers remain planned work.
-- Local Resource bytes are content-addressed and lifecycle-managed; Scheduler output ownership and authorized HTTP delivery remain planned work.
+- Local Resource bytes are content-addressed and lifecycle-managed, and Scheduler success commits Execution owners transactionally; authorized HTTP delivery remains planned work.
 - The npm organization/scope is still an architecture placeholder.
 - No arbitrary JavaScript evaluation, distributed scheduling, plugin sandbox, or multi-user authorization is implemented.

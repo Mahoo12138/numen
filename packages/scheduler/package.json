@@ -17,7 +17,8 @@
   "dependencies": {
     "@numen/automation": "workspace:*",
     "@numen/core": "workspace:*",
-    "@numen/database": "workspace:*"
+    "@numen/database": "workspace:*",
+    "@numen/resources": "workspace:*"
   },
   "devDependencies": {
     "schemastery": "^3.18.0"
