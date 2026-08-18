@@ -101,6 +101,197 @@ const linearSource: AutomationSource = {
 }
 
 describe('SchedulerService', () => {
+  it('runs Parallel branches concurrently and joins before the successor', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'numen-scheduler-'))
+    directories.push(directory)
+    let active = 0
+    let maxActive = 0
+    const completed: string[] = []
+    const root = await createContext(join(directory, 'numen.db'), actionDefinition(), async input => {
+      const value = (input as { value: string }).value
+      active += 1
+      maxActive = Math.max(maxActive, active)
+      await new Promise<void>(resolve => setImmediate(resolve))
+      active -= 1
+      completed.push(value)
+      return input
+    })
+    const automationId = publish(root, {
+      triggers: [],
+      flow: {
+        type: 'block',
+        id: 'flow',
+        steps: [
+          {
+            type: 'parallel',
+            id: 'parallel-work',
+            branches: [
+              {
+                type: 'block',
+                id: 'left-branch',
+                steps: [{
+                  type: 'capability',
+                  id: 'left',
+                  capability: { id: 'test:record', version: 1 },
+                  input: { value: { type: 'literal', value: 'left' } },
+                }],
+              },
+              {
+                type: 'block',
+                id: 'right-branch',
+                steps: [{
+                  type: 'capability',
+                  id: 'right',
+                  capability: { id: 'test:record', version: 1 },
+                  input: { value: { type: 'literal', value: 'right' } },
+                }],
+              },
+            ],
+          },
+          {
+            type: 'capability',
+            id: 'after',
+            capability: { id: 'test:record', version: 1 },
+            input: { value: { type: 'literal', value: 'after' } },
+          },
+        ],
+      },
+    })
+    const run = root.scheduler.startManual(automationId)
+    await root.scheduler.dispatchUntilIdle()
+
+    expect(root.scheduler.getRun(run.id)?.status).toBe('COMPLETED')
+    expect(maxActive).toBe(2)
+    expect(completed.slice(0, 2).sort()).toEqual(['left', 'right'])
+    expect(completed[2]).toBe('after')
+    const executions = root.scheduler.listExecutions(run.id)
+    const fork = executions.find(execution => execution.instructionId === 'parallel-work')!
+    expect(fork.status).toBe('COMPLETED')
+    expect(executions.filter(execution => execution.scopeExecutionId === fork.id)).toHaveLength(4)
+    expect(executions.every(execution => execution.status === 'COMPLETED')).toBe(true)
+    expect(root.scheduler.listEvents(run.id).map(event => event.type)).toEqual(expect.arrayContaining([
+      'ExecutionForked',
+      'ExecutionJoined',
+    ]))
+    await root.fiber.dispose()
+  })
+
+  it('fails Parallel fast and aborts sibling branches without running the successor', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'numen-scheduler-'))
+    directories.push(directory)
+    let startRight: (() => void) | undefined
+    const rightStarted = new Promise<void>(resolve => {
+      startRight = resolve
+    })
+    const calls: string[] = []
+    const root = await createContext(join(directory, 'numen.db'), actionDefinition(), async (input, signal) => {
+      const value = (input as { value: string }).value
+      calls.push(value)
+      if (value === 'left') {
+        await rightStarted
+        throw new Error('left failed')
+      }
+      if (value === 'right') {
+        startRight?.()
+        return new Promise((_resolve, reject) => {
+          signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+        })
+      }
+      return input
+    })
+    const automationId = publish(root, {
+      triggers: [],
+      flow: {
+        type: 'block',
+        id: 'flow',
+        steps: [
+          {
+            type: 'parallel',
+            id: 'parallel-work',
+            branches: [
+              {
+                type: 'block',
+                id: 'left-branch',
+                steps: [{
+                  type: 'capability',
+                  id: 'left',
+                  capability: { id: 'test:record', version: 1 },
+                  input: { value: { type: 'literal', value: 'left' } },
+                }],
+              },
+              {
+                type: 'block',
+                id: 'right-branch',
+                steps: [{
+                  type: 'capability',
+                  id: 'right',
+                  capability: { id: 'test:record', version: 1 },
+                  input: { value: { type: 'literal', value: 'right' } },
+                }],
+              },
+            ],
+          },
+          {
+            type: 'capability',
+            id: 'after',
+            capability: { id: 'test:record', version: 1 },
+            input: { value: { type: 'literal', value: 'after' } },
+          },
+        ],
+      },
+    })
+    const run = root.scheduler.startManual(automationId)
+    await root.scheduler.dispatchUntilIdle()
+
+    expect(root.scheduler.getRun(run.id)?.status).toBe('FAILED')
+    expect(calls.sort()).toEqual(['left', 'right'])
+    expect(root.scheduler.listAttempts(run.id).map(attempt => attempt.status).sort())
+      .toEqual(['ABORTED', 'FAILED'])
+    expect(root.scheduler.listExecutions(run.id).find(execution => execution.instructionId === 'parallel-work')?.status)
+      .toBe('FAILED')
+    expect(root.scheduler.listExecutions(run.id).some(execution => execution.instructionId === 'after')).toBe(false)
+    expect(root.scheduler.listEvents(run.id).map(event => event.type)).toContain('ExecutionScopeFailed')
+    await root.fiber.dispose()
+  })
+
+  it('recovers a durable all-children-complete Fork by creating its Join on restart', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'numen-scheduler-'))
+    directories.push(directory)
+    const databasePath = join(directory, 'numen.db')
+    const root = await createContext(databasePath)
+    const automationId = publish(root, {
+      triggers: [],
+      flow: {
+        type: 'parallel',
+        id: 'parallel-work',
+        branches: [
+          { type: 'block', id: 'left-branch', steps: [] },
+          { type: 'block', id: 'right-branch', steps: [] },
+        ],
+      },
+    })
+    const run = root.scheduler.startManual(automationId)
+    await expect(root.scheduler.dispatchUntilIdle(1)).rejects.toThrow('exceeded')
+    const fork = root.scheduler.listExecutions(run.id).find(execution => execution.instructionId === 'parallel-work')!
+    expect(fork.status).toBe('WAITING')
+    root.database.db.prepare(`
+      UPDATE executions SET status = 'COMPLETED', output_json = 'null'
+      WHERE scope_execution_id = ?
+    `).run(fork.id)
+    await root.fiber.dispose()
+
+    const restarted = await createContext(databasePath)
+    expect(restarted.scheduler.listExecutions(run.id).find(execution => execution.id === fork.id)?.status)
+      .toBe('COMPLETED')
+    expect(restarted.scheduler.listExecutions(run.id).some(execution => execution.instructionId === '__parallel-work.join'))
+      .toBe(true)
+    await restarted.scheduler.dispatchUntilIdle()
+    expect(restarted.scheduler.getRun(run.id)?.status).toBe('COMPLETED')
+    await restarted.fiber.dispose()
+  })
+
+
+
   it('commits ResourceRef outputs to an Execution owner in the success transaction', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'numen-scheduler-'))
     directories.push(directory)

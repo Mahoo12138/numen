@@ -256,6 +256,18 @@ export const coreMigrations: readonly Migration[] = [
       `)
     },
   },
+  {
+    version: 8,
+    name: 'execution-scopes',
+    up(database) {
+      database.exec(`
+        ALTER TABLE executions
+          ADD COLUMN scope_execution_id TEXT REFERENCES executions(id);
+        CREATE INDEX executions_scope_idx
+          ON executions(scope_execution_id, status, created_at);
+      `)
+    },
+  },
 ]
 
 export function runMigrations(

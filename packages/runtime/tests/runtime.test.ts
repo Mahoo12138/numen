@@ -56,7 +56,7 @@ describe('Numen runtime', () => {
     expect(await ready.json()).toMatchObject({
       status: 'ready',
       checks: {
-        database: { migrationVersion: 7 },
+        database: { migrationVersion: 8 },
         automations: { ready: true, count: 1 },
         connections: {
           ready: true,
