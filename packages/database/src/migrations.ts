@@ -161,6 +161,29 @@ export const coreMigrations: readonly Migration[] = [
       `)
     },
   },
+  {
+    version: 5,
+    name: 'connection-configs',
+    up(database) {
+      database.exec(`
+        CREATE TABLE connections (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          adapter_id TEXT NOT NULL,
+          adapter_version INTEGER NOT NULL,
+          config_json TEXT NOT NULL,
+          credential_id TEXT,
+          enabled INTEGER NOT NULL DEFAULT 0 CHECK (enabled IN (0, 1)),
+          generation INTEGER NOT NULL DEFAULT 1,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+
+        CREATE INDEX connections_adapter_idx
+          ON connections(adapter_id, adapter_version, enabled);
+      `)
+    },
+  },
 ]
 
 export function runMigrations(

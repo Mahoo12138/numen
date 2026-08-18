@@ -6,6 +6,7 @@ plugins:
   database:
     path: .numen/numen.db
   capabilities: {}
+  connections: {}
   automations: {}
   scheduler: {}
   triggers: {}

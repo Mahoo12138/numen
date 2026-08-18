@@ -1,6 +1,6 @@
 # Numen
 
-Numen is a Cordis-native, plugin-first personal automation runtime. The current implementation includes host/configuration loading, durable SQLite storage, stable capability contracts, Automation Draft authoring, deterministic Core IR compilation, immutable Revision publishing, Active Revision trigger subscriptions, durable event acceptance, and a single-node Scheduler with Run/Execution/Attempt journaling, retry, timeout, cancellation, and restart recovery.
+Numen is a Cordis-native, plugin-first personal automation runtime. The current implementation includes host/configuration loading, durable SQLite storage, stable capability and Connection Adapter contracts, durable Connection desired state, Automation Draft authoring, deterministic Core IR compilation, immutable Revision publishing, Active Revision trigger subscriptions, durable event acceptance, and a single-node Scheduler with Run/Execution/Attempt journaling, retry, timeout, cancellation, and restart recovery.
 
 ## Prerequisites
 

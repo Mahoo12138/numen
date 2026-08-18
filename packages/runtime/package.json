@@ -17,6 +17,7 @@
     "@cordisjs/plugin-server": "^1.7.0",
     "@numen/automation": "workspace:*",
     "@numen/config": "workspace:*",
+    "@numen/connections": "workspace:*",
     "@numen/core": "workspace:*",
     "@numen/database": "workspace:*",
     "@numen/scheduler": "workspace:*",

@@ -3,6 +3,7 @@ import LoggerConsole from '@cordisjs/plugin-logger-console'
 import Server from '@cordisjs/plugin-server'
 import { AutomationService } from '@numen/automation'
 import { createRuntimeEntries, loadConfig, type LoadedConfig, type RuntimeEntry } from '@numen/config'
+import { ConnectionService } from '@numen/connections'
 import { CapabilityRegistry } from '@numen/core'
 import { DatabaseService } from '@numen/database'
 import { SchedulerService } from '@numen/scheduler'
@@ -29,6 +30,7 @@ export interface NumenApplication {
 const builtins = {
   database: DatabaseService,
   capabilities: CapabilityRegistry,
+  connections: ConnectionService,
   automations: AutomationService,
   scheduler: SchedulerService,
   triggers: TriggerService,

@@ -35,6 +35,7 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Durable Run cancellation intent, active invocation abort, and restart recovery
 - [x] Trigger Provider lifecycle and Active Revision subscription ownership
 - [x] Durable Trigger acceptance with generation fencing and event deduplication
+- [x] Durable Connection configuration with Adapter contracts and optimistic generation
 
 ## Milestone 3 — Completed
 
@@ -51,7 +52,7 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 
 ## Next
 
-1. Connection, Credential, and Resource services
+1. Connection runtime lifecycle, Credential, and Resource services
 2. Parallel/Race/ForEach structured concurrency
 3. Typed Console Query/Action/Subscription protocol
 4. Browser Cordis Runtime and the first Workbench UI
@@ -61,10 +62,10 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 ```text
 Typecheck: passing
 Build: passing
-Tests: 8 files, 25 tests passing
+Tests: 9 files, 27 tests passing
 CLI config validate: passing
 CLI doctor: passing
-SQLite schema migration: v4
+SQLite schema migration: v5
 ```
 
 Run locally with:
@@ -82,5 +83,6 @@ pnpm dev
 - Drafts may remain invalid; authoritative validation happens during Publish.
 - The current Scheduler executes the Core IR subset emitted by the compiler, including retry, timeout, cancellation, and recovery. Parallel/Race/ForEach structured concurrency remains planned work.
 - Manual Runs and event Trigger subscriptions are supported. State Trigger transition detection, filtering, debounce, and throttle remain planned work.
+- Connection desired state and Adapter contracts are durable; runtime open/reconnect and Credential binding are not implemented yet.
 - The npm organization/scope is still an architecture placeholder.
 - No arbitrary JavaScript evaluation, distributed scheduling, plugin sandbox, or multi-user authorization is implemented.
