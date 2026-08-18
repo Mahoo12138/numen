@@ -56,6 +56,7 @@ interface ExecutionRow {
   instruction_id: string
   parent_execution_id: string | null
   scope_execution_id: string | null
+  scope_branch: number | null
   status: Execution['status']
   resolved_input_json: string | null
   output_json: string | null
@@ -122,6 +123,7 @@ function mapExecution(row: ExecutionRow): Execution {
     instructionId: row.instruction_id,
     ...(row.parent_execution_id ? { parentExecutionId: row.parent_execution_id } : {}),
     ...(row.scope_execution_id ? { scopeExecutionId: row.scope_execution_id } : {}),
+    ...(row.scope_branch === null ? {} : { scopeBranch: row.scope_branch }),
     status: row.status,
     ...(row.resolved_input_json ? { resolvedInput: parseJson(row.resolved_input_json) } : {}),
     ...(row.output_json ? { output: parseJson(row.output_json) } : {}),
@@ -186,6 +188,7 @@ export class SchedulerService extends Service {
   private ready = false
   private dispatchTask: Promise<number> | undefined
   private readonly activeInvocations = new Map<string, ActiveInvocation>()
+  private readonly activeExecutionTasks = new Map<string, Promise<void>>()
   private readonly autoDispatch: boolean
   private readonly sweepIntervalMs: number
   private readonly maxConcurrentExecutions: number
@@ -411,10 +414,20 @@ export class SchedulerService extends Service {
         transitions += 1
         progressed = true
       }
-      const executions = this.nextRunnableExecutions()
+      const availableSlots = this.maxConcurrentExecutions - this.activeExecutionTasks.size
+      const executions = availableSlots > 0 ? this.nextRunnableExecutions(availableSlots) : []
       if (executions.length) {
-        await Promise.all(executions.map(execution => this.execute(execution)))
+        for (const execution of executions) {
+          const task = this.execute(execution).finally(() => {
+            this.activeExecutionTasks.delete(execution.id)
+          })
+          this.activeExecutionTasks.set(execution.id, task)
+        }
         transitions += executions.length
+        progressed = true
+      }
+      if (this.activeExecutionTasks.size) {
+        await Promise.race(this.activeExecutionTasks.values())
         progressed = true
       }
       if (!progressed) return transitions
@@ -437,15 +450,25 @@ export class SchedulerService extends Service {
     instructionId: string,
     parentExecutionId?: string,
     scopeExecutionId?: string,
+    scopeBranch?: number,
   ): string {
     const executionId = id('exec')
     const now = new Date().toISOString()
     this.ctx.database.db.prepare(`
       INSERT INTO executions (
-        id, run_id, instruction_id, parent_execution_id, scope_execution_id,
+        id, run_id, instruction_id, parent_execution_id, scope_execution_id, scope_branch,
         status, generation, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, 'RUNNABLE', 0, ?, ?)
-    `).run(executionId, runId, instructionId, parentExecutionId ?? null, scopeExecutionId ?? null, now, now)
+      ) VALUES (?, ?, ?, ?, ?, ?, 'RUNNABLE', 0, ?, ?)
+    `).run(
+      executionId,
+      runId,
+      instructionId,
+      parentExecutionId ?? null,
+      scopeExecutionId ?? null,
+      scopeBranch ?? null,
+      now,
+      now,
+    )
     this.appendEvent(runId, 'ExecutionCreated', { executionId, instructionId }, now)
     return executionId
   }
@@ -482,14 +505,14 @@ export class SchedulerService extends Service {
     })
   }
 
-  private nextRunnableExecutions(): Execution[] {
+  private nextRunnableExecutions(limit: number): Execution[] {
     return (this.ctx.database.db.prepare(`
       SELECT executions.* FROM executions
       JOIN runs ON runs.id = executions.run_id
       WHERE executions.status = 'RUNNABLE' AND runs.status = 'RUNNING'
       ORDER BY executions.created_at, executions.id
       LIMIT ?
-    `).all(this.maxConcurrentExecutions) as ExecutionRow[]).map(mapExecution)
+    `).all(limit) as ExecutionRow[]).map(mapExecution)
   }
 
   private getRevisionForExecution(execution: Execution): { run: Run; revision: AutomationRevision; instruction: CoreInstruction } {
@@ -758,16 +781,18 @@ export class SchedulerService extends Service {
         WHERE id = ? AND status = 'RUNNING'
       `).run(executionStatus, JSON.stringify(error), now, execution.id)
       if (!result.changes) return
-      this.ctx.database.db.prepare(`
-        UPDATE runs SET status = 'FAILED', finished_at = ? WHERE id = ? AND status = 'RUNNING'
-      `).run(now, execution.runId)
-      this.failParentScopes(execution, now, error)
+      const runFailed = this.handleStructuredFailure(execution, now, error)
+      if (runFailed) {
+        this.ctx.database.db.prepare(`
+          UPDATE runs SET status = 'FAILED', finished_at = ? WHERE id = ? AND status = 'RUNNING'
+        `).run(now, execution.runId)
+      }
       this.appendEvent(execution.runId, 'ExecutionFailed', {
         executionId: execution.id,
         status: executionStatus,
         error,
       }, now)
-      this.appendEvent(execution.runId, 'RunFailed', { executionId: execution.id, error }, now)
+      if (runFailed) this.appendEvent(execution.runId, 'RunFailed', { executionId: execution.id, error }, now)
     })
   }
 
@@ -810,12 +835,14 @@ export class SchedulerService extends Service {
         WHERE id = ? AND status IN ('RUNNABLE', 'RUNNING')
       `).run(JSON.stringify(error), now, execution.id)
       if (!result.changes) return
-      this.ctx.database.db.prepare(`
-        UPDATE runs SET status = 'FAILED', finished_at = ? WHERE id = ? AND status = 'RUNNING'
-      `).run(now, execution.runId)
-      this.failParentScopes(execution, now, error)
+      const runFailed = this.handleStructuredFailure(execution, now, error)
+      if (runFailed) {
+        this.ctx.database.db.prepare(`
+          UPDATE runs SET status = 'FAILED', finished_at = ? WHERE id = ? AND status = 'RUNNING'
+        `).run(now, execution.runId)
+      }
       this.appendEvent(execution.runId, 'ExecutionFailed', { executionId: execution.id, error }, now)
-      this.appendEvent(execution.runId, 'RunFailed', { executionId: execution.id, error }, now)
+      if (runFailed) this.appendEvent(execution.runId, 'RunFailed', { executionId: execution.id, error }, now)
     })
   }
 
@@ -1042,13 +1069,30 @@ export class SchedulerService extends Service {
 
   private recoverStructuredScopes(): void {
     const rows = this.ctx.database.db.prepare(`
-      SELECT id FROM executions
+      SELECT * FROM executions
       WHERE status = 'WAITING' AND blocked_reason = 'CHILDREN'
       ORDER BY created_at, id
-    `).all() as Array<{ id: string }>
+    `).all() as ExecutionRow[]
     const now = new Date().toISOString()
     for (const row of rows) {
-      this.ctx.database.transaction(() => this.reconcileAllFork(row.id, now))
+      const fork = mapExecution(row)
+      const { revision, instruction } = this.getRevisionForExecution(fork)
+      if (instruction.op !== 'fork') continue
+      this.ctx.database.transaction(() => {
+        if (instruction.mode === 'all') {
+          this.reconcileAllFork(row.id, now)
+          return
+        }
+        const completed = this.ctx.database.db.prepare(`
+          SELECT * FROM executions
+          WHERE scope_execution_id = ? AND status = 'COMPLETED'
+          ORDER BY updated_at, id
+        `).all(row.id) as ExecutionRow[]
+        const winner = completed.find(candidate => (
+          revision.compiledPlan.instructions[candidate.instruction_id]?.op === 'scope_complete'
+        ))
+        if (winner) this.reconcileRaceFork(row.id, mapExecution(winner), now)
+      })
     }
   }
 
@@ -1058,6 +1102,7 @@ export class SchedulerService extends Service {
       instructionId,
       execution.id,
       execution.scopeExecutionId,
+      execution.scopeBranch,
     )
   }
 
@@ -1078,8 +1123,8 @@ export class SchedulerService extends Service {
         mode: instruction.mode,
         branches: instruction.branches,
       }, now)
-      for (const branch of instruction.branches) {
-        this.createExecution(execution.runId, branch, execution.id, execution.id)
+      for (const [branchIndex, branch] of instruction.branches.entries()) {
+        this.createExecution(execution.runId, branch, execution.id, execution.id, branchIndex)
       }
     })
   }
@@ -1100,7 +1145,13 @@ export class SchedulerService extends Service {
         executionId: execution.id,
         scopeExecutionId: execution.scopeExecutionId!,
       }, now)
-      this.reconcileAllFork(execution.scopeExecutionId!, now)
+      const forkRow = this.ctx.database.db.prepare('SELECT * FROM executions WHERE id = ?')
+        .get(execution.scopeExecutionId) as ExecutionRow | undefined
+      if (!forkRow) return
+      const { instruction } = this.getRevisionForExecution(mapExecution(forkRow))
+      if (instruction.op !== 'fork') return
+      if (instruction.mode === 'all') this.reconcileAllFork(execution.scopeExecutionId!, now)
+      else this.reconcileRaceFork(execution.scopeExecutionId!, execution, now)
     })
   }
 
@@ -1127,62 +1178,117 @@ export class SchedulerService extends Service {
       executionId: fork.id,
       mode: 'all',
     }, now)
-    this.createExecution(fork.runId, instruction.join, fork.id, fork.scopeExecutionId)
+    this.createExecution(fork.runId, instruction.join, fork.id, fork.scopeExecutionId, fork.scopeBranch)
   }
 
-  private failParentScopes(execution: Execution, now: string, error: NumenValue): void {
-    let scopeExecutionId = execution.scopeExecutionId
-    while (scopeExecutionId) {
-      const forkRow = this.ctx.database.db.prepare(`
-        SELECT * FROM executions WHERE id = ?
-      `).get(scopeExecutionId) as ExecutionRow | undefined
-      if (!forkRow) return
-      const rows = this.ctx.database.db.prepare(`
-        WITH RECURSIVE descendants(id) AS (
-          SELECT id FROM executions
-          WHERE scope_execution_id = ? AND id != ?
-          UNION ALL
-          SELECT executions.id FROM executions
-          JOIN descendants ON executions.scope_execution_id = descendants.id
-        )
-        SELECT executions.* FROM executions
-        JOIN descendants ON descendants.id = executions.id
-        WHERE executions.status IN ('RUNNABLE', 'RUNNING', 'WAITING', 'BLOCKED', 'CANCELLING')
-      `).all(scopeExecutionId, execution.id) as ExecutionRow[]
-      for (const row of rows) {
-        const active = this.activeInvocations.get(row.id)
-        if (active && !active.controller.signal.aborted) {
-          active.controller.abort(new InvocationCancelledError('PARENT'))
-        }
-        this.ctx.database.db.prepare(`
-          UPDATE attempts SET status = 'ABORTED', error_json = ?, finished_at = ?
-          WHERE execution_id = ? AND status = 'RUNNING'
-        `).run(JSON.stringify({ reason: 'PARENT' }), now, row.id)
-        const result = this.ctx.database.db.prepare(`
-          UPDATE executions
-          SET status = 'CANCELLED', blocked_reason = NULL, wake_at = NULL, updated_at = ?
-          WHERE id = ? AND status IN ('RUNNABLE', 'RUNNING', 'WAITING', 'BLOCKED', 'CANCELLING')
-        `).run(now, row.id)
-        if (result.changes) {
-          this.appendEvent(execution.runId, 'ExecutionCancelled', {
-            executionId: row.id,
-            reason: 'PARENT',
-          }, now)
-        }
+  private reconcileRaceFork(forkExecutionId: string, winner: Execution, now: string): void {
+    if (winner.scopeBranch === undefined) return
+    const forkRow = this.ctx.database.db.prepare('SELECT * FROM executions WHERE id = ?')
+      .get(forkExecutionId) as ExecutionRow | undefined
+    if (!forkRow || forkRow.status !== 'WAITING' || forkRow.blocked_reason !== 'CHILDREN') return
+    const fork = mapExecution(forkRow)
+    const { instruction } = this.getRevisionForExecution(fork)
+    if (instruction.op !== 'fork' || instruction.mode !== 'first_success') return
+    const output = { winnerBranch: winner.scopeBranch, winnerExecutionId: winner.id }
+    const result = this.ctx.database.db.prepare(`
+      UPDATE executions
+      SET status = 'COMPLETED', blocked_reason = NULL, output_json = ?, updated_at = ?
+      WHERE id = ? AND status = 'WAITING' AND blocked_reason = 'CHILDREN'
+    `).run(JSON.stringify(output), now, forkExecutionId)
+    if (!result.changes) return
+    this.cancelScopeExecutions(forkExecutionId, fork.runId, 'RACE', now, {
+      excludeBranch: winner.scopeBranch,
+    })
+    this.appendEvent(fork.runId, 'ExecutionRaceWon', {
+      executionId: fork.id,
+      winnerBranch: winner.scopeBranch,
+      winnerExecutionId: winner.id,
+    }, now)
+    this.appendEvent(fork.runId, 'ExecutionJoined', { executionId: fork.id, mode: 'first_success' }, now)
+    this.createExecution(fork.runId, instruction.join, fork.id, fork.scopeExecutionId, fork.scopeBranch)
+  }
+
+  private handleStructuredFailure(execution: Execution, now: string, error: NumenValue): boolean {
+    if (!execution.scopeExecutionId) return true
+    const forkRow = this.ctx.database.db.prepare('SELECT * FROM executions WHERE id = ?')
+      .get(execution.scopeExecutionId) as ExecutionRow | undefined
+    if (!forkRow) return true
+    const fork = mapExecution(forkRow)
+    const { instruction } = this.getRevisionForExecution(fork)
+    if (instruction.op !== 'fork') return true
+
+    if (instruction.mode === 'first_success') {
+      if (execution.scopeBranch === undefined) return true
+      this.cancelScopeExecutions(fork.id, execution.runId, 'PARENT', now, {
+        includeBranch: execution.scopeBranch,
+      })
+      this.appendEvent(execution.runId, 'ExecutionRaceBranchFailed', {
+        executionId: fork.id,
+        branch: execution.scopeBranch ?? -1,
+        failedExecutionId: execution.id,
+        error,
+      }, now)
+      const { failedBranches } = this.ctx.database.db.prepare(`
+        SELECT COUNT(DISTINCT scope_branch) AS failedBranches FROM executions
+        WHERE scope_execution_id = ? AND status IN ('FAILED', 'TIMED_OUT')
+      `).get(fork.id) as { failedBranches: number }
+      if (failedBranches < instruction.branches.length) return false
+    } else {
+      this.cancelScopeExecutions(fork.id, execution.runId, 'PARENT', now)
+    }
+
+    const result = this.ctx.database.db.prepare(`
+      UPDATE executions
+      SET status = 'FAILED', blocked_reason = NULL, output_json = ?, updated_at = ?
+      WHERE id = ? AND status IN ('RUNNABLE', 'RUNNING', 'WAITING', 'BLOCKED')
+    `).run(JSON.stringify(error), now, fork.id)
+    if (result.changes) {
+      this.appendEvent(execution.runId, 'ExecutionScopeFailed', {
+        executionId: fork.id,
+        failedExecutionId: execution.id,
+        error,
+      }, now)
+    }
+    return this.handleStructuredFailure(fork, now, error)
+  }
+
+  private cancelScopeExecutions(
+    scopeExecutionId: string,
+    runId: string,
+    reason: 'PARENT' | 'RACE',
+    now: string,
+    filter: { includeBranch?: number; excludeBranch?: number } = {},
+  ): void {
+    const rows = this.ctx.database.db.prepare(`
+      WITH RECURSIVE descendants(id, root_branch) AS (
+        SELECT id, scope_branch FROM executions WHERE scope_execution_id = ?
+        UNION ALL
+        SELECT executions.id, descendants.root_branch FROM executions
+        JOIN descendants ON executions.scope_execution_id = descendants.id
+      )
+      SELECT executions.*, descendants.root_branch FROM executions
+      JOIN descendants ON descendants.id = executions.id
+      WHERE executions.status IN ('RUNNABLE', 'RUNNING', 'WAITING', 'BLOCKED', 'CANCELLING')
+    `).all(scopeExecutionId) as Array<ExecutionRow & { root_branch: number | null }>
+    for (const row of rows) {
+      if (filter.includeBranch !== undefined && row.root_branch !== filter.includeBranch) continue
+      if (filter.excludeBranch !== undefined && row.root_branch === filter.excludeBranch) continue
+      const active = this.activeInvocations.get(row.id)
+      if (active && !active.controller.signal.aborted) {
+        active.controller.abort(new InvocationCancelledError(reason))
       }
-      const forkResult = this.ctx.database.db.prepare(`
+      this.ctx.database.db.prepare(`
+        UPDATE attempts SET status = 'ABORTED', error_json = ?, finished_at = ?
+        WHERE execution_id = ? AND status = 'RUNNING'
+      `).run(JSON.stringify({ reason }), now, row.id)
+      const result = this.ctx.database.db.prepare(`
         UPDATE executions
-        SET status = 'FAILED', blocked_reason = NULL, output_json = ?, updated_at = ?
-        WHERE id = ? AND status IN ('RUNNABLE', 'RUNNING', 'WAITING', 'BLOCKED')
-      `).run(JSON.stringify(error), now, scopeExecutionId)
-      if (forkResult.changes) {
-        this.appendEvent(execution.runId, 'ExecutionScopeFailed', {
-          executionId: scopeExecutionId,
-          failedExecutionId: execution.id,
-          error,
-        }, now)
+        SET status = 'CANCELLED', blocked_reason = NULL, wake_at = NULL, updated_at = ?
+        WHERE id = ? AND status IN ('RUNNABLE', 'RUNNING', 'WAITING', 'BLOCKED', 'CANCELLING')
+      `).run(now, row.id)
+      if (result.changes) {
+        this.appendEvent(runId, 'ExecutionCancelled', { executionId: row.id, reason }, now)
       }
-      scopeExecutionId = forkRow.scope_execution_id ?? undefined
     }
   }
 

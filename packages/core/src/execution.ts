@@ -59,6 +59,7 @@ export interface Execution {
   instructionId: string
   parentExecutionId?: string
   scopeExecutionId?: string
+  scopeBranch?: number
   status: ExecutionStatus
   resolvedInput?: NumenValue
   output?: NumenValue

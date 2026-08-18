@@ -31,7 +31,7 @@ describe('DatabaseService', () => {
     expect(tables).toContain('resources')
     expect(tables).toContain('resource_owners')
     expect(tables).toContain('resource_leases')
-    expect(root.database.health()).toMatchObject({ ready: true, migrationVersion: 8 })
+    expect(root.database.health()).toMatchObject({ ready: true, migrationVersion: 9 })
     expect(runMigrations(root.database.db)).toBe(0)
 
     await root.fiber.dispose()
@@ -42,7 +42,7 @@ describe('DatabaseService', () => {
     await root.plugin(DatabaseService, { path: ':memory:' })
 
     expect(() => runMigrations(root.database.db, [{
-      version: 9,
+      version: 10,
       name: 'broken',
       up(database) {
         database.exec('CREATE TABLE should_rollback (id TEXT);')

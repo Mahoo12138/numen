@@ -268,6 +268,17 @@ export const coreMigrations: readonly Migration[] = [
       `)
     },
   },
+  {
+    version: 9,
+    name: 'execution-scope-branches',
+    up(database) {
+      database.exec(`
+        ALTER TABLE executions ADD COLUMN scope_branch INTEGER;
+        CREATE INDEX executions_scope_branch_idx
+          ON executions(scope_execution_id, scope_branch, status);
+      `)
+    },
+  },
 ]
 
 export function runMigrations(

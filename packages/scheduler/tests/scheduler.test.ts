@@ -290,6 +290,143 @@ describe('SchedulerService', () => {
     await restarted.fiber.dispose()
   })
 
+  it('commits the first successful Race branch and aborts the loser with RACE', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'numen-scheduler-'))
+    directories.push(directory)
+    let startSlow: (() => void) | undefined
+    const slowStarted = new Promise<void>(resolve => {
+      startSlow = resolve
+    })
+    const calls: string[] = []
+    const root = await createContext(join(directory, 'numen.db'), actionDefinition(), async (input, signal) => {
+      const value = (input as { value: string }).value
+      calls.push(value)
+      if (value === 'fast') {
+        await slowStarted
+        return input
+      }
+      if (value === 'slow') {
+        startSlow?.()
+        return new Promise((_resolve, reject) => {
+          signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+        })
+      }
+      return input
+    })
+    const automationId = publish(root, {
+      triggers: [],
+      flow: {
+        type: 'block',
+        id: 'flow',
+        steps: [
+          {
+            type: 'race',
+            id: 'fastest',
+            branches: [
+              {
+                type: 'block',
+                id: 'fast-branch',
+                steps: [{
+                  type: 'capability',
+                  id: 'fast',
+                  capability: { id: 'test:record', version: 1 },
+                  input: { value: { type: 'literal', value: 'fast' } },
+                }],
+              },
+              {
+                type: 'block',
+                id: 'slow-branch',
+                steps: [{
+                  type: 'capability',
+                  id: 'slow',
+                  capability: { id: 'test:record', version: 1 },
+                  input: { value: { type: 'literal', value: 'slow' } },
+                }],
+              },
+            ],
+          },
+          {
+            type: 'capability',
+            id: 'after-race',
+            capability: { id: 'test:record', version: 1 },
+            input: { value: { type: 'literal', value: 'after' } },
+          },
+        ],
+      },
+    })
+    const run = root.scheduler.startManual(automationId)
+    await root.scheduler.dispatchUntilIdle()
+
+    expect(root.scheduler.getRun(run.id)?.status).toBe('COMPLETED')
+    expect(calls).toEqual(expect.arrayContaining(['fast', 'slow', 'after']))
+    expect(root.scheduler.listAttempts(run.id).map(attempt => attempt.status).sort())
+      .toEqual(['ABORTED', 'SUCCEEDED', 'SUCCEEDED'])
+    expect(root.scheduler.listExecutions(run.id).find(execution => execution.instructionId === 'slow')?.status)
+      .toBe('CANCELLED')
+    expect(root.scheduler.listEvents(run.id).map(event => event.type)).toContain('ExecutionRaceWon')
+    expect(root.scheduler.listEvents(run.id)).toContainEqual(expect.objectContaining({
+      type: 'ExecutionCancelled',
+      payload: expect.objectContaining({ reason: 'RACE' }),
+    }))
+    await root.fiber.dispose()
+  })
+
+  it('keeps a Race alive after one branch fails and fails only when all branches fail', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'numen-scheduler-'))
+    directories.push(directory)
+    let failAll = false
+    const root = await createContext(join(directory, 'numen.db'), actionDefinition(), async input => {
+      const value = (input as { value: string }).value
+      if (value === 'failure' || failAll) throw new Error(`${value} failed`)
+      return input
+    })
+    const source: AutomationSource = {
+      triggers: [],
+      flow: {
+        type: 'race',
+        id: 'race',
+        branches: [
+          {
+            type: 'block',
+            id: 'failure-branch',
+            steps: [{
+              type: 'capability',
+              id: 'failure',
+              capability: { id: 'test:record', version: 1 },
+              input: { value: { type: 'literal', value: 'failure' } },
+            }],
+          },
+          {
+            type: 'block',
+            id: 'success-branch',
+            steps: [{
+              type: 'capability',
+              id: 'success',
+              capability: { id: 'test:record', version: 1 },
+              input: { value: { type: 'literal', value: 'success' } },
+            }],
+          },
+        ],
+      },
+    }
+    const automationId = publish(root, source)
+    const successfulRun = root.scheduler.startManual(automationId)
+    await root.scheduler.dispatchUntilIdle()
+    expect(root.scheduler.getRun(successfulRun.id)?.status).toBe('COMPLETED')
+    expect(root.scheduler.listAttempts(successfulRun.id).map(attempt => attempt.status).sort())
+      .toEqual(['FAILED', 'SUCCEEDED'])
+
+    failAll = true
+    const failedRun = root.scheduler.startManual(automationId)
+    await root.scheduler.dispatchUntilIdle()
+    expect(root.scheduler.getRun(failedRun.id)?.status).toBe('FAILED')
+    expect(root.scheduler.listAttempts(failedRun.id).map(attempt => attempt.status)).toEqual(['FAILED', 'FAILED'])
+    expect(root.scheduler.listEvents(failedRun.id).filter(event => event.type === 'ExecutionRaceBranchFailed'))
+      .toHaveLength(2)
+    await root.fiber.dispose()
+  })
+
+
 
 
   it('commits ResourceRef outputs to an Execution owner in the success transaction', async () => {
