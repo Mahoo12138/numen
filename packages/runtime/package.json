@@ -1,0 +1,23 @@
+{
+  "name": "@numen/runtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@cordisjs/plugin-loader": "^1.0.0-rc.5",
+    "@cordisjs/plugin-logger-console": "^1.0.0",
+    "@cordisjs/plugin-server": "^1.7.0",
+    "@numen/config": "workspace:*",
+    "@numen/core": "workspace:*",
+    "@numen/database": "workspace:*",
+    "cordis": "^4.0.0-rc.8"
+  }
+}

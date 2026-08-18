@@ -1,0 +1,12 @@
+version: 1
+dataDir: .numen
+
+# Core services are regular Cordis plugins; their inject declarations enforce readiness order.
+plugins:
+  database:
+    path: .numen/numen.db
+  capabilities: {}
+  server:
+    host: 127.0.0.1
+    port: 5140
+  health: {}
