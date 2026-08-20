@@ -279,6 +279,34 @@ export const coreMigrations: readonly Migration[] = [
       `)
     },
   },
+  {
+    version: 10,
+    name: 'durable-iterations',
+    up(database) {
+      database.exec(`
+        ALTER TABLE executions ADD COLUMN loop_item_json TEXT;
+        ALTER TABLE executions ADD COLUMN loop_index INTEGER;
+
+        CREATE TABLE execution_iterations (
+          iterate_execution_id TEXT NOT NULL REFERENCES executions(id) ON DELETE CASCADE,
+          item_index INTEGER NOT NULL,
+          item_json TEXT NOT NULL,
+          status TEXT NOT NULL CHECK (status IN (
+            'PENDING', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED'
+          )),
+          root_execution_id TEXT REFERENCES executions(id),
+          terminal_execution_id TEXT REFERENCES executions(id),
+          error_json TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY (iterate_execution_id, item_index)
+        );
+
+        CREATE INDEX execution_iterations_dispatch_idx
+          ON execution_iterations(iterate_execution_id, status, item_index);
+      `)
+    },
+  },
 ]
 
 export function runMigrations(

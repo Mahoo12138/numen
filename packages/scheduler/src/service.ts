@@ -57,6 +57,8 @@ interface ExecutionRow {
   parent_execution_id: string | null
   scope_execution_id: string | null
   scope_branch: number | null
+  loop_item_json: string | null
+  loop_index: number | null
   status: Execution['status']
   resolved_input_json: string | null
   output_json: string | null
@@ -84,6 +86,18 @@ interface EventRow {
   type: string
   payload_json: string
   occurred_at: string
+}
+
+interface IterationRow {
+  iterate_execution_id: string
+  item_index: number
+  item_json: string
+  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED'
+  root_execution_id: string | null
+  terminal_execution_id: string | null
+  error_json: string | null
+  created_at: string
+  updated_at: string
 }
 
 declare module 'cordis' {
@@ -124,6 +138,8 @@ function mapExecution(row: ExecutionRow): Execution {
     ...(row.parent_execution_id ? { parentExecutionId: row.parent_execution_id } : {}),
     ...(row.scope_execution_id ? { scopeExecutionId: row.scope_execution_id } : {}),
     ...(row.scope_branch === null ? {} : { scopeBranch: row.scope_branch }),
+    ...(row.loop_item_json ? { loopItem: parseJson(row.loop_item_json) } : {}),
+    ...(row.loop_index === null ? {} : { loopIndex: row.loop_index }),
     status: row.status,
     ...(row.resolved_input_json ? { resolvedInput: parseJson(row.resolved_input_json) } : {}),
     ...(row.output_json ? { output: parseJson(row.output_json) } : {}),
@@ -451,14 +467,17 @@ export class SchedulerService extends Service {
     parentExecutionId?: string,
     scopeExecutionId?: string,
     scopeBranch?: number,
+    loopItem?: NumenValue,
+    loopIndex?: number,
   ): string {
     const executionId = id('exec')
     const now = new Date().toISOString()
     this.ctx.database.db.prepare(`
       INSERT INTO executions (
         id, run_id, instruction_id, parent_execution_id, scope_execution_id, scope_branch,
+        loop_item_json, loop_index,
         status, generation, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, 'RUNNABLE', 0, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'RUNNABLE', 0, ?, ?)
     `).run(
       executionId,
       runId,
@@ -466,6 +485,8 @@ export class SchedulerService extends Service {
       parentExecutionId ?? null,
       scopeExecutionId ?? null,
       scopeBranch ?? null,
+      loopItem === undefined ? null : JSON.stringify(loopItem),
+      loopIndex ?? null,
       now,
       now,
     )
@@ -515,6 +536,11 @@ export class SchedulerService extends Service {
     `).all(limit) as ExecutionRow[]).map(mapExecution)
   }
 
+  private getExecutionRow(executionId: string): ExecutionRow | undefined {
+    return this.ctx.database.db.prepare('SELECT * FROM executions WHERE id = ?')
+      .get(executionId) as ExecutionRow | undefined
+  }
+
   private getRevisionForExecution(execution: Execution): { run: Run; revision: AutomationRevision; instruction: CoreInstruction } {
     const run = this.getRun(execution.runId)
     if (!run) throw new Error(`run not found: ${execution.runId}`)
@@ -525,7 +551,7 @@ export class SchedulerService extends Service {
     return { run, revision, instruction }
   }
 
-  private createBindings(run: Run): EvaluationBindings {
+  private createBindings(run: Run, execution?: Execution): EvaluationBindings {
     const steps: Record<string, NumenValue> = {}
     const rows = this.ctx.database.db.prepare(`
       SELECT instruction_id, output_json FROM executions
@@ -533,6 +559,26 @@ export class SchedulerService extends Service {
       ORDER BY created_at, id
     `).all(run.id) as Array<{ instruction_id: string; output_json: string }>
     for (const row of rows) steps[row.instruction_id] = parseJson(row.output_json)
+    if (execution) {
+      const ancestors = this.ctx.database.db.prepare(`
+        WITH RECURSIVE ancestors(id, parent_execution_id, instruction_id, output_json, status, depth) AS (
+          SELECT id, parent_execution_id, instruction_id, output_json, status, 0
+          FROM executions WHERE id = ?
+          UNION ALL
+          SELECT parent.id, parent.parent_execution_id, parent.instruction_id,
+            parent.output_json, parent.status, ancestors.depth + 1
+          FROM executions AS parent
+          JOIN ancestors ON parent.id = ancestors.parent_execution_id
+        )
+        SELECT instruction_id, output_json FROM ancestors
+        WHERE status = 'COMPLETED' AND output_json IS NOT NULL
+        ORDER BY depth DESC
+      `).all(execution.id) as Array<{
+        instruction_id: string
+        output_json: string
+      }>
+      for (const row of ancestors) steps[row.instruction_id] = parseJson(row.output_json)
+    }
     return {
       run: {
         id: run.id,
@@ -543,7 +589,9 @@ export class SchedulerService extends Service {
       input: run.input,
       steps,
       vars: {},
-      loop: {},
+      loop: execution?.loopIndex === undefined
+        ? {}
+        : { item: execution.loopItem ?? null, index: execution.loopIndex },
       error: null,
     }
   }
@@ -551,7 +599,7 @@ export class SchedulerService extends Service {
   private async execute(execution: Execution): Promise<void> {
     try {
       const { run, revision, instruction } = this.getRevisionForExecution(execution)
-      const bindings = this.createBindings(run)
+      const bindings = this.createBindings(run, execution)
       switch (instruction.op) {
         case 'invoke': {
           const contract = revision.contractSnapshot.capabilities.find(item => (
@@ -572,6 +620,9 @@ export class SchedulerService extends Service {
           break
         case 'fork':
           this.forkAll(execution, instruction)
+          break
+        case 'iterate':
+          this.beginIterate(execution, instruction, bindings)
           break
         case 'scope_complete':
           this.completeScope(execution)
@@ -976,6 +1027,12 @@ export class SchedulerService extends Service {
           SELECT id FROM executions WHERE run_id = ?
         )
       `).run(JSON.stringify({ reason }), now, runId)
+      this.ctx.database.db.prepare(`
+        UPDATE execution_iterations SET status = 'CANCELLED', updated_at = ?
+        WHERE status IN ('PENDING', 'RUNNING') AND iterate_execution_id IN (
+          SELECT id FROM executions WHERE run_id = ?
+        )
+      `).run(now, runId)
       for (const row of rows) {
         const result = this.ctx.database.db.prepare(`
           UPDATE executions
@@ -1070,15 +1127,19 @@ export class SchedulerService extends Service {
   private recoverStructuredScopes(): void {
     const rows = this.ctx.database.db.prepare(`
       SELECT * FROM executions
-      WHERE status = 'WAITING' AND blocked_reason = 'CHILDREN'
+      WHERE status = 'WAITING' AND blocked_reason IN ('CHILDREN', 'ITERATIONS')
       ORDER BY created_at, id
     `).all() as ExecutionRow[]
     const now = new Date().toISOString()
     for (const row of rows) {
       const fork = mapExecution(row)
       const { revision, instruction } = this.getRevisionForExecution(fork)
-      if (instruction.op !== 'fork') continue
       this.ctx.database.transaction(() => {
+        if (instruction.op === 'iterate') {
+          this.reconcileIterate(fork, instruction, now)
+          return
+        }
+        if (instruction.op !== 'fork') return
         if (instruction.mode === 'all') {
           this.reconcileAllFork(row.id, now)
           return
@@ -1103,6 +1164,8 @@ export class SchedulerService extends Service {
       execution.id,
       execution.scopeExecutionId,
       execution.scopeBranch,
+      execution.loopItem,
+      execution.loopIndex,
     )
   }
 
@@ -1124,9 +1187,122 @@ export class SchedulerService extends Service {
         branches: instruction.branches,
       }, now)
       for (const [branchIndex, branch] of instruction.branches.entries()) {
-        this.createExecution(execution.runId, branch, execution.id, execution.id, branchIndex)
+        this.createExecution(
+          execution.runId,
+          branch,
+          execution.id,
+          execution.id,
+          branchIndex,
+          execution.loopItem,
+          execution.loopIndex,
+        )
       }
     })
+  }
+
+  private beginIterate(
+    execution: Execution,
+    instruction: Extract<CoreInstruction, { op: 'iterate' }>,
+    bindings: EvaluationBindings,
+  ): void {
+    const items = evaluateExpression(instruction.items, bindings)
+    if (!Array.isArray(items)) throw new Error('ForEach items must evaluate to an array')
+    const now = new Date().toISOString()
+    this.ctx.database.transaction(() => {
+      const result = this.ctx.database.db.prepare(`
+        UPDATE executions
+        SET status = 'WAITING', blocked_reason = 'ITERATIONS', resolved_input_json = ?, updated_at = ?
+        WHERE id = ? AND status = 'RUNNABLE'
+      `).run(JSON.stringify(items), now, execution.id)
+      if (!result.changes) return
+      const insert = this.ctx.database.db.prepare(`
+        INSERT INTO execution_iterations (
+          iterate_execution_id, item_index, item_json, status, created_at, updated_at
+        ) VALUES (?, ?, ?, 'PENDING', ?, ?)
+      `)
+      items.forEach((item, index) => insert.run(execution.id, index, JSON.stringify(item), now, now))
+      this.appendEvent(execution.runId, 'ExecutionIterationStarted', {
+        executionId: execution.id,
+        itemCount: items.length,
+        concurrency: instruction.concurrency,
+      }, now)
+      this.reconcileIterate(execution, instruction, now)
+    })
+  }
+
+  private reconcileIterate(
+    iterate: Execution,
+    instruction: Extract<CoreInstruction, { op: 'iterate' }>,
+    now: string,
+  ): void {
+    const current = this.getExecutionRow(iterate.id)
+    if (!current || current.status !== 'WAITING' || current.blocked_reason !== 'ITERATIONS') return
+    const { running } = this.ctx.database.db.prepare(`
+      SELECT COUNT(*) AS running FROM execution_iterations
+      WHERE iterate_execution_id = ? AND status = 'RUNNING'
+    `).get(iterate.id) as { running: number }
+    const capacity = Math.max(0, instruction.concurrency - running)
+    if (capacity) {
+      const pending = this.ctx.database.db.prepare(`
+        SELECT * FROM execution_iterations
+        WHERE iterate_execution_id = ? AND status = 'PENDING'
+        ORDER BY item_index LIMIT ?
+      `).all(iterate.id, capacity) as IterationRow[]
+      for (const item of pending) {
+        const claimed = this.ctx.database.db.prepare(`
+          UPDATE execution_iterations SET status = 'RUNNING', updated_at = ?
+          WHERE iterate_execution_id = ? AND item_index = ? AND status = 'PENDING'
+        `).run(now, iterate.id, item.item_index)
+        if (!claimed.changes) continue
+        const value = parseJson<NumenValue>(item.item_json)
+        const rootExecutionId = this.createExecution(
+          iterate.runId,
+          instruction.body,
+          iterate.id,
+          iterate.id,
+          item.item_index,
+          value,
+          item.item_index,
+        )
+        this.ctx.database.db.prepare(`
+          UPDATE execution_iterations SET root_execution_id = ?, updated_at = ?
+          WHERE iterate_execution_id = ? AND item_index = ?
+        `).run(rootExecutionId, now, iterate.id, item.item_index)
+        this.appendEvent(iterate.runId, 'ExecutionIterationDispatched', {
+          executionId: iterate.id,
+          itemIndex: item.item_index,
+          rootExecutionId,
+        }, now)
+      }
+    }
+    const counts = this.ctx.database.db.prepare(`
+      SELECT
+        SUM(CASE WHEN status = 'PENDING' THEN 1 ELSE 0 END) AS pending,
+        SUM(CASE WHEN status = 'RUNNING' THEN 1 ELSE 0 END) AS running,
+        COUNT(*) AS total
+      FROM execution_iterations WHERE iterate_execution_id = ?
+    `).get(iterate.id) as { pending: number | null; running: number | null; total: number }
+    if ((counts.pending ?? 0) || (counts.running ?? 0)) return
+    const output = { count: counts.total }
+    const completed = this.ctx.database.db.prepare(`
+      UPDATE executions
+      SET status = 'COMPLETED', blocked_reason = NULL, output_json = ?, updated_at = ?
+      WHERE id = ? AND status = 'WAITING' AND blocked_reason = 'ITERATIONS'
+    `).run(JSON.stringify(output), now, iterate.id)
+    if (!completed.changes) return
+    this.appendEvent(iterate.runId, 'ExecutionIterationCompleted', {
+      executionId: iterate.id,
+      itemCount: counts.total,
+    }, now)
+    this.createExecution(
+      iterate.runId,
+      instruction.join,
+      iterate.id,
+      iterate.scopeExecutionId,
+      iterate.scopeBranch,
+      iterate.loopItem,
+      iterate.loopIndex,
+    )
   }
 
   private completeScope(execution: Execution): void {
@@ -1149,9 +1325,26 @@ export class SchedulerService extends Service {
         .get(execution.scopeExecutionId) as ExecutionRow | undefined
       if (!forkRow) return
       const { instruction } = this.getRevisionForExecution(mapExecution(forkRow))
-      if (instruction.op !== 'fork') return
-      if (instruction.mode === 'all') this.reconcileAllFork(execution.scopeExecutionId!, now)
-      else this.reconcileRaceFork(execution.scopeExecutionId!, execution, now)
+      if (instruction.op === 'fork') {
+        if (instruction.mode === 'all') this.reconcileAllFork(execution.scopeExecutionId!, now)
+        else this.reconcileRaceFork(execution.scopeExecutionId!, execution, now)
+        return
+      }
+      if (instruction.op === 'iterate') {
+        if (execution.scopeBranch === undefined) return
+        const updated = this.ctx.database.db.prepare(`
+          UPDATE execution_iterations
+          SET status = 'COMPLETED', terminal_execution_id = ?, updated_at = ?
+          WHERE iterate_execution_id = ? AND item_index = ? AND status = 'RUNNING'
+        `).run(execution.id, now, execution.scopeExecutionId, execution.scopeBranch)
+        if (!updated.changes) return
+        this.appendEvent(execution.runId, 'ExecutionIterationItemCompleted', {
+          executionId: execution.scopeExecutionId!,
+          itemIndex: execution.scopeBranch,
+          terminalExecutionId: execution.id,
+        }, now)
+        this.reconcileIterate(mapExecution(forkRow), instruction, now)
+      }
     })
   }
 
@@ -1178,7 +1371,15 @@ export class SchedulerService extends Service {
       executionId: fork.id,
       mode: 'all',
     }, now)
-    this.createExecution(fork.runId, instruction.join, fork.id, fork.scopeExecutionId, fork.scopeBranch)
+    this.createExecution(
+      fork.runId,
+      instruction.join,
+      fork.id,
+      fork.scopeExecutionId,
+      fork.scopeBranch,
+      fork.loopItem,
+      fork.loopIndex,
+    )
   }
 
   private reconcileRaceFork(forkExecutionId: string, winner: Execution, now: string): void {
@@ -1205,7 +1406,15 @@ export class SchedulerService extends Service {
       winnerExecutionId: winner.id,
     }, now)
     this.appendEvent(fork.runId, 'ExecutionJoined', { executionId: fork.id, mode: 'first_success' }, now)
-    this.createExecution(fork.runId, instruction.join, fork.id, fork.scopeExecutionId, fork.scopeBranch)
+    this.createExecution(
+      fork.runId,
+      instruction.join,
+      fork.id,
+      fork.scopeExecutionId,
+      fork.scopeBranch,
+      fork.loopItem,
+      fork.loopIndex,
+    )
   }
 
   private handleStructuredFailure(execution: Execution, now: string, error: NumenValue): boolean {
@@ -1215,6 +1424,34 @@ export class SchedulerService extends Service {
     if (!forkRow) return true
     const fork = mapExecution(forkRow)
     const { instruction } = this.getRevisionForExecution(fork)
+    if (instruction.op === 'iterate') {
+      if (execution.scopeBranch === undefined) return true
+      this.ctx.database.db.prepare(`
+        UPDATE execution_iterations
+        SET status = 'FAILED', error_json = ?, updated_at = ?
+        WHERE iterate_execution_id = ? AND item_index = ? AND status = 'RUNNING'
+      `).run(JSON.stringify(error), now, fork.id, execution.scopeBranch)
+      this.cancelScopeExecutions(fork.id, execution.runId, 'PARENT', now)
+      this.ctx.database.db.prepare(`
+        UPDATE execution_iterations
+        SET status = 'CANCELLED', updated_at = ?
+        WHERE iterate_execution_id = ? AND status IN ('PENDING', 'RUNNING')
+      `).run(now, fork.id)
+      const result = this.ctx.database.db.prepare(`
+        UPDATE executions
+        SET status = 'FAILED', blocked_reason = NULL, output_json = ?, updated_at = ?
+        WHERE id = ? AND status = 'WAITING' AND blocked_reason = 'ITERATIONS'
+      `).run(JSON.stringify(error), now, fork.id)
+      if (result.changes) {
+        this.appendEvent(execution.runId, 'ExecutionIterationFailed', {
+          executionId: fork.id,
+          itemIndex: execution.scopeBranch,
+          failedExecutionId: execution.id,
+          error,
+        }, now)
+      }
+      return this.handleStructuredFailure(fork, now, error)
+    }
     if (instruction.op !== 'fork') return true
 
     if (instruction.mode === 'first_success') {
@@ -1285,6 +1522,10 @@ export class SchedulerService extends Service {
         UPDATE executions
         SET status = 'CANCELLED', blocked_reason = NULL, wake_at = NULL, updated_at = ?
         WHERE id = ? AND status IN ('RUNNABLE', 'RUNNING', 'WAITING', 'BLOCKED', 'CANCELLING')
+      `).run(now, row.id)
+      this.ctx.database.db.prepare(`
+        UPDATE execution_iterations SET status = 'CANCELLED', updated_at = ?
+        WHERE iterate_execution_id = ? AND status IN ('PENDING', 'RUNNING')
       `).run(now, row.id)
       if (result.changes) {
         this.appendEvent(runId, 'ExecutionCancelled', { executionId: row.id, reason }, now)

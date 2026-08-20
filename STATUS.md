@@ -1,6 +1,6 @@
 # Numen Development Status
 
-> Last updated: 2026-08-18
+> Last updated: 2026-08-20
 >
 > Architecture baseline: V1 Draft in [`docs/`](docs/README.md)
 
@@ -44,6 +44,8 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Scheduler ResourceRef output validation and transactional Execution ownership
 - [x] Durable Parallel Fork/Join scopes with concurrent dispatch, fail-fast, and restart recovery
 - [x] Durable first-success Race with branch failure tracking and RACE loser cancellation
+- [x] Durable ForEach iteration snapshots, bounded concurrency, loop bindings, fail-fast, and restart recovery
+- [x] Scope-lineage step binding isolation across concurrent and nested structured scopes
 
 ## Milestone 3 — Completed
 
@@ -56,23 +58,23 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Trigger subscription and durable event acceptance
 - [x] Retry policy and timeout handling
 - [x] Cancellation intent, propagation, and recovery
-- [ ] Parallel/Race/ForEach structured concurrency — Parallel and Race complete
+- [x] Parallel/Race/ForEach structured concurrency
 
 ## Next
 
-1. ForEach structured concurrency
-2. Typed Console Query/Action/Subscription protocol
-3. Browser Cordis Runtime and the first Workbench UI
+1. Typed Console Query/Action/Subscription protocol
+2. Browser Cordis Runtime and the first Workbench UI
+3. State Trigger transition detection, filtering, debounce, and throttle
 
 ## Verification Baseline
 
 ```text
 Typecheck: passing
 Build: passing
-Tests: 12 files, 48 tests passing
+Tests: 12 files, 55 tests passing
 CLI config validate: passing
 CLI doctor: passing
-SQLite schema migration: v9
+SQLite schema migration: v10
 ```
 
 Run locally with:
@@ -86,10 +88,10 @@ pnpm dev
 
 ## Known Boundaries
 
-- The current compiler supports Block, Capability, If, and timer Wait controls. Block output lowering is diagnosed as unsupported.
+- The current compiler supports Block, Capability, If, timer Wait, Parallel, first-success Race, and bounded ForEach controls. Block output lowering is diagnosed as unsupported.
 - Drafts may remain invalid; authoritative validation happens during Publish.
-- The current Scheduler executes the Core IR subset emitted by the compiler, including retry, timeout, cancellation, and recovery. Parallel/Race/ForEach structured concurrency remains planned work.
-- Parallel and first-success Race use durable Execution scopes with interruptible concurrent dispatch. ForEach remains planned work.
+- The current Scheduler executes the Core IR subset emitted by the compiler, including retry, timeout, cancellation, recovery, and structured concurrency.
+- Parallel, first-success Race, and bounded ForEach use durable Execution scopes with interruptible concurrent dispatch; Try/Finally control flow remains planned work.
 - Manual Runs and event Trigger subscriptions are supported. State Trigger transition detection, filtering, debounce, and throttle remain planned work.
 - Connection desired state, Adapter contracts, generation-fenced Runtime recreation, and Credential snapshots are operational; automatic reconnect policy remains planned work.
 - Credential payloads use authenticated encryption with environment-provided keys; key-ring migration and external vault providers remain planned work.

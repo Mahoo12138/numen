@@ -101,6 +101,283 @@ const linearSource: AutomationSource = {
 }
 
 describe('SchedulerService', () => {
+  it('executes ForEach with durable loop bindings and a bounded concurrency window', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'numen-scheduler-'))
+    directories.push(directory)
+    let active = 0
+    let maxActive = 0
+    const values: string[] = []
+    const root = await createContext(join(directory, 'numen.db'), actionDefinition(), async input => {
+      active += 1
+      maxActive = Math.max(maxActive, active)
+      await new Promise<void>(resolve => setImmediate(resolve))
+      active -= 1
+      values.push((input as { value: string }).value)
+      return input
+    })
+    const automationId = publish(root, {
+      triggers: [],
+      flow: {
+        type: 'foreach',
+        id: 'each',
+        items: { type: 'ref', path: 'input.items' },
+        concurrency: 2,
+        body: {
+          type: 'block',
+          id: 'each-body',
+          steps: [{
+            type: 'capability',
+            id: 'record-item',
+            capability: { id: 'test:record', version: 1 },
+            input: {
+              value: { type: 'template', parts: [{ ref: 'loop.index' }, ':', { ref: 'loop.item' }] },
+            },
+          }],
+        },
+      },
+    })
+    const run = root.scheduler.startManual(automationId, { items: ['a', 'b', 'c', 'd'] })
+    await root.scheduler.dispatchUntilIdle()
+
+    expect(root.scheduler.getRun(run.id)?.status).toBe('COMPLETED')
+    expect(maxActive).toBe(2)
+    expect(values.sort()).toEqual(['0:a', '1:b', '2:c', '3:d'])
+    const bodyExecutions = root.scheduler.listExecutions(run.id)
+      .filter(execution => execution.instructionId === 'record-item')
+      .sort((a, b) => a.loopIndex! - b.loopIndex!)
+    expect(bodyExecutions.map(execution => [execution.loopIndex, execution.loopItem]))
+      .toEqual([[0, 'a'], [1, 'b'], [2, 'c'], [3, 'd']])
+    const iterations = root.database.db.prepare(`
+      SELECT item_index, status FROM execution_iterations ORDER BY item_index
+    `).all() as Array<{ item_index: number; status: string }>
+    expect(iterations).toEqual([
+      { item_index: 0, status: 'COMPLETED' },
+      { item_index: 1, status: 'COMPLETED' },
+      { item_index: 2, status: 'COMPLETED' },
+      { item_index: 3, status: 'COMPLETED' },
+    ])
+    await root.fiber.dispose()
+  })
+
+  it('keeps step bindings isolated through nested scopes in concurrent iterations', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'numen-scheduler-'))
+    directories.push(directory)
+    let outerStarted = 0
+    let releaseOuters!: () => void
+    const bothOutersStarted = new Promise<void>(resolve => {
+      releaseOuters = resolve
+    })
+    const values: string[] = []
+    const root = await createContext(join(directory, 'numen.db'), actionDefinition(), async input => {
+      const value = (input as { value: string }).value
+      values.push(value)
+      if (value.startsWith('outer:')) {
+        outerStarted += 1
+        if (outerStarted === 2) releaseOuters()
+        await bothOutersStarted
+      }
+      return input
+    })
+    const nestedBranch = (id: string, stepId: string) => ({
+      type: 'block' as const,
+      id,
+      steps: [{
+        type: 'capability' as const,
+        id: stepId,
+        capability: { id: 'test:record', version: 1 },
+        input: { value: { type: 'ref' as const, path: 'steps.capture.value' } },
+      }],
+    })
+    const automationId = publish(root, {
+      triggers: [],
+      flow: {
+        type: 'foreach',
+        id: 'each',
+        items: { type: 'literal', value: ['a', 'b'] },
+        concurrency: 2,
+        body: {
+          type: 'block',
+          id: 'each-body',
+          steps: [
+            {
+              type: 'capability',
+              id: 'capture',
+              capability: { id: 'test:record', version: 1 },
+              input: { value: { type: 'template', parts: ['outer:', { ref: 'loop.item' }] } },
+            },
+            {
+              type: 'parallel',
+              id: 'nested',
+              branches: [nestedBranch('left-branch', 'left'), nestedBranch('right-branch', 'right')],
+            },
+          ],
+        },
+      },
+    })
+    const run = root.scheduler.startManual(automationId)
+    await root.scheduler.dispatchUntilIdle()
+
+    expect(root.scheduler.getRun(run.id)?.status).toBe('COMPLETED')
+    expect(values.sort()).toEqual([
+      'outer:a', 'outer:a', 'outer:a',
+      'outer:b', 'outer:b', 'outer:b',
+    ])
+    await root.fiber.dispose()
+  })
+
+  it('fails ForEach fast and cancels running and pending items', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'numen-scheduler-'))
+    directories.push(directory)
+    let startSlow: (() => void) | undefined
+    const slowStarted = new Promise<void>(resolve => {
+      startSlow = resolve
+    })
+    const calls: string[] = []
+    const root = await createContext(join(directory, 'numen.db'), actionDefinition(), async (input, signal) => {
+      const value = (input as { value: string }).value
+      calls.push(value)
+      if (value === 'bad') {
+        await slowStarted
+        throw new Error('bad item')
+      }
+      if (value === 'slow') {
+        startSlow?.()
+        return new Promise((_resolve, reject) => {
+          signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+        })
+      }
+      return input
+    })
+    const automationId = publish(root, {
+      triggers: [],
+      flow: {
+        type: 'foreach',
+        id: 'each',
+        items: { type: 'literal', value: ['bad', 'slow', 'pending'] },
+        concurrency: 2,
+        body: {
+          type: 'block',
+          id: 'each-body',
+          steps: [{
+            type: 'capability',
+            id: 'record-item',
+            capability: { id: 'test:record', version: 1 },
+            input: { value: { type: 'ref', path: 'loop.item' } },
+          }],
+        },
+      },
+    })
+    const run = root.scheduler.startManual(automationId)
+    await root.scheduler.dispatchUntilIdle()
+
+    expect(root.scheduler.getRun(run.id)?.status).toBe('FAILED')
+    expect(calls.sort()).toEqual(['bad', 'slow'])
+    expect(root.scheduler.listAttempts(run.id).map(attempt => attempt.status).sort())
+      .toEqual(['ABORTED', 'FAILED'])
+    const statuses = root.database.db.prepare(`
+      SELECT status FROM execution_iterations ORDER BY item_index
+    `).pluck().all() as string[]
+    expect(statuses).toEqual(['FAILED', 'CANCELLED', 'CANCELLED'])
+    expect(root.scheduler.listEvents(run.id).map(event => event.type)).toContain('ExecutionIterationFailed')
+    await root.fiber.dispose()
+  })
+
+  it('restores a partially dispatched ForEach window after restart', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'numen-scheduler-'))
+    directories.push(directory)
+    const databasePath = join(directory, 'numen.db')
+    const root = await createContext(databasePath)
+    const automationId = publish(root, {
+      triggers: [],
+      flow: {
+        type: 'foreach',
+        id: 'each',
+        items: { type: 'literal', value: ['a', 'b', 'c'] },
+        concurrency: 2,
+        body: { type: 'block', id: 'empty-body', steps: [] },
+      },
+    })
+    const run = root.scheduler.startManual(automationId)
+    await expect(root.scheduler.dispatchUntilIdle(1)).rejects.toThrow('exceeded')
+    expect(root.database.db.prepare(`
+      SELECT status FROM execution_iterations ORDER BY item_index
+    `).pluck().all()).toEqual(['RUNNING', 'RUNNING', 'PENDING'])
+    await root.fiber.dispose()
+
+    const restarted = await createContext(databasePath)
+    await restarted.scheduler.dispatchUntilIdle()
+    expect(restarted.scheduler.getRun(run.id)?.status).toBe('COMPLETED')
+    expect(restarted.database.db.prepare(`
+      SELECT status FROM execution_iterations ORDER BY item_index
+    `).pluck().all()).toEqual(['COMPLETED', 'COMPLETED', 'COMPLETED'])
+    await restarted.fiber.dispose()
+  })
+
+  it('completes an empty ForEach without dispatching a body execution', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'numen-scheduler-'))
+    directories.push(directory)
+    const root = await createContext(join(directory, 'numen.db'))
+    const automationId = publish(root, {
+      triggers: [],
+      flow: {
+        type: 'foreach',
+        id: 'each',
+        items: { type: 'literal', value: [] },
+        body: {
+          type: 'block',
+          id: 'each-body',
+          steps: [{
+            type: 'capability',
+            id: 'record-item',
+            capability: { id: 'test:record', version: 1 },
+            input: { value: { type: 'ref', path: 'loop.item' } },
+          }],
+        },
+      },
+    })
+    const run = root.scheduler.startManual(automationId)
+    await root.scheduler.dispatchUntilIdle()
+
+    expect(root.scheduler.getRun(run.id)?.status).toBe('COMPLETED')
+    expect(root.scheduler.listExecutions(run.id).some(execution => (
+      execution.instructionId === 'record-item'
+    ))).toBe(false)
+    expect(root.scheduler.listEvents(run.id).map(event => event.type))
+      .toContain('ExecutionIterationCompleted')
+    await root.fiber.dispose()
+  })
+
+  it('fails ForEach when its items expression is not an array', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'numen-scheduler-'))
+    directories.push(directory)
+    const root = await createContext(join(directory, 'numen.db'))
+    const automationId = publish(root, {
+      triggers: [],
+      flow: {
+        type: 'foreach',
+        id: 'each',
+        items: { type: 'literal', value: 'not-an-array' },
+        body: { type: 'block', id: 'empty-body', steps: [] },
+      },
+    })
+    const run = root.scheduler.startManual(automationId)
+    await root.scheduler.dispatchUntilIdle()
+
+    expect(root.scheduler.getRun(run.id)?.status).toBe('FAILED')
+    expect(root.scheduler.listExecutions(run.id)).toEqual([
+      expect.objectContaining({ instructionId: 'each', status: 'FAILED' }),
+    ])
+    expect(root.scheduler.listEvents(run.id)).toContainEqual(
+      expect.objectContaining({
+        type: 'ExecutionFailed',
+        payload: expect.objectContaining({
+          error: expect.objectContaining({ message: 'ForEach items must evaluate to an array' }),
+        }),
+      }),
+    )
+    await root.fiber.dispose()
+  })
+
   it('runs Parallel branches concurrently and joins before the successor', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'numen-scheduler-'))
     directories.push(directory)

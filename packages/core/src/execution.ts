@@ -60,6 +60,8 @@ export interface Execution {
   parentExecutionId?: string
   scopeExecutionId?: string
   scopeBranch?: number
+  loopItem?: NumenValue
+  loopIndex?: number
   status: ExecutionStatus
   resolvedInput?: NumenValue
   output?: NumenValue
