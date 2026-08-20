@@ -101,6 +101,24 @@ const linearSource: AutomationSource = {
 }
 
 describe('SchedulerService', () => {
+  it('lists recent Runs with a bounded deterministic limit', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'numen-scheduler-'))
+    directories.push(directory)
+    const root = await createContext(join(directory, 'numen.db'))
+    const automationId = publish(root, { triggers: [], flow: { type: 'block', id: 'flow', steps: [] } })
+    const first = root.scheduler.startManual(automationId)
+    const second = root.scheduler.startManual(automationId)
+    const third = root.scheduler.startManual(automationId)
+    root.database.db.prepare('UPDATE runs SET created_at = ? WHERE id = ?').run('2026-01-01T00:00:01.000Z', first.id)
+    root.database.db.prepare('UPDATE runs SET created_at = ? WHERE id = ?').run('2026-01-01T00:00:02.000Z', second.id)
+    root.database.db.prepare('UPDATE runs SET created_at = ? WHERE id = ?').run('2026-01-01T00:00:03.000Z', third.id)
+
+    expect(root.scheduler.listRuns(2).map(run => run.id)).toEqual([third.id, second.id])
+    expect(() => root.scheduler.listRuns(0)).toThrow('between 1 and 100')
+    expect(() => root.scheduler.listRuns(101)).toThrow('between 1 and 100')
+    await root.fiber.dispose()
+  })
+
   it('executes ForEach with durable loop bindings and a bounded concurrency window', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'numen-scheduler-'))
     directories.push(directory)

@@ -1,4 +1,6 @@
+export * from './contracts.js'
 export * from './pages.js'
 export * from './routes.js'
 export * from './types.js'
+export * from './useConsoleQuery.js'
 export * from './WorkbenchShell.js'

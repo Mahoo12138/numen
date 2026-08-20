@@ -1,6 +1,9 @@
 import type { ConsoleFrontendEntry } from '@numen/console'
 import { Service, type Context } from 'cordis'
+import { workbenchHomeOverviewQuery } from './home-provider.js'
 import { workbenchServerPlugin, type WorkbenchServerConfig } from './server.js'
+
+export { workbenchHomeOverviewQuery, workbenchHomeProviderPlugin } from './home-provider.js'
 
 export const coreWorkbenchEntryId = 'numen:workbench-core'
 
@@ -15,11 +18,12 @@ declare module 'cordis' {
 }
 
 export class WorkbenchRuntimeService extends Service {
-  static inject = ['server', 'consoleEntries', 'consoleAuth']
+  static inject = ['server', 'console', 'consoleEntries', 'consoleAuth']
 
   constructor(ctx: Context, config: WorkbenchRuntimeConfig = {}) {
     super(ctx, 'workbench')
     workbenchServerPlugin(ctx, config)
+    ctx.console.define(ctx, workbenchHomeOverviewQuery)
     const entry: ConsoleFrontendEntry = {
       id: coreWorkbenchEntryId,
       prod: config.entrySource ?? new URL('./app/core-entry.js', import.meta.url).href,

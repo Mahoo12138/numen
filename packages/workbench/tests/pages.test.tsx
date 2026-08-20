@@ -46,6 +46,7 @@ describe('core Workbench Pages', () => {
     })} />)
 
     expect(markup).toContain('Your personal automation workspace.')
+    expect(markup).toContain('Open Workbench from a running Numen Runtime')
     expect(markup).toMatch(/aria-current="page"[^>]*class="activity-button"[^>]*>.*?Home/s)
     expect(markup).not.toContain('Morning Brief automation flow')
   })

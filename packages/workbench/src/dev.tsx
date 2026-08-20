@@ -32,7 +32,10 @@ async function main(): Promise<void> {
   globalThis.addEventListener('beforeunload', () => void runtime.stop(), { once: true })
   createRoot(rootElement).render(
     <StrictMode>
-      <WorkbenchShell router={context.webuiRouter} />
+      <WorkbenchShell
+        router={context.webuiRouter}
+        {...(import.meta.env.DEV ? {} : { consoleClient: context.consoleClient })}
+      />
     </StrictMode>,
   )
 }

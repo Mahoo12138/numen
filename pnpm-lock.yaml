@@ -271,9 +271,18 @@ importers:
       '@cordisjs/plugin-server':
         specifier: ^1.7.0
         version: 1.7.0(cordis@4.0.0-rc.8)
+      '@numen/automation':
+        specifier: workspace:*
+        version: link:../automation
+      '@numen/connections':
+        specifier: workspace:*
+        version: link:../connections
       '@numen/console':
         specifier: workspace:*
         version: link:../console
+      '@numen/scheduler':
+        specifier: workspace:*
+        version: link:../scheduler
       '@numen/webui':
         specifier: workspace:*
         version: link:../webui
@@ -289,6 +298,9 @@ importers:
       react-dom:
         specifier: ^19.1.0
         version: 19.2.8(react@19.2.8)
+      schemastery:
+        specifier: ^3.18.0
+        version: 3.18.0
     devDependencies:
       '@types/react':
         specifier: ^19.1.0

@@ -19,7 +19,7 @@ import { CapabilityRegistry } from '@numen/core'
 import { DatabaseService } from '@numen/database'
 import { SchedulerService } from '@numen/scheduler'
 import { TriggerService } from '@numen/triggers'
-import { workbenchRuntimePlugin } from '@numen/workbench/runtime'
+import { workbenchHomeProviderPlugin, workbenchRuntimePlugin } from '@numen/workbench/runtime'
 import { Context } from 'cordis'
 import { sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -54,6 +54,7 @@ const builtins = {
   consoleAuth: SingleUserConsoleAuthService,
   server: Server,
   workbench: workbenchRuntimePlugin,
+  workbenchHome: workbenchHomeProviderPlugin,
   consoleSession: consoleSessionPlugin,
   consoleAssets: consoleAssetPlugin,
   consoleHttp: consoleHttpPlugin,

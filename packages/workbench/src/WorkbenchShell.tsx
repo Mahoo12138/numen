@@ -17,7 +17,7 @@ import {
   type CoreWorkbenchActivityId,
 } from './routes.js'
 import './styles.css'
-import type { WorkbenchPageComponent } from './types.js'
+import type { WorkbenchConsoleClient, WorkbenchPageComponent } from './types.js'
 
 const panelTabs = ['Problems', 'Preview', 'Logs'] as const
 const standaloneRouteState: BrowserRouteState = {
@@ -32,10 +32,11 @@ export interface WorkbenchRouter {
 
 export interface WorkbenchShellProps {
   router?: WorkbenchRouter
+  consoleClient?: WorkbenchConsoleClient
   standalonePages?: ReadonlyArray<FrontendPage<WorkbenchPageComponent>>
 }
 
-export function WorkbenchShell({ router, standalonePages = [] }: WorkbenchShellProps = {}) {
+export function WorkbenchShell({ router, consoleClient, standalonePages = [] }: WorkbenchShellProps = {}) {
   const [standaloneActivityId, setStandaloneActivityId] = useState<CoreWorkbenchActivityId>('automations')
   const [automationId, setAutomationId] = useState('morning-brief')
   const [activeTab, setActiveTab] = useState('Editor')
@@ -106,6 +107,7 @@ export function WorkbenchShell({ router, standalonePages = [] }: WorkbenchShellP
           automationId={automationId}
           activeStepId={stepId}
           activeTab={activeTab}
+          {...(consoleClient ? { consoleClient } : {})}
           onOpenInspector={() => setInspectorOpen(true)}
           onStepChange={(id) => { setStepId(id); setInspectorOpen(true) }}
           onTabChange={setActiveTab}

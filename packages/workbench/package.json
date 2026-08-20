@@ -25,12 +25,16 @@
   },
   "dependencies": {
     "@cordisjs/plugin-server": "^1.7.0",
+    "@numen/automation": "workspace:*",
     "@numen/console": "workspace:*",
+    "@numen/connections": "workspace:*",
+    "@numen/scheduler": "workspace:*",
     "@numen/webui": "workspace:*",
     "cordis": "^4.0.0-rc.8",
     "lucide-react": "^0.468.0",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "schemastery": "^3.18.0"
   },
   "devDependencies": {
     "@types/react": "^19.1.0",

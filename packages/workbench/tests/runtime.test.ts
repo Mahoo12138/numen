@@ -13,6 +13,7 @@ import {
   coreWorkbenchEntryId,
   workbenchRuntimePlugin,
 } from '../src/runtime.js'
+import { workbenchHomeOverviewQueryRef } from '../src/contracts.js'
 
 const roots: Context[] = []
 const directories: string[] = []
@@ -44,6 +45,7 @@ describe('Workbench Runtime plugin', () => {
       id: coreWorkbenchEntryId,
       prod: entrySource,
     }])
+    expect(root.console.get(workbenchHomeOverviewQueryRef)).toMatchObject({ providerAvailable: false })
     const document = await fetch(`${root.server.baseUrl}/`)
     expect(document.status).toBe(200)
     expect(await document.text()).toContain('Numen')
@@ -55,6 +57,7 @@ describe('Workbench Runtime plugin', () => {
 
     await fiber.dispose()
     expect(root.consoleEntries.list()).toEqual([])
+    expect(root.console.get(workbenchHomeOverviewQueryRef)).toBeUndefined()
     expect((await fetch(`${root.server.baseUrl}/`)).status).toBe(404)
   })
 })

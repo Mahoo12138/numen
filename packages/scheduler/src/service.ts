@@ -31,6 +31,8 @@ export interface SchedulerConfig {
 export interface SchedulerHealth {
   ready: boolean
   queuedRuns: number
+  runningRuns: number
+  cancellingRuns: number
   runnableExecutions: number
   waitingExecutions: number
   blockedExecutions: number
@@ -366,6 +368,15 @@ export class SchedulerService extends Service {
     return row ? mapRun(row) : undefined
   }
 
+  listRuns(limit = 20): Run[] {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
+      throw new TypeError('run list limit must be an integer between 1 and 100')
+    }
+    return (this.ctx.database.db.prepare(`
+      SELECT * FROM runs ORDER BY created_at DESC, id DESC LIMIT ?
+    `).all(limit) as RunRow[]).map(mapRun)
+  }
+
   listExecutions(runId: string): Execution[] {
     return (this.ctx.database.db.prepare(`
       SELECT * FROM executions WHERE run_id = ? ORDER BY created_at, id
@@ -393,6 +404,8 @@ export class SchedulerService extends Service {
     return {
       ready: this.ready,
       queuedRuns: count('QUEUED', 'runs'),
+      runningRuns: count('RUNNING', 'runs'),
+      cancellingRuns: count('CANCELLING', 'runs'),
       runnableExecutions: count('RUNNABLE'),
       waitingExecutions: count('WAITING'),
       blockedExecutions: count('BLOCKED'),

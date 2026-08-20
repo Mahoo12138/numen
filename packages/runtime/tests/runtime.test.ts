@@ -41,6 +41,7 @@ describe('Numen runtime', () => {
         consoleAuth: { token: 'runtime-console-token', ownerId: 'runtime-owner' },
         server: { host: '127.0.0.1', port: 0 },
         workbench: { root: workbenchRoot, entrySource: workbenchEntry },
+        workbenchHome: {},
         consoleSession: {},
         consoleAssets: { mode: 'prod' },
         consoleHttp: {},
@@ -52,7 +53,12 @@ describe('Numen runtime', () => {
 
     const application = await startRuntime({ configPath })
     applications.push(application)
-    expect(application.context.console.list()).toEqual([])
+    expect(application.context.console.list()).toEqual([
+      expect.objectContaining({
+        definition: expect.objectContaining({ id: 'numen:home-overview', version: 1, kind: 'query' }),
+        providerAvailable: true,
+      }),
+    ])
     expect(application.context.consoleEntries.list()).toEqual([{
       id: 'numen:workbench-core',
       prod: workbenchEntry,
@@ -144,6 +150,30 @@ describe('Numen runtime', () => {
     const run = application.context.scheduler.startManual(created.automation.id)
     await application.context.scheduler.dispatchUntilIdle()
     expect(application.context.scheduler.getRun(run.id)?.status).toBe('COMPLETED')
+    const homeOverview = await fetch(`${baseUrl}/api/console/call`, {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer runtime-console-token',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ kind: 'query', procedure: 'numen:home-overview@1', input: {} }),
+    })
+    expect(homeOverview.status).toBe(200)
+    expect(await homeOverview.json()).toMatchObject({
+      result: {
+        automations: {
+          total: 1,
+          enabled: 1,
+          recent: [{ id: created.automation.id, name: 'Runtime smoke test', enabled: true }],
+        },
+        runs: {
+          queued: 0,
+          active: 0,
+          recent: [{ id: run.id, automationName: 'Runtime smoke test', status: 'COMPLETED' }],
+        },
+        connections: { ready: true, total: 0, enabled: 0, runtimeReady: 0, unavailable: 0, errors: 0 },
+      },
+    })
 
     const health = await fetch(`${baseUrl}/api/health`)
     expect(health.status).toBe(200)

@@ -10,7 +10,10 @@
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],
   "references": [
+    { "path": "../automation" },
     { "path": "../console" },
+    { "path": "../connections" },
+    { "path": "../scheduler" },
     { "path": "../webui" }
   ]
 }
