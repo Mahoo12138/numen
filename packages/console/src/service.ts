@@ -59,6 +59,25 @@ export interface ConsoleRequestContext {
   logger: Logger
 }
 
+export interface ConsoleAuthenticationRequest {
+  method: string
+  path: string
+  headers: Headers
+  remoteAddress?: string
+  signal: AbortSignal
+}
+
+export interface ConsoleAuthenticationResult {
+  principal: ConsolePrincipal
+  session?: ConsoleSession
+}
+
+export interface ConsoleAuthenticator {
+  authenticate(request: ConsoleAuthenticationRequest):
+    | ConsoleAuthenticationResult
+    | Promise<ConsoleAuthenticationResult>
+}
+
 export interface ConsoleProcedureInvocation<Input> {
   input: Input
   request: ConsoleRequestContext
@@ -117,6 +136,17 @@ export function consoleProcedureKey(ref: ConsoleProcedureRef): string {
   return `${ref.id}@${ref.version}`
 }
 
+export function parseConsoleProcedureKey(value: string): ConsoleProcedureRef | undefined {
+  const separator = value.lastIndexOf('@')
+  if (separator < 1) return
+  const id = value.slice(0, separator)
+  const versionText = value.slice(separator + 1)
+  if (!procedureIdPattern.test(id) || !/^[1-9]\d*$/.test(versionText)) return
+  const version = Number(versionText)
+  if (!Number.isSafeInteger(version)) return
+  return { id, version }
+}
+
 export class ConsoleProcedureNotFoundError extends Error {
   override name = 'ConsoleProcedureNotFoundError'
 }
@@ -129,8 +159,17 @@ export class ConsoleProcedureKindError extends Error {
   override name = 'ConsoleProcedureKindError'
 }
 
+export class ConsoleAuthenticatorUnavailableError extends Error {
+  override name = 'ConsoleAuthenticatorUnavailableError'
+}
+
+export class ConsoleAuthenticationError extends Error {
+  override name = 'ConsoleAuthenticationError'
+}
+
 export class ConsoleService extends Service {
   private readonly entries = new Map<string, RegistryEntry>()
+  private authenticator?: ConsoleAuthenticator
 
   constructor(ctx: Context) {
     super(ctx, 'console')
@@ -181,6 +220,33 @@ export class ConsoleService extends Service {
     provider: ConsoleSubscriptionProvider<Input, Event>,
   ): () => void | Promise<void> {
     return this.provide(owner, ref, 'subscription', provider as AnySubscriptionProvider)
+  }
+
+  provideAuthenticator(owner: Context, authenticator: ConsoleAuthenticator): () => void | Promise<void> {
+    if (this.authenticator) throw new Error('console authenticator already registered')
+    return owner.effect(() => {
+      this.authenticator = authenticator
+      return () => {
+        if (this.authenticator === authenticator) delete this.authenticator
+      }
+    }, 'console.provideAuthenticator()')
+  }
+
+  async authenticate(request: ConsoleAuthenticationRequest): Promise<ConsoleAuthenticationResult> {
+    if (!this.authenticator) {
+      throw new ConsoleAuthenticatorUnavailableError('console authenticator unavailable')
+    }
+    request.signal.throwIfAborted()
+    const identity = await this.authenticator.authenticate(request)
+    request.signal.throwIfAborted()
+    if (!identity?.principal?.authenticated) {
+      throw new ConsoleAuthenticationError('console authentication required')
+    }
+    const { subject } = identity.principal
+    if (!subject || typeof subject.type !== 'string' || !subject.type || typeof subject.id !== 'string' || !subject.id) {
+      throw new TypeError('console authenticator returned an invalid principal')
+    }
+    return identity
   }
 
   get(ref: ConsoleProcedureRef): ConsoleProcedureStatus | undefined {

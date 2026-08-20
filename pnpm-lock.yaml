@@ -82,6 +82,9 @@ importers:
 
   packages/console:
     dependencies:
+      '@cordisjs/plugin-server':
+        specifier: ^1.7.0
+        version: 1.7.0(cordis@4.0.0-rc.8)
       cordis:
         specifier: ^4.0.0-rc.8
         version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)

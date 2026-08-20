@@ -12,6 +12,7 @@
     }
   },
   "dependencies": {
+    "@cordisjs/plugin-server": "^1.7.0",
     "cordis": "^4.0.0-rc.8",
     "schemastery": "^3.18.0"
   }
