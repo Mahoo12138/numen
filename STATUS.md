@@ -86,6 +86,10 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Workbench Activity navigation bound to stable Router IDs and browser History
 - [x] React external-store route snapshots with Page Effect and Back/Forward reconciliation
 - [x] Direct WebUI subpath imports for bounded Workbench bootstrap bundles
+- [x] Secret-free Workbench SPA bootstrap document with strict CSP and no-store delivery
+- [x] Confined Workbench asset delivery with immutable hashed caching and security headers
+- [x] Production Browser Runtime bootstrap bundle with controlled startup failure UI
+- [x] Root production build including the deployable Workbench application bundle
 
 ## Milestone 3 — Completed
 
@@ -116,20 +120,21 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] First Workbench shell and responsive interaction lifecycle
 - [x] Stable Route service and Page extension lifecycle
 - [x] Core product Page entries and Workbench Router binding
-- [ ] Authenticated Workbench bootstrap and bundled core Entry delivery
+- [x] Workbench SPA bootstrap document and production bundle delivery
+- [ ] Default Runtime Workbench server and core Entry registration
 
 ## Next
 
-1. Authenticated Workbench bootstrap document and bundled core Entry delivery
+1. Default Runtime registration of the Workbench server and static bundle
 2. Default Runtime registration of the Workbench frontend Entry
-3. Live Console Query bindings for Home and core index Pages
+3. Trusted launcher URL delivery and live Console bindings for core Pages
 
 ## Verification Baseline
 
 ```text
 Typecheck: passing
 Build: passing
-Tests: 28 files, 109 tests passing
+Tests: 29 files, 113 tests passing
 CLI config validate: passing
 CLI doctor: passing
 SQLite schema migration: v10
@@ -150,8 +155,8 @@ pnpm dev
 - Drafts may remain invalid; authoritative validation happens during Publish.
 - The current Scheduler executes the Core IR subset emitted by the compiler, including retry, timeout, cancellation, recovery, and structured concurrency.
 - Parallel, first-success Race, and bounded ForEach use durable Execution scopes with interruptible concurrent dispatch; Try/Finally control flow remains planned work.
-- Typed Console transports, browser sessions, Browser Cordis clients, frontend extension registries, atomic Entry generations, authenticated revision-fenced asset delivery, and Browser Entry reconciliation/rollback are operational. Generated bootstrap tokens and sessions rotate on restart; trusted launcher delivery and Workbench runtime integration remain planned work.
-- The responsive Workbench shell, six core Page entries, and stable browser Route/Page reconciliation are operational. Server-delivered browser bootstrap and live Console data binding remain planned work.
+- Typed Console transports, browser sessions, Browser Cordis clients, frontend extension registries, atomic Entry generations, authenticated revision-fenced asset delivery, and Browser Entry reconciliation/rollback are operational. Generated bootstrap tokens and sessions rotate on restart; trusted launcher delivery remains planned work.
+- The responsive Workbench shell, six core Page entries, stable browser Route/Page reconciliation, and a secret-free server-delivered production bootstrap are operational. Default Runtime registration and live Console data binding remain planned work.
 - Manual Runs and event Trigger subscriptions are supported. State Trigger transition detection, filtering, debounce, and throttle remain planned work.
 - Connection desired state, Adapter contracts, generation-fenced Runtime recreation, and Credential snapshots are operational; automatic reconnect policy remains planned work.
 - Credential payloads use authenticated encryption with environment-provided keys; key-ring migration and external vault providers remain planned work.

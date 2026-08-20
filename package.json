@@ -14,7 +14,7 @@
     ]
   },
   "scripts": {
-    "build": "tsc -b",
+    "build": "tsc -b && pnpm --filter @numen/workbench build:app",
     "clean": "tsc -b --clean",
     "numen": "tsx packages/cli/src/bin.ts",
     "dev": "pnpm numen start",

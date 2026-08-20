@@ -265,6 +265,9 @@ importers:
 
   packages/workbench:
     dependencies:
+      '@cordisjs/plugin-server':
+        specifier: ^1.7.0
+        version: 1.7.0(cordis@4.0.0-rc.8)
       '@numen/webui':
         specifier: workspace:*
         version: link:../webui
