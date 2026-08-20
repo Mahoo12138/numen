@@ -117,7 +117,7 @@ type AnyProvider = AnyQueryProvider | AnyActionProvider | AnySubscriptionProvide
 interface RegistryEntry {
   definition: ConsoleProcedureDefinition<any, any>
   provider?: AnyProvider
-  activeSubscriptions: Set<ConsoleSubscriptionCleanup>
+  activeSubscriptions: Set<{ invalidate: ConsoleSubscriptionCleanup }>
 }
 
 declare module 'cordis' {
@@ -296,6 +296,7 @@ export class ConsoleService extends Service {
     input: Input,
     request: ConsoleRequestContext,
     emit: (event: Event) => void | Promise<void>,
+    invalidated?: ConsoleSubscriptionCleanup,
   ): Promise<ConsoleSubscriptionCleanup> {
     const entry = this.requireEntry(ref, 'subscription')
     const provider = this.requireProvider<AnySubscriptionProvider>(ref, entry)
@@ -305,13 +306,15 @@ export class ConsoleService extends Service {
     let started = false
     let disposeRequested = false
     let disposed = false
+    const registration = { invalidate: async () => finalize(true) }
 
-    const finalize = async () => {
+    const finalize = async (notifyInvalidated = false) => {
       if (disposed) return
       disposed = true
       request.signal.removeEventListener('abort', abort)
-      entry.activeSubscriptions.delete(dispose)
+      entry.activeSubscriptions.delete(registration)
       await cleanup?.()
+      if (notifyInvalidated) await invalidated?.()
     }
     const dispose = async () => {
       if (!started) {
@@ -332,8 +335,13 @@ export class ConsoleService extends Service {
         emit: event => emit(entry.definition.event(event) as Event),
       })
       cleanup = result ?? undefined
+      if (entry.provider !== provider) {
+        request.signal.removeEventListener('abort', abort)
+        await cleanup?.()
+        throw new ConsoleProcedureUnavailableError(`console procedure unavailable: ${consoleProcedureKey(ref)}`)
+      }
       started = true
-      entry.activeSubscriptions.add(dispose)
+      entry.activeSubscriptions.add(registration)
       if (disposeRequested || request.signal.aborted) await finalize()
       return dispose
     } catch (error) {
@@ -408,7 +416,7 @@ export class ConsoleService extends Service {
   }
 
   private async disposeSubscriptions(entry: RegistryEntry): Promise<void> {
-    await Promise.all([...entry.activeSubscriptions].map(dispose => dispose()))
+    await Promise.all([...entry.activeSubscriptions].map(subscription => subscription.invalidate()))
   }
 }
 

@@ -14,6 +14,10 @@
   "dependencies": {
     "@cordisjs/plugin-server": "^1.7.0",
     "cordis": "^4.0.0-rc.8",
-    "schemastery": "^3.18.0"
+    "schemastery": "^3.18.0",
+    "ws": "^8.19.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.1"
   }
 }

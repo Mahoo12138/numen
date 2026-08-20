@@ -19,5 +19,6 @@ plugins:
     host: 127.0.0.1
     port: 5140
   consoleHttp: {}
+  consoleWs: {}
   health: {}
   readiness: {}

@@ -35,6 +35,7 @@ describe('Numen runtime', () => {
         consoleAuth: { token: 'runtime-console-token', ownerId: 'runtime-owner' },
         server: { host: '127.0.0.1', port: 0 },
         consoleHttp: {},
+        consoleWs: {},
         health: {},
         readiness: {},
       },
@@ -43,6 +44,9 @@ describe('Numen runtime', () => {
     const application = await startRuntime({ configPath })
     applications.push(application)
     expect(application.context.console.list()).toEqual([])
+    expect(application.entries).toContainEqual(expect.objectContaining({
+      key: 'consoleWs', builtin: true, disabled: false,
+    }))
     const baseUrl = application.serverUrl!
     const currentUser = {
       id: 'runtime:current-user',
