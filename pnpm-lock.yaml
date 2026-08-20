@@ -253,9 +253,15 @@ importers:
       '@cordisjs/plugin-server':
         specifier: ^1.7.0
         version: 1.7.0(cordis@4.0.0-rc.8)
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
       schemastery:
         specifier: ^3.18.0
         version: 3.18.0
+      ws:
+        specifier: ^8.19.0
+        version: 8.21.3
 
 packages:
 

@@ -60,6 +60,9 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Browser Cordis Console Client with fragment scrubbing and session restoration
 - [x] Browser typed Query/Action client with AbortSignal and structured transport errors
 - [x] Real Server-to-Browser Context authentication and Query integration coverage
+- [x] Browser multiplexed Subscription client with Cordis lifecycle ownership
+- [x] Truth-first reconnect reconciliation before subscription restoration
+- [x] Real Server-to-Browser authenticated WebSocket integration coverage
 
 ## Milestone 3 — Completed
 
@@ -82,12 +85,13 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Console Subscription WebSocket transport
 - [x] Server-side browser session bootstrap and same-origin cookie authentication
 - [x] Browser Cordis Runtime bootstrap and typed Query/Action client
-- [ ] Browser Subscription client and frontend extension lifecycle
+- [x] Browser Subscription client and reconnect reconciliation
+- [ ] Frontend Entry/Page/Slot Effect registries and extension lifecycle
 
 ## Next
 
-1. Browser multiplexed Subscription client and reconnect reconciliation
-2. Frontend Entry/Page/Slot Effect registries
+1. Frontend Entry/Page/Slot Effect registries
+2. Backend Console Entry generation and atomic replacement
 3. First Workbench shell and extension lifecycle
 
 ## Verification Baseline
@@ -95,7 +99,7 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 ```text
 Typecheck: passing
 Build: passing
-Tests: 20 files, 75 tests passing
+Tests: 21 files, 78 tests passing
 CLI config validate: passing
 CLI doctor: passing
 SQLite schema migration: v10
@@ -116,7 +120,7 @@ pnpm dev
 - Drafts may remain invalid; authoritative validation happens during Publish.
 - The current Scheduler executes the Core IR subset emitted by the compiler, including retry, timeout, cancellation, recovery, and structured concurrency.
 - Parallel, first-success Race, and bounded ForEach use durable Execution scopes with interruptible concurrent dispatch; Try/Finally control flow remains planned work.
-- Typed Console procedures, HTTP/WS transports, browser-safe sessions, and a Browser Cordis Query/Action client are operational. Generated bootstrap tokens and browser sessions are memory-only and rotate on restart; trusted launcher delivery, browser subscription reconnection, asset serving, and the Workbench UI remain planned work.
+- Typed Console procedures, HTTP/WS transports, browser-safe sessions, and a Browser Cordis Query/Action/Subscription client are operational. Generated bootstrap tokens and sessions rotate on restart; trusted launcher delivery, frontend extension registries, asset serving, and the Workbench UI remain planned work.
 - Manual Runs and event Trigger subscriptions are supported. State Trigger transition detection, filtering, debounce, and throttle remain planned work.
 - Connection desired state, Adapter contracts, generation-fenced Runtime recreation, and Credential snapshots are operational; automatic reconnect policy remains planned work.
 - Credential payloads use authenticated encryption with environment-provided keys; key-ring migration and external vault providers remain planned work.

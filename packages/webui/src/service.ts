@@ -3,6 +3,12 @@ import type {
   ConsoleSessionDocument,
 } from '@numen/console'
 import { Service, type Context } from 'cordis'
+import {
+  BrowserConsoleSubscriptions,
+  type BrowserConsoleSubscription,
+  type BrowserWebSocketFactory,
+  type ConsoleSubscriptionHandlers,
+} from './subscriptions.js'
 
 export interface BrowserConsoleEnvironment {
   fetch: typeof globalThis.fetch
@@ -14,6 +20,8 @@ export interface BrowserConsoleClientConfig {
   baseUrl?: string
   bootstrapParameter?: string
   environment?: BrowserConsoleEnvironment
+  createWebSocket?: BrowserWebSocketFactory
+  reconnectDelayMs?: number
 }
 
 export interface ConsoleClientCallError {
@@ -60,6 +68,7 @@ function defaultEnvironment(): BrowserConsoleEnvironment {
 export class BrowserConsoleClient extends Service {
   readonly baseUrl: string
   readonly bootstrapParameter: string
+  readonly subscriptions: BrowserConsoleSubscriptions
   session: ConsoleSessionDocument | undefined
 
   private readonly environment: BrowserConsoleEnvironment
@@ -69,11 +78,22 @@ export class BrowserConsoleClient extends Service {
     this.environment = config.environment ?? defaultEnvironment()
     this.baseUrl = (config.baseUrl ?? new URL(this.environment.location.href).origin).replace(/\/$/, '')
     this.bootstrapParameter = config.bootstrapParameter ?? 'numen-bootstrap'
+    const reconnectDelayMs = config.reconnectDelayMs ?? 500
+    if (!Number.isSafeInteger(reconnectDelayMs) || reconnectDelayMs < 0) {
+      throw new TypeError('browser Console reconnectDelayMs must be a non-negative integer')
+    }
+    this.subscriptions = new BrowserConsoleSubscriptions(
+      ctx,
+      this.baseUrl,
+      config.createWebSocket ?? (url => new globalThis.WebSocket(url)),
+      reconnectDelayMs,
+    )
   }
 
   async *[Service.init]() {
     this.session = await this.bootstrapSession()
     yield () => {
+      this.subscriptions.dispose()
       this.session = undefined
     }
   }
@@ -84,6 +104,15 @@ export class BrowserConsoleClient extends Service {
 
   async action<Input, Output>(ref: ConsoleProcedureRef, input: Input, signal?: AbortSignal): Promise<Output> {
     return this.call<Input, Output>('action', ref, input, signal)
+  }
+
+  subscribe<Input, Event>(
+    ref: ConsoleProcedureRef,
+    input: Input,
+    handlers: ConsoleSubscriptionHandlers<Event>,
+    signal?: AbortSignal,
+  ): Promise<BrowserConsoleSubscription> {
+    return this.subscriptions.subscribe(ref, input, handlers, signal)
   }
 
   async logout(signal?: AbortSignal): Promise<void> {

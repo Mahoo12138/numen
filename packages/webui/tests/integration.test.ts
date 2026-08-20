@@ -4,10 +4,12 @@ import {
   SingleUserConsoleAuthService,
   consoleHttpPlugin,
   consoleSessionPlugin,
+  consoleWebSocketPlugin,
 } from '@numen/console'
 import { Context } from 'cordis'
 import z from 'schemastery'
-import { expect, it } from 'vitest'
+import { expect, it, vi } from 'vitest'
+import NodeWebSocket from 'ws'
 import { BrowserConsoleClient, type BrowserConsoleEnvironment } from '../src/index.js'
 
 it('boots a browser Cordis client and calls a real authenticated Console server', async () => {
@@ -20,6 +22,7 @@ it('boots a browser Cordis client and calls a real authenticated Console server'
   })
   await server.plugin(consoleSessionPlugin)
   await server.plugin(consoleHttpPlugin)
+  await server.plugin(consoleWebSocketPlugin)
   const browser = new Context()
   try {
     const query = {
@@ -33,6 +36,24 @@ it('boots a browser Cordis client and calls a real authenticated Console server'
     server.console.define(server, query)
     server.console.provideQuery(server, query, {
       query: ({ request }) => request.principal.subject.id,
+    })
+    const updates = {
+      id: 'test:updates',
+      version: 1,
+      kind: 'subscription' as const,
+      title: 'Updates',
+      input: z.object({}),
+      event: z.number(),
+    }
+    let publish: ((event: number) => void | Promise<void>) | undefined
+    server.console.define(server, updates)
+    server.console.provideSubscription(server, updates, {
+      subscribe({ emit }) {
+        publish = emit
+        return () => {
+          publish = undefined
+        }
+      },
     })
 
     const baseUrl = server.server.baseUrl
@@ -58,13 +79,28 @@ it('boots a browser Cordis client and calls a real authenticated Console server'
         return response
       },
     }
-    await browser.plugin(BrowserConsoleClient, { environment })
+    await browser.plugin(BrowserConsoleClient, {
+      environment,
+      createWebSocket: url => {
+        if (!sessionCookie) throw new Error('browser session cookie missing')
+        return new NodeWebSocket(url, {
+          headers: { cookie: sessionCookie, origin: baseUrl },
+        }) as unknown as WebSocket
+      },
+    })
 
     expect(location.href).toBe(`${baseUrl}/`)
     expect(browser.consoleClient.session).toMatchObject({
       principal: { subject: { id: 'integration-owner' } },
     })
     await expect(browser.consoleClient.query(query, {})).resolves.toBe('integration-owner')
+    const events: number[] = []
+    const unsubscribe = await browser.consoleClient.subscribe(updates, {}, {
+      event: value => events.push(value),
+    })
+    await publish?.(9)
+    await vi.waitFor(() => expect(events).toEqual([9]))
+    unsubscribe()
     await browser.consoleClient.logout()
     expect(browser.consoleClient.session).toBeUndefined()
   } finally {
