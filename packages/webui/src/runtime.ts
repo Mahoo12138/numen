@@ -1,9 +1,11 @@
 import { Context } from 'cordis'
 import { BrowserExtensionRegistry } from './extensions.js'
+import { BrowserEntryLoader, type BrowserEntryLoaderConfig } from './loader.js'
 import { BrowserConsoleClient, type BrowserConsoleClientConfig } from './service.js'
 
 export interface StartBrowserRuntimeOptions {
   console?: BrowserConsoleClientConfig
+  entries?: BrowserEntryLoaderConfig
 }
 
 export interface NumenBrowserRuntime {
@@ -18,6 +20,7 @@ export async function startBrowserRuntime(
   try {
     await context.plugin(BrowserExtensionRegistry)
     await context.plugin(BrowserConsoleClient, options.console ?? {})
+    await context.plugin(BrowserEntryLoader, options.entries ?? {})
   } catch (error) {
     await context.fiber.dispose()
     throw error

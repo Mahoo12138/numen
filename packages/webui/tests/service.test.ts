@@ -115,4 +115,25 @@ describe('BrowserConsoleClient', () => {
     expect(fetch).toHaveBeenCalledTimes(3)
     await root.fiber.dispose()
   })
+
+  it('fetches the authenticated frontend Entry manifest', async () => {
+    const manifest = {
+      revision: 4,
+      entries: [{ id: 'plugin:workbench', url: '/api/console/assets/plugin/4/index.js' }],
+      unavailable: [],
+    }
+    const fetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      if (String(input).endsWith('/session')) return Response.json(session)
+      expect(String(input)).toBe('http://numen.local/api/console/entries')
+      expect(init).toMatchObject({ method: 'GET', credentials: 'include' })
+      return Response.json(manifest)
+    }) as BrowserConsoleEnvironment['fetch']
+    const root = new Context()
+    await root.plugin(BrowserConsoleClient, {
+      environment: environment('http://numen.local/', fetch),
+    })
+
+    await expect(root.consoleClient.getEntryManifest()).resolves.toEqual(manifest)
+    await root.fiber.dispose()
+  })
 })

@@ -1,4 +1,5 @@
 import type {
+  ConsoleEntryManifest,
   ConsoleProcedureRef,
   ConsoleSessionDocument,
 } from '@numen/console'
@@ -113,6 +114,18 @@ export class BrowserConsoleClient extends Service {
     signal?: AbortSignal,
   ): Promise<BrowserConsoleSubscription> {
     return this.subscriptions.subscribe(ref, input, handlers, signal)
+  }
+
+  async getEntryManifest(signal?: AbortSignal): Promise<ConsoleEntryManifest> {
+    signal?.throwIfAborted()
+    const response = await this.environment.fetch(`${this.baseUrl}/api/console/entries`, {
+      method: 'GET',
+      credentials: 'include',
+      ...(signal ? { signal } : {}),
+    })
+    signal?.throwIfAborted()
+    if (!response.ok) await this.throwResponse(response)
+    return response.json() as Promise<ConsoleEntryManifest>
   }
 
   async logout(signal?: AbortSignal): Promise<void> {
