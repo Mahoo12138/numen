@@ -122,3 +122,14 @@ export interface WorkbenchConnectionsIndex {
   }
   items: WorkbenchConnectionIndexItem[]
 }
+
+export const workbenchInvalidationSubscriptionRef = {
+  id: 'numen:workbench-invalidation',
+  version: 1,
+} as const satisfies ConsoleProcedureRef
+
+export type WorkbenchInvalidationScope = 'home' | 'runs' | 'connections'
+
+export interface WorkbenchInvalidationEvent {
+  scopes: WorkbenchInvalidationScope[]
+}

@@ -36,6 +36,7 @@ function HomePage({ consoleClient }: WorkbenchPageProps) {
     consoleClient,
     workbenchHomeOverviewQueryRef,
     emptyQueryInput,
+    'home',
   )
   return (
     <main className="main-workbench core-page">
@@ -146,6 +147,7 @@ function RunsPage({ consoleClient }: WorkbenchPageProps) {
     consoleClient,
     workbenchRunsIndexQueryRef,
     input,
+    'runs',
   )
   const next = index.status === 'READY' ? index.data.nextCursor : undefined
   const goNext = () => {
@@ -250,6 +252,7 @@ function ConnectionsPage({ consoleClient }: WorkbenchPageProps) {
     consoleClient,
     workbenchConnectionsIndexQueryRef,
     emptyQueryInput,
+    'connections',
   )
   return (
     <main className="main-workbench core-page">

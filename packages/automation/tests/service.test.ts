@@ -53,6 +53,8 @@ describe('AutomationService', () => {
     directories.push(directory)
     const databasePath = join(directory, 'numen.db')
     const root = await createContext(databasePath)
+    const changes: string[] = []
+    root.on('numen/automation-change', automationId => changes.push(automationId))
 
     const created = root.automations.create({ name: 'Morning note', source })
     expect(created.draft.version).toBe(1)
@@ -87,6 +89,7 @@ describe('AutomationService', () => {
     expect(activated).toMatchObject({ enabled: false, activeRevisionId: presentationRevision.id, activationGeneration: 1 })
     const enabled = root.automations.setEnabled(created.automation.id, true)
     expect(enabled).toMatchObject({ enabled: true, activationGeneration: 2 })
+    expect(changes).toEqual(Array.from({ length: 7 }, () => created.automation.id))
     await root.fiber.dispose()
 
     const restarted = await createContext(databasePath)

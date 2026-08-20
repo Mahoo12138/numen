@@ -1,9 +1,13 @@
 import { writeConfig } from '@numen/config'
+import {
+  workbenchInvalidationSubscriptionRef,
+  type WorkbenchInvalidationEvent,
+} from '@numen/workbench/contracts'
 import z from 'schemastery'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { startRuntime, type NumenApplication } from '../src/index.js'
 
 const applications: NumenApplication[] = []
@@ -43,6 +47,7 @@ describe('Numen runtime', () => {
         workbench: { root: workbenchRoot, entrySource: workbenchEntry },
         workbenchConnections: {},
         workbenchHome: {},
+        workbenchInvalidation: {},
         workbenchRuns: {},
         consoleSession: {},
         consoleAssets: { mode: 'prod' },
@@ -68,7 +73,29 @@ describe('Numen runtime', () => {
         definition: expect.objectContaining({ id: 'numen:runs-index', version: 1, kind: 'query' }),
         providerAvailable: true,
       }),
+      expect.objectContaining({
+        definition: expect.objectContaining({ id: 'numen:workbench-invalidation', version: 1, kind: 'subscription' }),
+        providerAvailable: true,
+      }),
     ])
+    const invalidations: WorkbenchInvalidationEvent[] = []
+    const invalidationController = new AbortController()
+    const disposeInvalidation = await application.context.console.subscribe(
+      workbenchInvalidationSubscriptionRef,
+      {},
+      {
+        requestId: 'runtime-invalidation-test',
+        principal: { subject: { type: 'user', id: 'runtime-owner' }, authenticated: true },
+        signal: invalidationController.signal,
+        logger: application.context.logger('runtime:invalidation-test'),
+      },
+      event => invalidations.push(event),
+    )
+    expect(invalidations).toEqual([{ scopes: ['home', 'runs', 'connections'] }])
+    invalidations.length = 0
+    application.context.emit('numen/run-change', 'synthetic-run')
+    application.context.emit('numen/automation-change', 'synthetic-automation')
+    await vi.waitFor(() => expect(invalidations).toEqual([{ scopes: ['home', 'runs'] }]))
     expect(application.context.consoleEntries.list()).toEqual([{
       id: 'numen:workbench-core',
       prod: workbenchEntry,
@@ -333,6 +360,12 @@ describe('Numen runtime', () => {
       },
     })
     expect(JSON.stringify(connectionsDocument)).not.toContain('runtime authentication failed')
+    await disposeInvalidation()
+    const invalidationCount = invalidations.length
+    application.context.emit('numen/run-change', 'disposed-run')
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(invalidations).toHaveLength(invalidationCount)
 
     const health = await fetch(`${baseUrl}/api/health`)
     expect(health.status).toBe(200)

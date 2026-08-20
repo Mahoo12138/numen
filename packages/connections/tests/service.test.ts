@@ -115,6 +115,10 @@ describe('ConnectionService', () => {
   it('opens, recreates, and stops generation-fenced runtimes', async () => {
     const root = await createContext(':memory:', false)
     root.connections.defineAdapter(root, adapter)
+    const runtimeStatuses: string[] = []
+    root.on('numen/connection-runtime-change', connectionId => {
+      runtimeStatuses.push(root.connections.getRuntimeState(connectionId).status)
+    })
     const opens: number[] = []
     let closes = 0
     root.connections.provideAdapter(root, adapter, {
@@ -135,6 +139,7 @@ describe('ConnectionService', () => {
     })
     await root.connections.reconcile()
     expect(root.connections.getRuntimeState(created.id)).toMatchObject({ status: 'READY', generation: 1 })
+    expect(runtimeStatuses).toEqual(['STARTING', 'READY'])
 
     const updated = root.connections.update({
       id: created.id,
@@ -150,6 +155,11 @@ describe('ConnectionService', () => {
     await root.connections.reconcile()
     expect(root.connections.getRuntimeState(created.id)).toEqual({ connectionId: created.id, status: 'STOPPED' })
     expect(closes).toBe(2)
+    expect(runtimeStatuses).toEqual([
+      'STARTING', 'READY',
+      'STOPPING', 'STOPPED', 'STARTING', 'READY',
+      'STOPPING', 'STOPPED',
+    ])
     await root.fiber.dispose()
   })
 

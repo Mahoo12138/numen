@@ -128,6 +128,10 @@ declare module 'cordis' {
   interface Context {
     scheduler: SchedulerService
   }
+
+  interface Events {
+    'numen/run-change'(runId: string): void
+  }
 }
 
 function id(prefix: string): string {
@@ -229,6 +233,8 @@ export class SchedulerService extends Service {
   private dispatchTask: Promise<number> | undefined
   private readonly activeInvocations = new Map<string, ActiveInvocation>()
   private readonly activeExecutionTasks = new Map<string, Promise<void>>()
+  private readonly pendingRunChanges = new Set<string>()
+  private runChangeScheduled = false
   private readonly autoDispatch: boolean
   private readonly sweepIntervalMs: number
   private readonly maxConcurrentExecutions: number
@@ -541,6 +547,19 @@ export class SchedulerService extends Service {
       INSERT INTO run_events (run_id, sequence, type, payload_json, occurred_at)
       VALUES (?, ?, ?, ?, ?)
     `).run(runId, sequence, type, JSON.stringify(payload), occurredAt)
+    this.scheduleRunChange(runId)
+  }
+
+  private scheduleRunChange(runId: string): void {
+    this.pendingRunChanges.add(runId)
+    if (this.runChangeScheduled) return
+    this.runChangeScheduled = true
+    queueMicrotask(() => {
+      this.runChangeScheduled = false
+      const runIds = [...this.pendingRunChanges]
+      this.pendingRunChanges.clear()
+      for (const changedRunId of runIds) this.ctx.emit('numen/run-change', changedRunId)
+    })
   }
 
   private createExecution(

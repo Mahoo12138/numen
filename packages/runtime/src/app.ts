@@ -22,6 +22,7 @@ import { TriggerService } from '@numen/triggers'
 import {
   workbenchConnectionsProviderPlugin,
   workbenchHomeProviderPlugin,
+  workbenchInvalidationProviderPlugin,
   workbenchRunsProviderPlugin,
   workbenchRuntimePlugin,
 } from '@numen/workbench/runtime'
@@ -61,6 +62,7 @@ const builtins = {
   workbench: workbenchRuntimePlugin,
   workbenchConnections: workbenchConnectionsProviderPlugin,
   workbenchHome: workbenchHomeProviderPlugin,
+  workbenchInvalidation: workbenchInvalidationProviderPlugin,
   workbenchRuns: workbenchRunsProviderPlugin,
   consoleSession: consoleSessionPlugin,
   consoleAssets: consoleAssetPlugin,

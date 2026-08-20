@@ -106,9 +106,14 @@ describe('SchedulerService', () => {
     directories.push(directory)
     const root = await createContext(join(directory, 'numen.db'))
     const automationId = publish(root, { triggers: [], flow: { type: 'block', id: 'flow', steps: [] } })
+    const changes: string[] = []
+    root.on('numen/run-change', runId => changes.push(runId))
     const first = root.scheduler.startManual(automationId)
     const second = root.scheduler.startManual(automationId)
     const third = root.scheduler.startManual(automationId)
+    await Promise.resolve()
+    expect(new Set(changes)).toEqual(new Set([first.id, second.id, third.id]))
+    const acceptedChangeCount = changes.length
     root.database.db.prepare('UPDATE runs SET created_at = ? WHERE id = ?').run('2026-01-01T00:00:01.000Z', first.id)
     root.database.db.prepare('UPDATE runs SET created_at = ? WHERE id = ?').run('2026-01-01T00:00:02.000Z', second.id)
     root.database.db.prepare('UPDATE runs SET created_at = ? WHERE id = ?').run('2026-01-01T00:00:03.000Z', third.id)
@@ -126,6 +131,10 @@ describe('SchedulerService', () => {
     expect(() => root.scheduler.listRuns(0)).toThrow('between 1 and 100')
     expect(() => root.scheduler.listRuns(101)).toThrow('between 1 and 100')
     expect(() => root.scheduler.listRunSummariesPage(51)).toThrow('between 1 and 50')
+    await root.scheduler.dispatchUntilIdle()
+    await Promise.resolve()
+    expect(root.scheduler.getRunStatusCounts()).toMatchObject({ QUEUED: 0, COMPLETED: 3 })
+    expect(changes.length).toBeGreaterThan(acceptedChangeCount)
     await root.fiber.dispose()
   })
 

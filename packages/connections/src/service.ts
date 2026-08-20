@@ -127,6 +127,7 @@ declare module 'cordis' {
 
   interface Events {
     'numen/connection-change'(connectionId: string): void
+    'numen/connection-runtime-change'(connectionId: string): void
   }
 }
 
@@ -424,6 +425,7 @@ export class ConnectionService extends Service {
       status: 'STARTING',
     }
     this.runtimes.set(connection.id, runtime)
+    this.ctx.emit('numen/connection-runtime-change', connection.id)
     try {
       const credential = connection.credentialId
         ? this.ctx.credentials.readSecretSnapshot(connection.credentialId)
@@ -447,10 +449,12 @@ export class ConnectionService extends Service {
       }
       runtime.runtime = opened ?? {}
       runtime.status = 'READY'
+      this.ctx.emit('numen/connection-runtime-change', connection.id)
     } catch (error) {
       if (runtime.controller.signal.aborted || this.runtimes.get(connection.id) !== runtime) return
       runtime.status = 'ERROR'
       runtime.error = error instanceof Error ? error.message : String(error)
+      this.ctx.emit('numen/connection-runtime-change', connection.id)
     }
   }
 
@@ -459,11 +463,15 @@ export class ConnectionService extends Service {
     const task = (async () => {
       if (this.runtimes.get(runtime.connectionId) !== runtime) return
       runtime.status = 'STOPPING'
+      this.ctx.emit('numen/connection-runtime-change', runtime.connectionId)
       if (!runtime.controller.signal.aborted) runtime.controller.abort()
       try {
         await runtime.runtime?.close?.()
       } finally {
-        if (this.runtimes.get(runtime.connectionId) === runtime) this.runtimes.delete(runtime.connectionId)
+        if (this.runtimes.get(runtime.connectionId) === runtime) {
+          this.runtimes.delete(runtime.connectionId)
+          this.ctx.emit('numen/connection-runtime-change', runtime.connectionId)
+        }
       }
     })()
     runtime.stopTask = task

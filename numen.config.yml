@@ -22,6 +22,7 @@ plugins:
   workbench: {}
   workbenchConnections: {}
   workbenchHome: {}
+  workbenchInvalidation: {}
   workbenchRuns: {}
   consoleSession: {}
   consoleAssets:

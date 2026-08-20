@@ -164,6 +164,7 @@ export class AutomationService extends Service {
         ) VALUES (?, ?, ?, 1, ?)
       `).run(id, JSON.stringify(source), JSON.stringify(presentation), now)
     })
+    this.ctx.emit('numen/automation-change', id)
     return { automation: this.get(id)!, draft: this.getDraft(id)! }
   }
 
@@ -186,7 +187,7 @@ export class AutomationService extends Service {
 
   saveDraft(input: SaveDraftInput): AutomationDraft {
     const now = new Date().toISOString()
-    return this.ctx.database.transaction(() => {
+    const draft = this.ctx.database.transaction(() => {
       const result = this.ctx.database.db.prepare(`
         UPDATE automation_drafts
         SET source_json = ?, presentation_json = ?, version = version + 1, updated_at = ?
@@ -206,6 +207,8 @@ export class AutomationService extends Service {
       this.ctx.database.db.prepare('UPDATE automations SET updated_at = ? WHERE id = ?').run(now, input.automationId)
       return this.getDraft(input.automationId)!
     })
+    this.ctx.emit('numen/automation-change', input.automationId)
+    return draft
   }
 
   count(): number {
@@ -233,7 +236,7 @@ export class AutomationService extends Service {
     const revisionId = `rev_${randomUUID().replaceAll('-', '')}`
     const now = new Date().toISOString()
 
-    return this.ctx.database.transaction(() => {
+    const revision = this.ctx.database.transaction(() => {
       const current = this.getDraft(automationId)
       if (!current) throw new AutomationNotFoundError(`automation not found: ${automationId}`)
       if (current.version !== draft.version) throw new DraftConflictError(draft.version, current.version)
@@ -266,6 +269,8 @@ export class AutomationService extends Service {
       `).run(revisionId, automationId)
       return this.getRevision(revisionId)!
     })
+    this.ctx.emit('numen/automation-change', automationId)
+    return revision
   }
 
   getRevision(revisionId: string): AutomationRevision | undefined {
