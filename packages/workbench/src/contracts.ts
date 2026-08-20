@@ -49,3 +49,35 @@ export interface WorkbenchHomeOverview {
     errors: number
   }
 }
+
+export const workbenchRunsIndexQueryRef = {
+  id: 'numen:runs-index',
+  version: 1,
+} as const satisfies ConsoleProcedureRef
+
+export type WorkbenchRunsCursor = string
+
+export interface WorkbenchRunsQueryInput {
+  limit: number
+  cursor?: WorkbenchRunsCursor
+}
+
+export interface WorkbenchRunIndexItem extends WorkbenchHomeRun {
+  revisionId: string
+  startedAt?: string
+  executionCount: number
+  attemptCount: number
+}
+
+export interface WorkbenchRunsIndex {
+  summary: {
+    total: number
+    queued: number
+    active: number
+    completed: number
+    failed: number
+    cancelled: number
+  }
+  items: WorkbenchRunIndexItem[]
+  nextCursor?: WorkbenchRunsCursor
+}

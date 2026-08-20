@@ -97,6 +97,9 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Typed Home Overview Query with default Automation/Scheduler/Connection Provider
 - [x] Abort-safe reusable browser Console Query hook with loading, empty, and retry states
 - [x] Shared React runtime identity across the public shell and authenticated core Entry
+- [x] Typed Runs Index Query with status totals and aggregate Execution/Attempt counts
+- [x] Deterministic keyset pagination with opaque validated browser cursors
+- [x] Live responsive Runs page with loading, retry, empty, table, and pagination states
 
 ## Milestone 3 — Completed
 
@@ -131,13 +134,14 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Default Runtime Workbench server and core Entry registration
 - [x] Trusted Workbench launcher URL delivery
 - [x] Live Home Overview Console Query binding
-- [ ] Live Runs and Connections Console Query bindings
+- [x] Live Runs index Console Query binding
+- [ ] Live Connections index Console Query binding
 
 ## Next
 
-1. Live Runs index Query with bounded recent execution summaries
-2. Live Connections index Query with runtime availability state
-3. Console Subscription invalidation for visible overview data
+1. Live Connections index Query with runtime availability state
+2. Console Subscription invalidation for visible overview data
+3. Automation index/detail data bindings and authoring actions
 
 ## Verification Baseline
 
@@ -166,7 +170,7 @@ pnpm dev
 - The current Scheduler executes the Core IR subset emitted by the compiler, including retry, timeout, cancellation, recovery, and structured concurrency.
 - Parallel, first-success Race, and bounded ForEach use durable Execution scopes with interruptible concurrent dispatch; Try/Finally control flow remains planned work.
 - Typed Console transports, browser sessions, Browser Cordis clients, frontend extension registries, atomic Entry generations, authenticated revision-fenced asset delivery, and Browser Entry reconciliation/rollback are operational. Generated bootstrap tokens and sessions rotate on restart; the CLI prints a fragment-only Workbench launch URL only with explicit `--print-launch-url` authorization.
-- The responsive Workbench shell, six core Page entries, stable browser Route/Page reconciliation, a secret-free production bootstrap, and authenticated core Entry loading are operational through the default Runtime. Home displays live Automation, Run, and Connection summaries; dedicated Runs and Connections indexes remain planned work.
+- The responsive Workbench shell, six core Page entries, stable browser Route/Page reconciliation, a secret-free production bootstrap, and authenticated core Entry loading are operational through the default Runtime. Home displays live Automation, Run, and Connection summaries, and Runs provides a live keyset-paginated execution index; the dedicated Connections index remains planned work.
 - Manual Runs and event Trigger subscriptions are supported. State Trigger transition detection, filtering, debounce, and throttle remain planned work.
 - Connection desired state, Adapter contracts, generation-fenced Runtime recreation, and Credential snapshots are operational; automatic reconnect policy remains planned work.
 - Credential payloads use authenticated encryption with environment-provided keys; key-ring migration and external vault providers remain planned work.

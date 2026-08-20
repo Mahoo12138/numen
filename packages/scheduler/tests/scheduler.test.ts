@@ -101,7 +101,7 @@ const linearSource: AutomationSource = {
 }
 
 describe('SchedulerService', () => {
-  it('lists recent Runs with a bounded deterministic limit', async () => {
+  it('pages recent Run summaries with deterministic keyset cursors and status counts', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'numen-scheduler-'))
     directories.push(directory)
     const root = await createContext(join(directory, 'numen.db'))
@@ -114,8 +114,18 @@ describe('SchedulerService', () => {
     root.database.db.prepare('UPDATE runs SET created_at = ? WHERE id = ?').run('2026-01-01T00:00:03.000Z', third.id)
 
     expect(root.scheduler.listRuns(2).map(run => run.id)).toEqual([third.id, second.id])
+    const firstPage = root.scheduler.listRunSummariesPage(2)
+    expect(firstPage.items.map(run => ({ id: run.id, executions: run.executionCount, attempts: run.attemptCount })))
+      .toEqual([
+        { id: third.id, executions: 0, attempts: 0 },
+        { id: second.id, executions: 0, attempts: 0 },
+      ])
+    expect(firstPage.nextCursor).toEqual({ createdAt: '2026-01-01T00:00:02.000Z', id: second.id })
+    expect(root.scheduler.listRunSummariesPage(2, firstPage.nextCursor).items.map(run => run.id)).toEqual([first.id])
+    expect(root.scheduler.getRunStatusCounts()).toMatchObject({ QUEUED: 3, RUNNING: 0, COMPLETED: 0 })
     expect(() => root.scheduler.listRuns(0)).toThrow('between 1 and 100')
     expect(() => root.scheduler.listRuns(101)).toThrow('between 1 and 100')
+    expect(() => root.scheduler.listRunSummariesPage(51)).toThrow('between 1 and 50')
     await root.fiber.dispose()
   })
 

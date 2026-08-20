@@ -1,11 +1,16 @@
 import type { FrontendPage } from '@numen/webui/extensions'
 import type { Context } from 'cordis'
 import { Activity, Boxes, Cable, Home, Network, Play, Settings } from 'lucide-react'
+import { useMemo, useState } from 'react'
 import { AutomationEditor } from './AutomationEditor.js'
 import {
   workbenchHomeOverviewQueryRef,
+  workbenchRunsIndexQueryRef,
   type WorkbenchHomeOverview,
   type WorkbenchHomeRun,
+  type WorkbenchRunsCursor,
+  type WorkbenchRunsIndex,
+  type WorkbenchRunsQueryInput,
 } from './contracts.js'
 import { coreWorkbenchRoutes, type CoreWorkbenchActivityId } from './routes.js'
 import type { WorkbenchPageComponent, WorkbenchPageProps } from './types.js'
@@ -44,13 +49,13 @@ function HomeOverview({ state, onReload }: {
   onReload(): void
 }) {
   if (state.status === 'DISABLED') {
-    return <HomeState title="Runtime preview" message="Open Workbench from a running Numen Runtime to load current data." />
+    return <QueryStatePanel title="Runtime preview" message="Open Workbench from a running Numen Runtime to load current data." />
   }
   if (state.status === 'LOADING') {
-    return <HomeState busy title="Loading overview" message="Reading current Automation, Run, and Connection state…" />
+    return <QueryStatePanel busy title="Loading overview" message="Reading current Automation, Run, and Connection state…" />
   }
   if (state.status === 'ERROR') {
-    return <HomeState action="Try again" message={state.message} onAction={onReload} title="Overview unavailable" tone="error" />
+    return <QueryStatePanel action="Try again" message={state.message} onAction={onReload} title="Overview unavailable" tone="error" />
   }
   const { data } = state
   return (
@@ -104,7 +109,7 @@ function HomeMetric({ label, value, detail, tone = 'default' }: {
   return <div className="home-metric" data-tone={tone}><span>{label}</span><strong>{value}</strong><small>{detail}</small></div>
 }
 
-function HomeState({ title, message, busy = false, tone = 'default', action, onAction }: {
+function QueryStatePanel({ title, message, busy = false, tone = 'default', action, onAction }: {
   title: string
   message: string
   busy?: boolean
@@ -125,8 +130,118 @@ function AutomationsPage(props: WorkbenchPageProps) {
   return <AutomationEditor {...props} />
 }
 
-function RunsPage() {
-  return <CoreIndexPage icon={Play} title="Runs" description="Inspect durable automation executions and their outcomes." />
+interface RunsPosition {
+  cursor?: WorkbenchRunsCursor
+  history: Array<WorkbenchRunsCursor | null>
+}
+
+function RunsPage({ consoleClient }: WorkbenchPageProps) {
+  const [position, setPosition] = useState<RunsPosition>({ history: [] })
+  const input = useMemo<WorkbenchRunsQueryInput>(() => ({
+    limit: 20,
+    ...(position.cursor ? { cursor: position.cursor } : {}),
+  }), [position.cursor])
+  const [index, reload] = useConsoleQuery<WorkbenchRunsQueryInput, WorkbenchRunsIndex>(
+    consoleClient,
+    workbenchRunsIndexQueryRef,
+    input,
+  )
+  const next = index.status === 'READY' ? index.data.nextCursor : undefined
+  const goNext = () => {
+    if (!next) return
+    setPosition(current => ({
+      cursor: next,
+      history: [...current.history, current.cursor ?? null],
+    }))
+  }
+  const goPrevious = () => {
+    setPosition(current => {
+      const previous = current.history.at(-1)
+      return {
+        ...(previous ? { cursor: previous } : {}),
+        history: current.history.slice(0, -1),
+      }
+    })
+  }
+  return (
+    <main className="main-workbench core-page">
+      <header className="core-page-header"><Play size={22} /><div><h1>Runs</h1><p>Inspect durable automation executions and their outcomes.</p></div></header>
+      <RunsIndex
+        onNext={goNext}
+        onPrevious={goPrevious}
+        onReload={reload}
+        state={index}
+        canGoPrevious={position.history.length > 0}
+      />
+    </main>
+  )
+}
+
+function RunsIndex({ state, canGoPrevious, onNext, onPrevious, onReload }: {
+  state: ConsoleQueryState<WorkbenchRunsIndex>
+  canGoPrevious: boolean
+  onNext(): void
+  onPrevious(): void
+  onReload(): void
+}) {
+  if (state.status === 'DISABLED') {
+    return <QueryStatePanel title="Runtime preview" message="Open Workbench from a running Numen Runtime to inspect durable Runs." />
+  }
+  if (state.status === 'LOADING') {
+    return <QueryStatePanel busy title="Loading Runs" message="Reading the latest durable execution state…" />
+  }
+  if (state.status === 'ERROR') {
+    return <QueryStatePanel action="Try again" message={state.message} onAction={onReload} title="Runs unavailable" tone="error" />
+  }
+  const { summary, items, nextCursor } = state.data
+  return (
+    <div className="runs-index">
+      <section aria-label="Run summary" className="home-metrics runs-metrics">
+        <HomeMetric label="Total" value={summary.total} detail={`${summary.completed} completed`} />
+        <HomeMetric label="Active" value={summary.active} detail={`${summary.queued} queued`} />
+        <HomeMetric label="Failed" value={summary.failed} detail={`${summary.cancelled} cancelled`} tone={summary.failed ? 'warning' : 'default'} />
+      </section>
+      <section className="core-page-section runs-section">
+        <div className="runs-section-heading"><h2>Durable Runs</h2><span>Newest first · up to 20 per page</span></div>
+        {items.length ? (
+          <div className="runs-table-wrap">
+            <table className="runs-table">
+              <thead><tr><th>Automation</th><th>Status</th><th>Started</th><th>Duration</th><th>Work</th></tr></thead>
+              <tbody>
+                {items.map(run => (
+                  <tr key={run.id}>
+                    <td><strong>{run.automationName}</strong><small>{run.id}</small></td>
+                    <td><em data-status={run.status}>{statusLabel(run.status)}</em></td>
+                    <td>{formatTime(run.startedAt ?? run.createdAt)}</td>
+                    <td>{formatRunDuration(run)}</td>
+                    <td>{formatCount(run.executionCount, 'execution')} · {formatCount(run.attemptCount, 'attempt')}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : <p className="home-empty">No runs have been accepted yet.</p>}
+        <nav aria-label="Run pages" className="runs-pagination">
+          <button disabled={!canGoPrevious} onClick={onPrevious} type="button">Previous</button>
+          <button disabled={!nextCursor} onClick={onNext} type="button">Next</button>
+        </nav>
+      </section>
+    </div>
+  )
+}
+
+function formatRunDuration(run: WorkbenchRunsIndex['items'][number]): string {
+  if (!run.startedAt) return 'Not started'
+  if (!run.finishedAt) return 'In progress'
+  const duration = new Date(run.finishedAt).getTime() - new Date(run.startedAt).getTime()
+  if (!Number.isFinite(duration) || duration < 0) return '—'
+  if (duration < 1000) return `${duration} ms`
+  if (duration < 60_000) return `${(duration / 1000).toFixed(1)} s`
+  return `${Math.floor(duration / 60_000)}m ${Math.floor((duration % 60_000) / 1000)}s`
+}
+
+function formatCount(count: number, singular: string): string {
+  return `${count} ${singular}${count === 1 ? '' : 's'}`
 }
 
 function ConnectionsPage() {

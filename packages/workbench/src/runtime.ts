@@ -1,9 +1,11 @@
 import type { ConsoleFrontendEntry } from '@numen/console'
 import { Service, type Context } from 'cordis'
 import { workbenchHomeOverviewQuery } from './home-provider.js'
+import { workbenchRunsIndexQuery } from './runs-provider.js'
 import { workbenchServerPlugin, type WorkbenchServerConfig } from './server.js'
 
 export { workbenchHomeOverviewQuery, workbenchHomeProviderPlugin } from './home-provider.js'
+export { workbenchRunsIndexQuery, workbenchRunsProviderPlugin } from './runs-provider.js'
 
 export const coreWorkbenchEntryId = 'numen:workbench-core'
 
@@ -24,6 +26,7 @@ export class WorkbenchRuntimeService extends Service {
     super(ctx, 'workbench')
     workbenchServerPlugin(ctx, config)
     ctx.console.define(ctx, workbenchHomeOverviewQuery)
+    ctx.console.define(ctx, workbenchRunsIndexQuery)
     const entry: ConsoleFrontendEntry = {
       id: coreWorkbenchEntryId,
       prod: config.entrySource ?? new URL('./app/core-entry.js', import.meta.url).href,

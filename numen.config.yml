@@ -21,6 +21,7 @@ plugins:
     port: 5140
   workbench: {}
   workbenchHome: {}
+  workbenchRuns: {}
   consoleSession: {}
   consoleAssets:
     mode: prod

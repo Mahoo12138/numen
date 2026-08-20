@@ -38,6 +38,23 @@ export interface SchedulerHealth {
   blockedExecutions: number
 }
 
+export interface RunListCursor {
+  createdAt: string
+  id: string
+}
+
+export interface RunSummary extends Run {
+  executionCount: number
+  attemptCount: number
+}
+
+export interface RunSummaryPage {
+  items: RunSummary[]
+  nextCursor?: RunListCursor
+}
+
+export type RunStatusCounts = Record<Run['status'], number>
+
 interface RunRow {
   id: string
   automation_id: string
@@ -50,6 +67,11 @@ interface RunRow {
   created_at: string
   started_at: string | null
   finished_at: string | null
+}
+
+interface RunSummaryRow extends RunRow {
+  execution_count: number
+  attempt_count: number
 }
 
 interface ExecutionRow {
@@ -375,6 +397,53 @@ export class SchedulerService extends Service {
     return (this.ctx.database.db.prepare(`
       SELECT * FROM runs ORDER BY created_at DESC, id DESC LIMIT ?
     `).all(limit) as RunRow[]).map(mapRun)
+  }
+
+  listRunSummariesPage(limit = 20, cursor?: RunListCursor): RunSummaryPage {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50) {
+      throw new TypeError('run summary page limit must be an integer between 1 and 50')
+    }
+    if (cursor && (!cursor.createdAt || !cursor.id)) throw new TypeError('run summary cursor is invalid')
+    const rows = this.ctx.database.db.prepare(`
+      SELECT runs.*, COUNT(DISTINCT executions.id) AS execution_count,
+        COUNT(attempts.id) AS attempt_count
+      FROM runs
+      LEFT JOIN executions ON executions.run_id = runs.id
+      LEFT JOIN attempts ON attempts.execution_id = executions.id
+      ${cursor ? 'WHERE runs.created_at < ? OR (runs.created_at = ? AND runs.id < ?)' : ''}
+      GROUP BY runs.id
+      ORDER BY runs.created_at DESC, runs.id DESC
+      LIMIT ?
+    `).all(...(cursor
+      ? [cursor.createdAt, cursor.createdAt, cursor.id, limit + 1]
+      : [limit + 1])) as RunSummaryRow[]
+    const hasMore = rows.length > limit
+    const items = rows.slice(0, limit).map(row => ({
+      ...mapRun(row),
+      executionCount: row.execution_count,
+      attemptCount: row.attempt_count,
+    }))
+    const last = items.at(-1)
+    return {
+      items,
+      ...(hasMore && last ? { nextCursor: { createdAt: last.createdAt, id: last.id } } : {}),
+    }
+  }
+
+  getRunStatusCounts(): RunStatusCounts {
+    const counts: RunStatusCounts = {
+      QUEUED: 0,
+      RUNNING: 0,
+      COMPLETED: 0,
+      FAILED: 0,
+      CANCELLING: 0,
+      CANCELLED: 0,
+    }
+    const rows = this.ctx.database.db.prepare(`
+      SELECT status, COUNT(*) AS count FROM runs GROUP BY status
+    `).all() as Array<{ status: Run['status']; count: number }>
+    for (const row of rows) counts[row.status] = row.count
+    return counts
   }
 
   listExecutions(runId: string): Execution[] {

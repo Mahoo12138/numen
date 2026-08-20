@@ -42,6 +42,7 @@ describe('Numen runtime', () => {
         server: { host: '127.0.0.1', port: 0 },
         workbench: { root: workbenchRoot, entrySource: workbenchEntry },
         workbenchHome: {},
+        workbenchRuns: {},
         consoleSession: {},
         consoleAssets: { mode: 'prod' },
         consoleHttp: {},
@@ -56,6 +57,10 @@ describe('Numen runtime', () => {
     expect(application.context.console.list()).toEqual([
       expect.objectContaining({
         definition: expect.objectContaining({ id: 'numen:home-overview', version: 1, kind: 'query' }),
+        providerAvailable: true,
+      }),
+      expect.objectContaining({
+        definition: expect.objectContaining({ id: 'numen:runs-index', version: 1, kind: 'query' }),
         providerAvailable: true,
       }),
     ])
@@ -174,6 +179,91 @@ describe('Numen runtime', () => {
         connections: { ready: true, total: 0, enabled: 0, runtimeReady: 0, unavailable: 0, errors: 0 },
       },
     })
+    const runsIndex = await fetch(`${baseUrl}/api/console/call`, {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer runtime-console-token',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ kind: 'query', procedure: 'numen:runs-index@1', input: { limit: 20 } }),
+    })
+    expect(runsIndex.status).toBe(200)
+    expect(await runsIndex.json()).toMatchObject({
+      result: {
+        summary: { total: 1, queued: 0, active: 0, completed: 1, failed: 0, cancelled: 0 },
+        items: [{
+          id: run.id,
+          automationId: created.automation.id,
+          automationName: 'Runtime smoke test',
+          status: 'COMPLETED',
+          executionCount: 1,
+          attemptCount: 0,
+        }],
+      },
+    })
+    const secondRun = application.context.scheduler.startManual(created.automation.id)
+    await application.context.scheduler.dispatchUntilIdle()
+    const firstRunPage = await fetch(`${baseUrl}/api/console/call`, {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer runtime-console-token',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ kind: 'query', procedure: 'numen:runs-index@1', input: { limit: 1 } }),
+    })
+    expect(firstRunPage.status).toBe(200)
+    const firstRunPageBody = await firstRunPage.json() as {
+      result: { summary: { total: number }; items: Array<{ id: string }>; nextCursor?: string }
+    }
+    expect(firstRunPageBody.result.summary.total).toBe(2)
+    expect(firstRunPageBody.result.items).toHaveLength(1)
+    expect(firstRunPageBody.result.nextCursor).toEqual(expect.any(String))
+    const secondRunPage = await fetch(`${baseUrl}/api/console/call`, {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer runtime-console-token',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        kind: 'query',
+        procedure: 'numen:runs-index@1',
+        input: { limit: 1, cursor: firstRunPageBody.result.nextCursor },
+      }),
+    })
+    expect(secondRunPage.status).toBe(200)
+    const secondRunPageBody = await secondRunPage.json() as {
+      result: { items: Array<{ id: string }>; nextCursor?: string }
+    }
+    expect(secondRunPageBody.result.items).toHaveLength(1)
+    expect([
+      firstRunPageBody.result.items[0]!.id,
+      secondRunPageBody.result.items[0]!.id,
+    ].sort()).toEqual([run.id, secondRun.id].sort())
+    expect(secondRunPageBody.result.nextCursor).toBeUndefined()
+    const invalidRunsPage = await fetch(`${baseUrl}/api/console/call`, {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer runtime-console-token',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ kind: 'query', procedure: 'numen:runs-index@1', input: { limit: 51 } }),
+    })
+    expect(invalidRunsPage.status).toBe(422)
+    expect(await invalidRunsPage.json()).toMatchObject({ error: { code: 'PROCEDURE_VALIDATION_FAILED' } })
+    const invalidRunsCursor = await fetch(`${baseUrl}/api/console/call`, {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer runtime-console-token',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        kind: 'query',
+        procedure: 'numen:runs-index@1',
+        input: { limit: 20, cursor: 'not-a-valid-cursor' },
+      }),
+    })
+    expect(invalidRunsCursor.status).toBe(422)
+    expect(await invalidRunsCursor.json()).toMatchObject({ error: { code: 'PROCEDURE_VALIDATION_FAILED' } })
 
     const health = await fetch(`${baseUrl}/api/health`)
     expect(health.status).toBe(200)
