@@ -16,6 +16,7 @@
     "@cordisjs/plugin-logger-console": "^1.0.0",
     "@cordisjs/plugin-server": "^1.7.0",
     "@numen/automation": "workspace:*",
+    "@numen/console": "workspace:*",
     "@numen/config": "workspace:*",
     "@numen/connections": "workspace:*",
     "@numen/credentials": "workspace:*",

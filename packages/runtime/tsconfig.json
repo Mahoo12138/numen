@@ -8,6 +8,7 @@
   "include": ["src/**/*.ts"],
   "references": [
     { "path": "../config" },
+    { "path": "../console" },
     { "path": "../core" },
     { "path": "../database" },
     { "path": "../connections" },

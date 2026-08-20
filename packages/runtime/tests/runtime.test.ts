@@ -30,6 +30,7 @@ describe('Numen runtime', () => {
         automations: {},
         scheduler: { autoDispatch: false },
         triggers: {},
+        console: {},
         server: { host: '127.0.0.1', port: 0 },
         health: {},
         readiness: {},
@@ -38,6 +39,7 @@ describe('Numen runtime', () => {
 
     const application = await startRuntime({ configPath })
     applications.push(application)
+    expect(application.context.console.list()).toEqual([])
     const baseUrl = application.serverUrl!
     const created = application.context.automations.create({ name: 'Runtime smoke test' })
     const revision = application.context.automations.publishDraft(created.automation.id, 1)

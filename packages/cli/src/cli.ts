@@ -1,5 +1,5 @@
 import { createRuntimeEntries, loadConfig } from '@numen/config'
-import { startRuntime } from '@numen/runtime'
+import { runtimeBuiltinNames, startRuntime } from '@numen/runtime'
 import { access } from 'node:fs/promises'
 import { constants } from 'node:fs'
 import { parseArgs } from 'node:util'
@@ -55,7 +55,7 @@ export async function runCli(argv = process.argv.slice(2), io = defaultIo): Prom
   const command = positionals[0]
   if (command === 'config' && positionals[1] === 'validate') {
     const loaded = await loadConfig(values.config)
-    createRuntimeEntries(loaded.config, new Set(['database', 'capabilities', 'connections', 'credentials', 'resources', 'automations', 'scheduler', 'triggers', 'server', 'health', 'readiness']))
+    createRuntimeEntries(loaded.config, runtimeBuiltinNames)
     io.out(`valid: ${loaded.filename}`)
     return 0
   }
@@ -64,7 +64,7 @@ export async function runCli(argv = process.argv.slice(2), io = defaultIo): Prom
     const loaded = await loadConfig(values.config)
     const entries = createRuntimeEntries(
       loaded.config,
-      new Set(['database', 'capabilities', 'connections', 'credentials', 'resources', 'automations', 'scheduler', 'triggers', 'server', 'health', 'readiness']),
+      runtimeBuiltinNames,
       values.safe,
     )
     let writable = true

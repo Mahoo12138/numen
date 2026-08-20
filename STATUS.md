@@ -48,6 +48,7 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Scope-lineage step binding isolation across concurrent and nested structured scopes
 - [x] Typed, versioned Console Query/Action/Subscription contracts with Schemastery validation
 - [x] Console Procedure/Provider Effect lifecycle and abort-safe Subscription cleanup
+- [x] Default Runtime/Loader integration for the Console procedure service
 
 ## Milestone 3 — Completed
 
@@ -79,7 +80,7 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 ```text
 Typecheck: passing
 Build: passing
-Tests: 13 files, 59 tests passing
+Tests: 14 files, 60 tests passing
 CLI config validate: passing
 CLI doctor: passing
 SQLite schema migration: v10

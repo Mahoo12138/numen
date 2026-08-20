@@ -2,6 +2,7 @@ import Loader, { type EntryOptions } from '@cordisjs/plugin-loader'
 import LoggerConsole from '@cordisjs/plugin-logger-console'
 import Server from '@cordisjs/plugin-server'
 import { AutomationService } from '@numen/automation'
+import { ConsoleService } from '@numen/console'
 import { createRuntimeEntries, loadConfig, type LoadedConfig, type RuntimeEntry } from '@numen/config'
 import { ConnectionService } from '@numen/connections'
 import { CredentialService } from '@numen/credentials'
@@ -38,10 +39,13 @@ const builtins = {
   automations: AutomationService,
   scheduler: SchedulerService,
   triggers: TriggerService,
+  console: ConsoleService,
   server: Server,
   health: healthPlugin,
   readiness: readinessPlugin,
 } as const
+
+export const runtimeBuiltinNames: ReadonlySet<string> = new Set(Object.keys(builtins))
 
 function toCordisEntry(entry: RuntimeEntry): EntryOptions {
   return {
@@ -55,7 +59,7 @@ function toCordisEntry(entry: RuntimeEntry): EntryOptions {
 export async function startRuntime(options: StartRuntimeOptions = {}): Promise<NumenApplication> {
   const config = await loadConfig(options.configPath)
   const safeMode = options.safeMode ?? false
-  const entries = createRuntimeEntries(config.config, new Set(Object.keys(builtins)), safeMode)
+  const entries = createRuntimeEntries(config.config, runtimeBuiltinNames, safeMode)
   const context = new Context()
   context.baseUrl = pathToFileURL(config.baseDir + sep).href
 
