@@ -75,6 +75,10 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Generation-scoped frontend staging with complete snapshot validation
 - [x] Atomic frontend snapshot activation, stale fencing, and failed-generation rollback
 - [x] Entry snapshot reconciliation before WebSocket subscription restoration
+- [x] Default React Workbench package with Activity Rail, Sidebar, Main, Inspector, Panel, and Status regions
+- [x] Automation detail shell with interactive tabs, step selection, grouped Inspector, and bottom panel
+- [x] Responsive desktop/tablet/mobile Workbench profiles with Inspector drawer behavior
+- [x] Browser-verified Workbench visual baseline at 1440×960 and 390×844
 
 ## Milestone 3 — Completed
 
@@ -102,20 +106,21 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Backend Console Entry registry and atomic generation staging
 - [x] Authenticated Console Entry manifest and asset delivery
 - [x] Browser Entry loader with generation-scoped activation
-- [ ] First Workbench shell and core extension lifecycle
+- [x] First Workbench shell and responsive interaction lifecycle
+- [ ] Stable Route service and core Page extension lifecycle
 
 ## Next
 
-1. First Workbench shell with core Activity Rail, Sidebar, Main, Inspector, and status regions
-2. Route service with stable Route IDs and Page lifecycle reconciliation
-3. Core Home / Automations / Runs / Connections / Plugins / System Page entries
+1. Route service with stable Route IDs and Page lifecycle reconciliation
+2. Core Home / Automations / Runs / Connections / Plugins / System Page entries
+3. Authenticated Workbench bootstrap document and bundled core Entry delivery
 
 ## Verification Baseline
 
 ```text
 Typecheck: passing
 Build: passing
-Tests: 25 files, 98 tests passing
+Tests: 26 files, 100 tests passing
 CLI config validate: passing
 CLI doctor: passing
 SQLite schema migration: v10
@@ -136,7 +141,8 @@ pnpm dev
 - Drafts may remain invalid; authoritative validation happens during Publish.
 - The current Scheduler executes the Core IR subset emitted by the compiler, including retry, timeout, cancellation, recovery, and structured concurrency.
 - Parallel, first-success Race, and bounded ForEach use durable Execution scopes with interruptible concurrent dispatch; Try/Finally control flow remains planned work.
-- Typed Console transports, browser sessions, Browser Cordis clients, frontend extension registries, atomic Entry generations, authenticated revision-fenced asset delivery, and Browser Entry reconciliation/rollback are operational. Generated bootstrap tokens and sessions rotate on restart; trusted launcher delivery and the Workbench UI remain planned work.
+- Typed Console transports, browser sessions, Browser Cordis clients, frontend extension registries, atomic Entry generations, authenticated revision-fenced asset delivery, and Browser Entry reconciliation/rollback are operational. Generated bootstrap tokens and sessions rotate on restart; trusted launcher delivery and Workbench runtime integration remain planned work.
+- The first responsive Workbench shell is operational as a standalone Vite surface. Stable Route/Page reconciliation, server-delivered browser bootstrap, and live Console data binding remain planned work.
 - Manual Runs and event Trigger subscriptions are supported. State Trigger transition detection, filtering, debounce, and throttle remain planned work.
 - Connection desired state, Adapter contracts, generation-fenced Runtime recreation, and Credential snapshots are operational; automatic reconnect policy remains planned work.
 - Credential payloads use authenticated encryption with environment-provided keys; key-ring migration and external vault providers remain planned work.

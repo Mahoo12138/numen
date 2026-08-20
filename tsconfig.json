@@ -12,6 +12,7 @@
     { "path": "packages/scheduler" },
     { "path": "packages/triggers" },
     { "path": "packages/webui" },
+    { "path": "packages/workbench" },
     { "path": "packages/runtime" },
     { "path": "packages/cli" }
   ]
