@@ -399,6 +399,41 @@ export function compileAutomation(source: AutomationSource, capabilities: Capabi
         }
         return control.id
       }
+      case 'foreach': {
+        validateExpression(control.items, control.id, 'items')
+        const concurrency = control.concurrency ?? 1
+        if (!Number.isSafeInteger(concurrency) || concurrency < 1) {
+          report({
+            severity: 'error',
+            code: 'FOREACH_CONCURRENCY_INVALID',
+            message: 'ForEach concurrency must be a positive integer.',
+            source: { nodeId: control.id, fieldPath: 'concurrency' },
+          })
+        }
+        if (!control.body || control.body.type !== 'block') {
+          report({
+            severity: 'error',
+            code: 'FOREACH_BODY_INVALID',
+            message: 'ForEach body must be a block.',
+            source: { nodeId: control.id, fieldPath: 'body' },
+          })
+          return next
+        }
+        const joinId = `__${control.id}.join`
+        const terminalId = `__${control.id}.iteration.complete`
+        instructions[joinId] = { op: 'join', id: joinId, mode: 'iterate', next }
+        instructions[terminalId] = { op: 'scope_complete', id: terminalId }
+        const body = compileControl(control.body, terminalId)
+        instructions[control.id] = {
+          op: 'iterate',
+          id: control.id,
+          items: control.items,
+          body,
+          concurrency,
+          join: joinId,
+        }
+        return control.id
+      }
       default:
         report({ severity: 'error', code: 'UNKNOWN_CONTROL', message: `Unknown control type: ${(control as { type?: string }).type ?? 'missing'}`, source: { nodeId: controlId } })
         return next

@@ -59,7 +59,22 @@ export interface RaceSource {
   branches: BlockSource[]
 }
 
-export type ControlSource = CapabilitySource | BlockSource | IfSource | WaitSource | ParallelSource | RaceSource
+export interface ForEachSource {
+  type: 'foreach'
+  id: string
+  items: ValueExpr
+  body: BlockSource
+  concurrency?: number
+}
+
+export type ControlSource =
+  | CapabilitySource
+  | BlockSource
+  | IfSource
+  | WaitSource
+  | ParallelSource
+  | RaceSource
+  | ForEachSource
 
 export interface TriggerSource {
   id: string
@@ -103,8 +118,9 @@ export type CoreInstruction =
     next?: string
   }
   | { op: 'fork'; id: string; mode: 'all' | 'first_success'; branches: string[]; join: string }
+  | { op: 'iterate'; id: string; items: ValueExpr; body: string; concurrency: number; join: string }
   | { op: 'scope_complete'; id: string }
-  | { op: 'join'; id: string; mode: 'all' | 'first_success'; next?: string }
+  | { op: 'join'; id: string; mode: 'all' | 'first_success' | 'iterate'; next?: string }
   | { op: 'complete'; id: string; output?: ValueExpr }
   | { op: 'fail'; id: string; error: ValueExpr }
 

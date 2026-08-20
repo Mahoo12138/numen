@@ -201,4 +201,45 @@ describe('automation compiler', () => {
       next: '__complete',
     })
   })
+
+  it('lowers ForEach into a windowed Iterate body and Join', () => {
+    const forEach: AutomationSource = {
+      triggers: [],
+      flow: {
+        type: 'foreach',
+        id: 'each-message',
+        items: { type: 'ref', path: 'input.messages' },
+        concurrency: 3,
+        body: {
+          type: 'block',
+          id: 'each-body',
+          steps: [{
+            type: 'capability',
+            id: 'send-each',
+            capability: { id: 'test:send', version: 1 },
+            input: { message: { type: 'ref', path: 'loop.item' } },
+          }],
+        },
+      },
+    }
+    const result = compileAutomation(forEach, resolver)
+    expect(result.plan.entry).toBe('each-message')
+    expect(result.plan.instructions['each-message']).toEqual({
+      op: 'iterate',
+      id: 'each-message',
+      items: { type: 'ref', path: 'input.messages' },
+      body: 'send-each',
+      concurrency: 3,
+      join: '__each-message.join',
+    })
+    expect(result.plan.instructions['send-each']).toMatchObject({
+      next: '__each-message.iteration.complete',
+    })
+    expect(result.plan.instructions['__each-message.join']).toEqual({
+      op: 'join',
+      id: '__each-message.join',
+      mode: 'iterate',
+      next: '__complete',
+    })
+  })
 })
