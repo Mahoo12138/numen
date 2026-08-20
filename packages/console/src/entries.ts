@@ -20,6 +20,14 @@ export interface ConsoleEntryGeneration {
 
 interface ActiveGeneration extends ConsoleEntryGeneration {
   entries: ConsoleFrontendEntry[]
+  baseUrl?: string
+}
+
+export interface ConsoleEntrySource {
+  entry: ConsoleFrontendEntryStatus
+  source: string
+  baseUrl?: string
+  revision: number
 }
 
 declare module 'cordis' {
@@ -46,7 +54,9 @@ function validateEntry(entry: ConsoleFrontendEntry): ConsoleFrontendEntry {
 
 export class ConsoleEntryRegistry extends Service {
   private readonly direct = new Map<string, ConsoleFrontendEntry>()
+  private readonly directBaseUrls = new Map<string, string>()
   private readonly generations = new Map<string, ActiveGeneration>()
+  private revision = 0
 
   constructor(ctx: Context) {
     super(ctx, 'consoleEntries')
@@ -57,10 +67,12 @@ export class ConsoleEntryRegistry extends Service {
     this.assertIdAvailable(entry.id)
     return owner.effect(() => {
       this.direct.set(entry.id, entry)
-      this.ctx.emit('numen/console-entry-change')
+      if (owner.baseUrl) this.directBaseUrls.set(entry.id, owner.baseUrl)
+      this.bumpRevision()
       return () => {
         if (this.direct.get(entry.id) === entry) this.direct.delete(entry.id)
-        this.ctx.emit('numen/console-entry-change')
+        this.directBaseUrls.delete(entry.id)
+        this.bumpRevision()
       }
     }, `consoleEntries.add(${JSON.stringify(entry.id)})`)
   }
@@ -89,14 +101,18 @@ export class ConsoleEntryRegistry extends Service {
       stagedIds.add(entry.id)
       this.assertIdAvailable(entry.id, generation.scopeId)
     }
-    const active: ActiveGeneration = { ...generation, entries }
+    const active: ActiveGeneration = {
+      ...generation,
+      entries,
+      ...(owner.baseUrl ? { baseUrl: owner.baseUrl } : {}),
+    }
     const dispose = owner.effect(() => {
       this.generations.set(generation.scopeId, active)
-      this.ctx.emit('numen/console-entry-change')
+      this.bumpRevision()
       return () => {
         if (this.generations.get(generation.scopeId) === active) {
           this.generations.delete(generation.scopeId)
-          this.ctx.emit('numen/console-entry-change')
+          this.bumpRevision()
         }
       }
     }, `consoleEntries.replace(${JSON.stringify(`${generation.scopeId}@${generation.generation}`)})`)
@@ -128,6 +144,40 @@ export class ConsoleEntryRegistry extends Service {
     return mode === 'dev' ? (entry.dev ?? entry.prod) : (entry.prod ?? entry.dev)
   }
 
+  getRevision(): number {
+    return this.revision
+  }
+
+  resolveSource(entryId: string, mode: 'dev' | 'prod'): ConsoleEntrySource | undefined {
+    const direct = this.direct.get(entryId)
+    if (direct) {
+      const source = mode === 'dev' ? (direct.dev ?? direct.prod) : (direct.prod ?? direct.dev)
+      if (!source) return
+      return {
+        entry: direct,
+        source,
+        ...(this.directBaseUrls.get(entryId) ? { baseUrl: this.directBaseUrls.get(entryId)! } : {}),
+        revision: this.revision,
+      }
+    }
+    for (const generation of this.generations.values()) {
+      const entry = generation.entries.find(item => item.id === entryId)
+      if (!entry) continue
+      const source = mode === 'dev' ? (entry.dev ?? entry.prod) : (entry.prod ?? entry.dev)
+      if (!source) return
+      return {
+        entry: {
+          ...entry,
+          scopeId: generation.scopeId,
+          generation: generation.generation,
+        },
+        source,
+        ...(generation.baseUrl ? { baseUrl: generation.baseUrl } : {}),
+        revision: this.revision,
+      }
+    }
+  }
+
   private assertIdAvailable(entryId: string, replacingScopeId?: string): void {
     if (this.direct.has(entryId)) throw new Error(`console entry already registered: ${entryId}`)
     for (const [scopeId, generation] of this.generations) {
@@ -136,6 +186,11 @@ export class ConsoleEntryRegistry extends Service {
         throw new Error(`console entry already registered: ${entryId}`)
       }
     }
+  }
+
+  private bumpRevision(): void {
+    this.revision += 1
+    this.ctx.emit('numen/console-entry-change')
   }
 }
 

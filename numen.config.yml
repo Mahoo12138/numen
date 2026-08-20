@@ -20,6 +20,8 @@ plugins:
     host: 127.0.0.1
     port: 5140
   consoleSession: {}
+  consoleAssets:
+    mode: prod
   consoleHttp: {}
   consoleWs: {}
   health: {}

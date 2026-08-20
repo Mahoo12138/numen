@@ -36,6 +36,7 @@ describe('Numen runtime', () => {
         consoleAuth: { token: 'runtime-console-token', ownerId: 'runtime-owner' },
         server: { host: '127.0.0.1', port: 0 },
         consoleSession: {},
+        consoleAssets: { mode: 'prod' },
         consoleHttp: {},
         consoleWs: {},
         health: {},
@@ -96,6 +97,11 @@ describe('Numen runtime', () => {
     })
     expect(consoleResponse.status).toBe(200)
     expect(await consoleResponse.json()).toMatchObject({ result: 'runtime-owner' })
+    const entryManifest = await fetch(`${baseUrl}/api/console/entries`, {
+      headers: { authorization: 'Bearer runtime-console-token' },
+    })
+    expect(entryManifest.status).toBe(200)
+    expect(await entryManifest.json()).toMatchObject({ entries: [], unavailable: [] })
     const created = application.context.automations.create({ name: 'Runtime smoke test' })
     const revision = application.context.automations.publishDraft(created.automation.id, 1)
     application.context.automations.activateRevision(created.automation.id, revision.id)

@@ -13,7 +13,8 @@ it('reports the default Console service as a safe-mode builtin', async () => {
       version: 1,
       dataDir: 'data',
       plugins: {
-        console: {}, consoleEntries: {}, consoleAuth: {}, consoleSession: {}, consoleHttp: {}, consoleWs: {},
+        console: {}, consoleEntries: {}, consoleAuth: {}, consoleSession: {},
+        consoleAssets: {}, consoleHttp: {}, consoleWs: {},
       },
     })
     const output: string[] = []
@@ -29,6 +30,7 @@ it('reports the default Console service as a safe-mode builtin', async () => {
         { key: 'consoleEntries', package: 'cordis:consoleEntries', enabled: true, builtin: true },
         { key: 'consoleAuth', package: 'cordis:consoleAuth', enabled: true, builtin: true },
         { key: 'consoleSession', package: 'cordis:consoleSession', enabled: true, builtin: true },
+        { key: 'consoleAssets', package: 'cordis:consoleAssets', enabled: true, builtin: true },
         { key: 'consoleHttp', package: 'cordis:consoleHttp', enabled: true, builtin: true },
         { key: 'consoleWs', package: 'cordis:consoleWs', enabled: true, builtin: true },
       ],
