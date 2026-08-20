@@ -1,4 +1,5 @@
 import { writeConfig } from '@numen/config'
+import z from 'schemastery'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -31,7 +32,9 @@ describe('Numen runtime', () => {
         scheduler: { autoDispatch: false },
         triggers: {},
         console: {},
+        consoleAuth: { token: 'runtime-console-token', ownerId: 'runtime-owner' },
         server: { host: '127.0.0.1', port: 0 },
+        consoleHttp: {},
         health: {},
         readiness: {},
       },
@@ -41,6 +44,34 @@ describe('Numen runtime', () => {
     applications.push(application)
     expect(application.context.console.list()).toEqual([])
     const baseUrl = application.serverUrl!
+    const currentUser = {
+      id: 'runtime:current-user',
+      version: 1,
+      kind: 'query' as const,
+      title: 'Current user',
+      input: z.object({}),
+      output: z.string(),
+    }
+    application.context.console.define(application.context, currentUser)
+    application.context.console.provideQuery(application.context, currentUser, {
+      query: ({ request }) => request.principal.subject.id,
+    })
+    const unauthorizedConsole = await fetch(`${baseUrl}/api/console/call`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ kind: 'query', procedure: 'runtime:current-user@1', input: {} }),
+    })
+    expect(unauthorizedConsole.status).toBe(401)
+    const consoleResponse = await fetch(`${baseUrl}/api/console/call`, {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer runtime-console-token',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ kind: 'query', procedure: 'runtime:current-user@1', input: {} }),
+    })
+    expect(consoleResponse.status).toBe(200)
+    expect(await consoleResponse.json()).toMatchObject({ result: 'runtime-owner' })
     const created = application.context.automations.create({ name: 'Runtime smoke test' })
     const revision = application.context.automations.publishDraft(created.automation.id, 1)
     application.context.automations.activateRevision(created.automation.id, revision.id)

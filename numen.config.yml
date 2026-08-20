@@ -14,8 +14,10 @@ plugins:
   scheduler: {}
   triggers: {}
   console: {}
+  consoleAuth: {}
   server:
     host: 127.0.0.1
     port: 5140
+  consoleHttp: {}
   health: {}
   readiness: {}

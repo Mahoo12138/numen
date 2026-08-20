@@ -12,7 +12,7 @@ it('reports the default Console service as a safe-mode builtin', async () => {
     await writeConfig(configPath, {
       version: 1,
       dataDir: 'data',
-      plugins: { console: {} },
+      plugins: { console: {}, consoleAuth: {}, consoleHttp: {} },
     })
     const output: string[] = []
     const result = await runCli(['doctor', '--safe', '--config', configPath], {
@@ -22,7 +22,11 @@ it('reports the default Console service as a safe-mode builtin', async () => {
 
     expect(result).toBe(0)
     expect(JSON.parse(output[0]!)).toMatchObject({
-      plugins: [{ key: 'console', package: 'cordis:console', enabled: true, builtin: true }],
+      plugins: [
+        { key: 'console', package: 'cordis:console', enabled: true, builtin: true },
+        { key: 'consoleAuth', package: 'cordis:consoleAuth', enabled: true, builtin: true },
+        { key: 'consoleHttp', package: 'cordis:consoleHttp', enabled: true, builtin: true },
+      ],
     })
   } finally {
     await rm(directory, { recursive: true, force: true })

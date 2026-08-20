@@ -2,7 +2,7 @@ import Loader, { type EntryOptions } from '@cordisjs/plugin-loader'
 import LoggerConsole from '@cordisjs/plugin-logger-console'
 import Server from '@cordisjs/plugin-server'
 import { AutomationService } from '@numen/automation'
-import { ConsoleService } from '@numen/console'
+import { ConsoleService, SingleUserConsoleAuthService, consoleHttpPlugin } from '@numen/console'
 import { createRuntimeEntries, loadConfig, type LoadedConfig, type RuntimeEntry } from '@numen/config'
 import { ConnectionService } from '@numen/connections'
 import { CredentialService } from '@numen/credentials'
@@ -40,7 +40,9 @@ const builtins = {
   scheduler: SchedulerService,
   triggers: TriggerService,
   console: ConsoleService,
+  consoleAuth: SingleUserConsoleAuthService,
   server: Server,
+  consoleHttp: consoleHttpPlugin,
   health: healthPlugin,
   readiness: readinessPlugin,
 } as const

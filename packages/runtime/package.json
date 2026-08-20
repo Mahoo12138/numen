@@ -26,5 +26,8 @@
     "@numen/scheduler": "workspace:*",
     "@numen/triggers": "workspace:*",
     "cordis": "^4.0.0-rc.8"
+  },
+  "devDependencies": {
+    "schemastery": "^3.18.0"
   }
 }
