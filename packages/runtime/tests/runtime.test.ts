@@ -32,6 +32,7 @@ describe('Numen runtime', () => {
         scheduler: { autoDispatch: false },
         triggers: {},
         console: {},
+        consoleEntries: {},
         consoleAuth: { token: 'runtime-console-token', ownerId: 'runtime-owner' },
         server: { host: '127.0.0.1', port: 0 },
         consoleSession: {},
@@ -45,6 +46,7 @@ describe('Numen runtime', () => {
     const application = await startRuntime({ configPath })
     applications.push(application)
     expect(application.context.console.list()).toEqual([])
+    expect(application.context.consoleEntries.list()).toEqual([])
     expect(application.entries).toContainEqual(expect.objectContaining({
       key: 'consoleWs', builtin: true, disabled: false,
     }))

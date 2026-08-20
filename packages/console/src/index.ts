@@ -1,4 +1,5 @@
 export * from './auth.js'
+export * from './entries.js'
 export * from './http.js'
 export * from './session.js'
 export * from './service.js'

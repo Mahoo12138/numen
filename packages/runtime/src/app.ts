@@ -4,6 +4,7 @@ import Server from '@cordisjs/plugin-server'
 import { AutomationService } from '@numen/automation'
 import {
   ConsoleService,
+  ConsoleEntryRegistry,
   SingleUserConsoleAuthService,
   consoleHttpPlugin,
   consoleSessionPlugin,
@@ -46,6 +47,7 @@ const builtins = {
   scheduler: SchedulerService,
   triggers: TriggerService,
   console: ConsoleService,
+  consoleEntries: ConsoleEntryRegistry,
   consoleAuth: SingleUserConsoleAuthService,
   server: Server,
   consoleSession: consoleSessionPlugin,

@@ -13,7 +13,7 @@ it('reports the default Console service as a safe-mode builtin', async () => {
       version: 1,
       dataDir: 'data',
       plugins: {
-        console: {}, consoleAuth: {}, consoleSession: {}, consoleHttp: {}, consoleWs: {},
+        console: {}, consoleEntries: {}, consoleAuth: {}, consoleSession: {}, consoleHttp: {}, consoleWs: {},
       },
     })
     const output: string[] = []
@@ -26,6 +26,7 @@ it('reports the default Console service as a safe-mode builtin', async () => {
     expect(JSON.parse(output[0]!)).toMatchObject({
       plugins: [
         { key: 'console', package: 'cordis:console', enabled: true, builtin: true },
+        { key: 'consoleEntries', package: 'cordis:consoleEntries', enabled: true, builtin: true },
         { key: 'consoleAuth', package: 'cordis:consoleAuth', enabled: true, builtin: true },
         { key: 'consoleSession', package: 'cordis:consoleSession', enabled: true, builtin: true },
         { key: 'consoleHttp', package: 'cordis:consoleHttp', enabled: true, builtin: true },
