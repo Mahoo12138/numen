@@ -71,6 +71,21 @@ describe('BrowserExtensionRegistry', () => {
     expect(() => root.webuiExtensions.page(root, {
       id: 'core:second', version: 1, path: '/same', title: 'Second', component: null,
     })).toThrow('path already registered')
+    root.webuiExtensions.page(root, {
+      id: 'core:detail', version: 1, path: '/items/:id', title: 'Detail', component: null,
+    })
+    expect(() => root.webuiExtensions.page(root, {
+      id: 'core:ambiguous', version: 1, path: '/items/:name', title: 'Ambiguous', component: null,
+    })).toThrow('path already registered')
+    expect(() => root.webuiExtensions.page(root, {
+      id: 'core:invalid', version: 1, path: '/items/:bad-name', title: 'Invalid', component: null,
+    })).toThrow('invalid frontend page parameter')
+    expect(() => root.webuiExtensions.page(root, {
+      id: 'core:trailing', version: 1, path: '/items/', title: 'Trailing', component: null,
+    })).toThrow('invalid frontend page path')
+    expect(() => root.webuiExtensions.page(root, {
+      id: 'core:empty-segment', version: 1, path: '/items//edit', title: 'Empty', component: null,
+    })).toThrow('invalid frontend page path')
     expect(() => root.webuiExtensions.contribute(root, {
       id: 'plugin:missing', slot: { ...inspector, version: 2 }, content: null,
     })).toThrow('slot not found')
@@ -161,8 +176,25 @@ describe('BrowserExtensionRegistry', () => {
   })
 
   it('starts and stops a composed Browser Cordis Runtime', async () => {
+    const routerLocation = { href: 'http://numen.local/' }
     const runtime = await startBrowserRuntime({
       entries: { autoLoad: false },
+      router: {
+        environment: {
+          location: routerLocation,
+          history: {
+            state: null,
+            pushState(_data, _unused, url) {
+              if (url !== undefined && url !== null) routerLocation.href = new URL(String(url), routerLocation.href).href
+            },
+            replaceState(_data, _unused, url) {
+              if (url !== undefined && url !== null) routerLocation.href = new URL(String(url), routerLocation.href).href
+            },
+          },
+          addEventListener() {},
+          removeEventListener() {},
+        },
+      },
       console: {
         environment: {
           location: { href: 'http://numen.local/' },

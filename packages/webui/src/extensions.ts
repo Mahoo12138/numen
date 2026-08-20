@@ -50,6 +50,29 @@ function validateRef(ref: FrontendExtensionRef, kind: string): void {
 function validatePage(page: FrontendPage): void {
   validateRef(page, 'frontend page')
   if (!page.path.startsWith('/')) throw new TypeError(`frontend page path must start with /: ${page.path}`)
+  pagePattern(page.path)
+}
+
+function pagePattern(path: string): string {
+  if (
+    path.includes('?')
+    || path.includes('#')
+    || path.includes('//')
+    || (path.length > 1 && path.endsWith('/'))
+  ) {
+    throw new TypeError(`invalid frontend page path: ${path}`)
+  }
+  const parameters = new Set<string>()
+  return path.split('/').map((segment) => {
+    if (segment === '.' || segment === '..') throw new TypeError(`invalid frontend page path: ${path}`)
+    if (!segment.startsWith(':')) return segment
+    const name = segment.slice(1)
+    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name) || parameters.has(name)) {
+      throw new TypeError(`invalid frontend page parameter: ${segment}`)
+    }
+    parameters.add(name)
+    return ':'
+  }).join('/')
 }
 
 function validateContribution(contribution: FrontendSlotContribution): void {
@@ -142,14 +165,15 @@ export class FrontendExtensionStage {
     validatePage(page)
     const key = extensionKey(page)
     if (this.state.pages.has(key)) throw new Error(`frontend page already registered: ${key}`)
-    const existingPath = this.state.pagePaths.get(page.path)
+    const pattern = pagePattern(page.path)
+    const existingPath = this.state.pagePaths.get(pattern)
     if (existingPath) throw new Error(`frontend page path already registered: ${page.path} (${existingPath})`)
     return owner.effect(() => {
       this.state.pages.set(key, page as FrontendPage)
-      this.state.pagePaths.set(page.path, key)
+      this.state.pagePaths.set(pattern, key)
       return () => {
         if (this.state.pages.get(key) === page) this.state.pages.delete(key)
-        if (this.state.pagePaths.get(page.path) === key) this.state.pagePaths.delete(page.path)
+        if (this.state.pagePaths.get(pattern) === key) this.state.pagePaths.delete(pattern)
       }
     }, `webui.stage.page(${JSON.stringify(key)})`)
   }
@@ -207,15 +231,16 @@ export class BrowserExtensionRegistry extends Service {
     if (this.direct.pages.has(key) || this.active?.state.pages.has(key)) {
       throw new Error(`frontend page already registered: ${key}`)
     }
-    const existingPath = this.direct.pagePaths.get(page.path) ?? this.active?.state.pagePaths.get(page.path)
+    const pattern = pagePattern(page.path)
+    const existingPath = this.direct.pagePaths.get(pattern) ?? this.active?.state.pagePaths.get(pattern)
     if (existingPath) throw new Error(`frontend page path already registered: ${page.path} (${existingPath})`)
     return owner.effect(() => {
       this.direct.pages.set(key, page as FrontendPage)
-      this.direct.pagePaths.set(page.path, key)
+      this.direct.pagePaths.set(pattern, key)
       this.ctx.emit('numen/webui-extension-change', 'page', key)
       return () => {
         this.direct.pages.delete(key)
-        if (this.direct.pagePaths.get(page.path) === key) this.direct.pagePaths.delete(page.path)
+        if (this.direct.pagePaths.get(pattern) === key) this.direct.pagePaths.delete(pattern)
         this.ctx.emit('numen/webui-extension-change', 'page', key)
       }
     }, `webui.page(${JSON.stringify(key)})`)
@@ -270,6 +295,11 @@ export class BrowserExtensionRegistry extends Service {
     ))
   }
 
+  getPage(ref: FrontendExtensionRef): FrontendPage | undefined {
+    const key = extensionKey(ref)
+    return this.direct.pages.get(key) ?? this.active?.state.pages.get(key)
+  }
+
   listSlots(): FrontendSlot[] {
     return [...this.direct.slots.values(), ...(this.active?.state.slots.values() ?? [])]
       .sort((left, right) => extensionKey(left).localeCompare(extensionKey(right)))
@@ -318,7 +348,7 @@ export class BrowserExtensionRegistry extends Service {
   private validateSnapshot(next: ExtensionState): void {
     for (const [key, page] of next.pages) {
       if (this.direct.pages.has(key)) throw new Error(`frontend page already registered: ${key}`)
-      const existingPath = this.direct.pagePaths.get(page.path)
+      const existingPath = this.direct.pagePaths.get(pagePattern(page.path))
       if (existingPath) throw new Error(`frontend page path already registered: ${page.path} (${existingPath})`)
     }
     for (const key of next.slots.keys()) {

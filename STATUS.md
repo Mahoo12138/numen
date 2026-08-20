@@ -79,6 +79,9 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Automation detail shell with interactive tabs, step selection, grouped Inspector, and bottom panel
 - [x] Responsive desktop/tablet/mobile Workbench profiles with Inspector drawer behavior
 - [x] Browser-verified Workbench visual baseline at 1440×960 and 390×844
+- [x] Stable Route ID Browser Router with typed parameters and deterministic query encoding
+- [x] History/popstate reconciliation with Page Effect lifecycle and Entry snapshot replacement
+- [x] Dynamic Page path validation with ambiguous route-shape collision prevention
 
 ## Milestone 3 — Completed
 
@@ -107,12 +110,13 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Authenticated Console Entry manifest and asset delivery
 - [x] Browser Entry loader with generation-scoped activation
 - [x] First Workbench shell and responsive interaction lifecycle
-- [ ] Stable Route service and core Page extension lifecycle
+- [x] Stable Route service and Page extension lifecycle
+- [ ] Core product Page entries and Workbench Router binding
 
 ## Next
 
-1. Route service with stable Route IDs and Page lifecycle reconciliation
-2. Core Home / Automations / Runs / Connections / Plugins / System Page entries
+1. Core Home / Automations / Runs / Connections / Plugins / System Page entries
+2. Workbench navigation bound to Browser Router and live Page registry
 3. Authenticated Workbench bootstrap document and bundled core Entry delivery
 
 ## Verification Baseline
@@ -120,7 +124,7 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 ```text
 Typecheck: passing
 Build: passing
-Tests: 26 files, 100 tests passing
+Tests: 27 files, 105 tests passing
 CLI config validate: passing
 CLI doctor: passing
 SQLite schema migration: v10
@@ -142,7 +146,7 @@ pnpm dev
 - The current Scheduler executes the Core IR subset emitted by the compiler, including retry, timeout, cancellation, recovery, and structured concurrency.
 - Parallel, first-success Race, and bounded ForEach use durable Execution scopes with interruptible concurrent dispatch; Try/Finally control flow remains planned work.
 - Typed Console transports, browser sessions, Browser Cordis clients, frontend extension registries, atomic Entry generations, authenticated revision-fenced asset delivery, and Browser Entry reconciliation/rollback are operational. Generated bootstrap tokens and sessions rotate on restart; trusted launcher delivery and Workbench runtime integration remain planned work.
-- The first responsive Workbench shell is operational as a standalone Vite surface. Stable Route/Page reconciliation, server-delivered browser bootstrap, and live Console data binding remain planned work.
+- The first responsive Workbench shell and stable browser Route/Page reconciliation are operational. Core Page entries, server-delivered browser bootstrap, and live Console data binding remain planned work.
 - Manual Runs and event Trigger subscriptions are supported. State Trigger transition detection, filtering, debounce, and throttle remain planned work.
 - Connection desired state, Adapter contracts, generation-fenced Runtime recreation, and Credential snapshots are operational; automatic reconnect policy remains planned work.
 - Credential payloads use authenticated encryption with environment-provided keys; key-ring migration and external vault providers remain planned work.
