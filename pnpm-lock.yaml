@@ -265,6 +265,12 @@ importers:
 
   packages/workbench:
     dependencies:
+      '@numen/webui':
+        specifier: workspace:*
+        version: link:../webui
+      cordis:
+        specifier: ^4.0.0-rc.8
+        version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
       lucide-react:
         specifier: ^0.468.0
         version: 0.468.0(react@19.2.8)

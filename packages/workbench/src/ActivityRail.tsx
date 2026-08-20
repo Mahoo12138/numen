@@ -1,9 +1,9 @@
-import type { Dispatch, SetStateAction } from 'react'
 import { activities } from './model.js'
+import type { CoreWorkbenchActivityId } from './routes.js'
 
 export interface ActivityRailProps {
-  activeId: string
-  onChange: Dispatch<SetStateAction<string>>
+  activeId: CoreWorkbenchActivityId | undefined
+  onChange(id: CoreWorkbenchActivityId): void
 }
 
 export function ActivityRail({ activeId, onChange }: ActivityRailProps) {

@@ -136,6 +136,29 @@ describe('BrowserRouterService', () => {
     await root.fiber.dispose()
   })
 
+  it('publishes stable external-store snapshots only until unsubscribe', async () => {
+    const root = new Context()
+    await root.plugin(BrowserExtensionRegistry)
+    root.webuiExtensions.page(root, page('core:home', '/'))
+    root.webuiExtensions.page(root, page('core:runs', '/runs'))
+    const environment = new FakeRouterEnvironment('http://numen.local/')
+    await root.plugin(BrowserRouterService, { environment })
+    const listener = vi.fn()
+    const unsubscribe = root.webuiRouter.subscribe(listener)
+    const firstSnapshot = root.webuiRouter.getSnapshot()
+
+    root.webuiRouter.reconcile()
+    expect(root.webuiRouter.getSnapshot()).toBe(firstSnapshot)
+    expect(listener).not.toHaveBeenCalled()
+    root.webuiRouter.navigate({ id: 'core:runs', version: 1 })
+    expect(listener).toHaveBeenCalledTimes(1)
+    expect(root.webuiRouter.getSnapshot()).not.toBe(firstSnapshot)
+    unsubscribe()
+    environment.pop('/')
+    expect(listener).toHaveBeenCalledTimes(1)
+    await root.fiber.dispose()
+  })
+
   it('reconciles the active Page object after an atomic snapshot replacement', async () => {
     const root = new Context()
     await root.plugin(BrowserExtensionRegistry)

@@ -114,6 +114,7 @@ export class BrowserRouterService extends Service {
   static inject = ['webuiExtensions']
 
   private readonly environment: BrowserRouterEnvironment
+  private readonly listeners = new Set<() => void>()
   private state!: BrowserRouteState
 
   constructor(ctx: Context, config: BrowserRouterConfig = {}) {
@@ -131,6 +132,7 @@ export class BrowserRouterService extends Service {
     yield () => {
       disposePageListener()
       this.environment.removeEventListener('popstate', onPopState)
+      this.listeners.clear()
     }
   }
 
@@ -140,6 +142,15 @@ export class BrowserRouterService extends Service {
       parameters: { ...this.state.parameters },
       ...(this.state.page ? { page: this.state.page } : {}),
     }
+  }
+
+  getSnapshot(): BrowserRouteState {
+    return this.state
+  }
+
+  subscribe(listener: () => void): () => void {
+    this.listeners.add(listener)
+    return () => this.listeners.delete(listener)
   }
 
   href(ref: FrontendExtensionRef, target: BrowserRouteTarget = {}): string {
@@ -186,8 +197,11 @@ export class BrowserRouterService extends Service {
       || this.state.search !== next.search
       || this.state.page !== next.page
       || JSON.stringify(this.state.parameters) !== JSON.stringify(next.parameters)
-    this.state = next
-    if (changed || force) this.ctx.emit('numen/webui-route-change', this.getState())
+    if (changed) this.state = next
+    if (changed || force) {
+      this.ctx.emit('numen/webui-route-change', this.getState())
+      for (const listener of [...this.listeners]) listener()
+    }
     return this.getState()
   }
 }

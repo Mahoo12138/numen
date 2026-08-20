@@ -12,11 +12,13 @@ import {
   Send,
   Settings,
 } from 'lucide-react'
+import { coreWorkbenchRoutes, type CoreWorkbenchActivityId } from './routes.js'
 
 export interface ActivityItem {
-  id: string
+  id: CoreWorkbenchActivityId
   label: string
   icon: LucideIcon
+  route: typeof coreWorkbenchRoutes[CoreWorkbenchActivityId]
 }
 
 export interface AutomationItem {
@@ -34,12 +36,12 @@ export interface AutomationStep {
 }
 
 export const activities: ActivityItem[] = [
-  { id: 'home', label: 'Home', icon: Home },
-  { id: 'automations', label: 'Automations', icon: Network },
-  { id: 'runs', label: 'Runs', icon: Play },
-  { id: 'connections', label: 'Connections', icon: Plug },
-  { id: 'plugins', label: 'Plugins', icon: Boxes },
-  { id: 'system', label: 'System', icon: Settings },
+  { id: 'home', label: 'Home', icon: Home, route: coreWorkbenchRoutes.home },
+  { id: 'automations', label: 'Automations', icon: Network, route: coreWorkbenchRoutes.automations },
+  { id: 'runs', label: 'Runs', icon: Play, route: coreWorkbenchRoutes.runs },
+  { id: 'connections', label: 'Connections', icon: Plug, route: coreWorkbenchRoutes.connections },
+  { id: 'plugins', label: 'Plugins', icon: Boxes, route: coreWorkbenchRoutes.plugins },
+  { id: 'system', label: 'System', icon: Settings, route: coreWorkbenchRoutes.system },
 ]
 
 export const automations: AutomationItem[] = [

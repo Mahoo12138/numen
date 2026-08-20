@@ -1,15 +1,44 @@
+import type {
+  FrontendExtensionRef,
+  FrontendPage,
+} from '@numen/webui/extensions'
+import type {
+  BrowserNavigateOptions,
+  BrowserRouteState,
+} from '@numen/webui/router'
 import { CircleHelp, Clock3, Command, Play, Plus, Save, Search, Settings } from 'lucide-react'
-import { useState } from 'react'
+import { useCallback, useState, useSyncExternalStore } from 'react'
 import { ActivityRail } from './ActivityRail.js'
-import { AutomationEditor } from './AutomationEditor.js'
 import { AutomationSidebar } from './AutomationSidebar.js'
 import { Inspector } from './Inspector.js'
+import {
+  corePageForActivity,
+  type WorkbenchPageComponent,
+} from './pages.js'
+import {
+  activityIdForRoute,
+  coreWorkbenchRoutes,
+  type CoreWorkbenchActivityId,
+} from './routes.js'
 import './styles.css'
 
 const panelTabs = ['Problems', 'Preview', 'Logs'] as const
+const standaloneRouteState: BrowserRouteState = {
+  status: 'NOT_FOUND', pathname: '/', search: '', parameters: {},
+}
 
-export function WorkbenchShell() {
-  const [activityId, setActivityId] = useState('automations')
+export interface WorkbenchRouter {
+  getSnapshot(): BrowserRouteState
+  subscribe(listener: () => void): () => void
+  navigate(ref: FrontendExtensionRef, options?: BrowserNavigateOptions): BrowserRouteState
+}
+
+export interface WorkbenchShellProps {
+  router?: WorkbenchRouter
+}
+
+export function WorkbenchShell({ router }: WorkbenchShellProps = {}) {
+  const [standaloneActivityId, setStandaloneActivityId] = useState<CoreWorkbenchActivityId>('automations')
   const [automationId, setAutomationId] = useState('morning-brief')
   const [activeTab, setActiveTab] = useState('Editor')
   const [stepId, setStepId] = useState('notification')
@@ -20,9 +49,34 @@ export function WorkbenchShell() {
       ? globalThis.matchMedia('(min-width: 1280px)').matches
       : true
   ))
+  const subscribe = useCallback((listener: () => void) => (
+    router?.subscribe(listener) ?? (() => {})
+  ), [router])
+  const getSnapshot = useCallback(() => router?.getSnapshot() ?? standaloneRouteState, [router])
+  const routeState = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+  const routedActivityId = activityIdForRoute(routeState.page)
+  const activityId = router ? routedActivityId : standaloneActivityId
+  const isAutomations = activityId === 'automations'
+  const activePage = (router
+    ? routeState.page
+    : corePageForActivity(standaloneActivityId)) as FrontendPage<WorkbenchPageComponent> | undefined
+  const PageComponent = activePage?.component
+  const onActivityChange = useCallback((nextActivityId: CoreWorkbenchActivityId) => {
+    if (router) {
+      router.navigate(coreWorkbenchRoutes[nextActivityId])
+    } else {
+      setStandaloneActivityId(nextActivityId)
+    }
+    if (nextActivityId === 'automations') {
+      setInspectorOpen(
+        typeof globalThis.matchMedia !== 'function'
+        || globalThis.matchMedia('(min-width: 1280px)').matches,
+      )
+    }
+  }, [router])
 
   return (
-    <div className="workbench-shell" data-inspector-open={activityId === 'automations' && inspectorOpen}>
+    <div className="workbench-shell" data-inspector-open={isAutomations && inspectorOpen}>
       <header className="top-bar">
         <div className="brand"><span className="brand-mark">N</span><strong>Numen Workbench</strong></div>
         <label className="command-center">
@@ -39,17 +93,17 @@ export function WorkbenchShell() {
           <button aria-label="Help" className="icon-button" type="button"><CircleHelp size={17} /></button>
         </div>
       </header>
-      <ActivityRail activeId={activityId} onChange={setActivityId} />
-      {activityId === 'automations' ? (
+      <ActivityRail activeId={activityId} onChange={onActivityChange} />
+      {isAutomations ? (
         <AutomationSidebar activeId={automationId} onChange={setAutomationId} />
       ) : (
         <aside className="primary-sidebar simple-sidebar">
-          <div className="sidebar-heading">{activityId.toUpperCase()}</div>
-          <p>Select a {activityId.slice(0, -1) || activityId} to open its workspace.</p>
+          <div className="sidebar-heading">{activePage?.title.toUpperCase() ?? 'NOT FOUND'}</div>
+          <p>{activePage ? `Browse ${activePage.title.toLowerCase()} in the main workspace.` : 'No Page matches the current URL.'}</p>
         </aside>
       )}
-      {activityId === 'automations' ? (
-        <AutomationEditor
+      {PageComponent ? (
+        <PageComponent
           automationId={automationId}
           activeStepId={stepId}
           activeTab={activeTab}
@@ -60,11 +114,11 @@ export function WorkbenchShell() {
       ) : (
         <main className="main-workbench secondary-view activity-placeholder">
           <Command size={24} />
-          <h1>{activityId[0]!.toUpperCase() + activityId.slice(1)}</h1>
-          <p>This activity is ready for its core Page entry.</p>
+          <h1>Page not found</h1>
+          <p>No registered Page matches {routeState.pathname}.</p>
         </main>
       )}
-      <Inspector activeStepId={stepId} open={activityId === 'automations' && inspectorOpen} onClose={() => setInspectorOpen(false)} />
+      <Inspector activeStepId={stepId} open={isAutomations && inspectorOpen} onClose={() => setInspectorOpen(false)} />
       <section className="bottom-panel" data-open={panelOpen} aria-label="Bottom panel">
         <div className="panel-tablist" role="tablist">
           {panelTabs.map(tab => (
