@@ -1,10 +1,10 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import { WorkbenchShell } from '../src/index.js'
+import { coreWorkbenchPageDefinitions, WorkbenchShell } from '../src/index.js'
 
 describe('WorkbenchShell', () => {
   it('renders the documented Workbench regions and primary navigation', () => {
-    const markup = renderToStaticMarkup(<WorkbenchShell />)
+    const markup = renderToStaticMarkup(<WorkbenchShell standalonePages={coreWorkbenchPageDefinitions} />)
 
     expect(markup).toContain('Numen Workbench')
     expect(markup).toContain('aria-label="Command center"')
@@ -19,7 +19,7 @@ describe('WorkbenchShell', () => {
   })
 
   it('renders the selected Automation editor and inspector state', () => {
-    const markup = renderToStaticMarkup(<WorkbenchShell />)
+    const markup = renderToStaticMarkup(<WorkbenchShell standalonePages={coreWorkbenchPageDefinitions} />)
 
     for (const label of ['Morning Brief', 'Inbox Triage', 'Weekly Archive']) {
       expect(markup).toContain(label)

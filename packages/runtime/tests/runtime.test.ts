@@ -1,6 +1,6 @@
 import { writeConfig } from '@numen/config'
 import z from 'schemastery'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -19,6 +19,11 @@ describe('Numen runtime', () => {
     const directory = await mkdtemp(join(tmpdir(), 'numen-runtime-'))
     temporaryDirectories.push(directory)
     const configPath = join(directory, 'numen.config.yml')
+    const workbenchRoot = join(directory, 'workbench')
+    const workbenchEntry = join(workbenchRoot, 'core-entry.js')
+    await mkdir(workbenchRoot)
+    await writeFile(join(workbenchRoot, 'index.html'), '<main id="root">Runtime Workbench</main>')
+    await writeFile(workbenchEntry, 'export default function coreWorkbench() {}\n')
     await writeConfig(configPath, {
       version: 1,
       dataDir: 'data',
@@ -35,6 +40,7 @@ describe('Numen runtime', () => {
         consoleEntries: {},
         consoleAuth: { token: 'runtime-console-token', ownerId: 'runtime-owner' },
         server: { host: '127.0.0.1', port: 0 },
+        workbench: { root: workbenchRoot, entrySource: workbenchEntry },
         consoleSession: {},
         consoleAssets: { mode: 'prod' },
         consoleHttp: {},
@@ -47,9 +53,15 @@ describe('Numen runtime', () => {
     const application = await startRuntime({ configPath })
     applications.push(application)
     expect(application.context.console.list()).toEqual([])
-    expect(application.context.consoleEntries.list()).toEqual([])
+    expect(application.context.consoleEntries.list()).toEqual([{
+      id: 'numen:workbench-core',
+      prod: workbenchEntry,
+    }])
     expect(application.entries).toContainEqual(expect.objectContaining({
       key: 'consoleWs', builtin: true, disabled: false,
+    }))
+    expect(application.entries).toContainEqual(expect.objectContaining({
+      key: 'workbench', builtin: true, disabled: false,
     }))
     const baseUrl = application.serverUrl!
     const currentUser = {
@@ -101,7 +113,25 @@ describe('Numen runtime', () => {
       headers: { authorization: 'Bearer runtime-console-token' },
     })
     expect(entryManifest.status).toBe(200)
-    expect(await entryManifest.json()).toMatchObject({ entries: [], unavailable: [] })
+    const entryDocument = await entryManifest.json() as {
+      entries: Array<{ id: string; url: string }>
+      unavailable: unknown[]
+    }
+    expect(entryDocument).toMatchObject({
+      entries: [{ id: 'numen:workbench-core' }],
+      unavailable: [],
+    })
+    const coreEntryUrl = new URL(entryDocument.entries[0]!.url, baseUrl)
+    expect((await fetch(coreEntryUrl)).status).toBe(401)
+    const coreEntry = await fetch(coreEntryUrl, {
+      headers: { authorization: 'Bearer runtime-console-token' },
+    })
+    expect(coreEntry.status).toBe(200)
+    expect(await coreEntry.text()).toContain('coreWorkbench')
+    expect((await fetch(`${baseUrl}/workbench/core-entry.js`)).status).toBe(404)
+    const workbenchDocument = await fetch(`${baseUrl}/automations`)
+    expect(workbenchDocument.status).toBe(200)
+    expect(await workbenchDocument.text()).toContain('Runtime Workbench')
     const created = application.context.automations.create({ name: 'Runtime smoke test' })
     const revision = application.context.automations.publishDraft(created.automation.id, 1)
     application.context.automations.activateRevision(created.automation.id, revision.id)

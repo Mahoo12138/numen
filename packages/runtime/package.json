@@ -25,6 +25,7 @@
     "@numen/database": "workspace:*",
     "@numen/scheduler": "workspace:*",
     "@numen/triggers": "workspace:*",
+    "@numen/workbench": "workspace:*",
     "cordis": "^4.0.0-rc.8"
   },
   "devDependencies": {

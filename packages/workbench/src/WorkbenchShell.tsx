@@ -12,15 +12,12 @@ import { ActivityRail } from './ActivityRail.js'
 import { AutomationSidebar } from './AutomationSidebar.js'
 import { Inspector } from './Inspector.js'
 import {
-  corePageForActivity,
-  type WorkbenchPageComponent,
-} from './pages.js'
-import {
   activityIdForRoute,
   coreWorkbenchRoutes,
   type CoreWorkbenchActivityId,
 } from './routes.js'
 import './styles.css'
+import type { WorkbenchPageComponent } from './types.js'
 
 const panelTabs = ['Problems', 'Preview', 'Logs'] as const
 const standaloneRouteState: BrowserRouteState = {
@@ -35,9 +32,10 @@ export interface WorkbenchRouter {
 
 export interface WorkbenchShellProps {
   router?: WorkbenchRouter
+  standalonePages?: ReadonlyArray<FrontendPage<WorkbenchPageComponent>>
 }
 
-export function WorkbenchShell({ router }: WorkbenchShellProps = {}) {
+export function WorkbenchShell({ router, standalonePages = [] }: WorkbenchShellProps = {}) {
   const [standaloneActivityId, setStandaloneActivityId] = useState<CoreWorkbenchActivityId>('automations')
   const [automationId, setAutomationId] = useState('morning-brief')
   const [activeTab, setActiveTab] = useState('Editor')
@@ -59,7 +57,8 @@ export function WorkbenchShell({ router }: WorkbenchShellProps = {}) {
   const isAutomations = activityId === 'automations'
   const activePage = (router
     ? routeState.page
-    : corePageForActivity(standaloneActivityId)) as FrontendPage<WorkbenchPageComponent> | undefined
+    : standalonePages.find(page => activityIdForRoute(page) === standaloneActivityId)
+  ) as FrontendPage<WorkbenchPageComponent> | undefined
   const PageComponent = activePage?.component
   const onActivityChange = useCallback((nextActivityId: CoreWorkbenchActivityId) => {
     if (router) {

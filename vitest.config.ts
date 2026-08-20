@@ -12,6 +12,7 @@ export default defineConfig({
       '@numen/automation': fromRoot('./packages/automation/src/index.ts'),
       '@numen/scheduler': fromRoot('./packages/scheduler/src/index.ts'),
       '@numen/runtime': fromRoot('./packages/runtime/src/index.ts'),
+      '@numen/workbench/runtime': fromRoot('./packages/workbench/src/runtime.ts'),
     },
   },
   test: {

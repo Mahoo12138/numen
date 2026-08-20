@@ -1,7 +1,6 @@
 import type { Context } from 'cordis'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { coreWorkbenchPages } from './pages.js'
 import { WorkbenchShell } from './WorkbenchShell.js'
 
 const root = document.querySelector('#root')
@@ -26,7 +25,10 @@ async function startContext(): Promise<{ context: Context; stop(): Promise<void>
 async function main(): Promise<void> {
   const runtime = await startContext()
   const { context } = runtime
-  await context.plugin(coreWorkbenchPages)
+  if (import.meta.env.DEV) {
+    const { coreWorkbenchPages } = await import('./pages.js')
+    await context.plugin(coreWorkbenchPages)
+  }
   globalThis.addEventListener('beforeunload', () => void runtime.stop(), { once: true })
   createRoot(rootElement).render(
     <StrictMode>

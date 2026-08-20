@@ -13,6 +13,10 @@
     "./server": {
       "types": "./dist/server.d.ts",
       "default": "./dist/server.js"
+    },
+    "./runtime": {
+      "types": "./dist/runtime.d.ts",
+      "default": "./dist/runtime.js"
     }
   },
   "scripts": {
@@ -21,6 +25,7 @@
   },
   "dependencies": {
     "@cordisjs/plugin-server": "^1.7.0",
+    "@numen/console": "workspace:*",
     "@numen/webui": "workspace:*",
     "cordis": "^4.0.0-rc.8",
     "lucide-react": "^0.468.0",

@@ -28,6 +28,7 @@ async function setup(): Promise<{ root: Context; baseUrl: string; buildRoot: str
   ].join(''))
   await writeFile(join(buildRoot, 'assets/app-12345678.js'), 'export const bootstrap = true\n')
   await writeFile(join(buildRoot, 'assets/app-12345678.css'), ':root { color: black }\n')
+  await writeFile(join(buildRoot, 'core-entry.js'), 'export default function core() {}\n')
   await writeFile(join(directory, 'outside.js'), 'export const privateValue = true\n')
   await symlink(join(directory, 'outside.js'), join(buildRoot, 'assets/link.js'))
   const root = new Context()
@@ -84,6 +85,8 @@ describe('Workbench bootstrap delivery', () => {
     expect(traversal.status).toBe(404)
     const symlinkEscape = await fetch(`${fixture.baseUrl}/workbench/assets/link.js`)
     expect(symlinkEscape.status).toBe(404)
+    const privateEntry = await fetch(`${fixture.baseUrl}/workbench/core-entry.js`)
+    expect(privateEntry.status).toBe(404)
 
     await fixture.dispose()
     expect((await fetch(`${fixture.baseUrl}/`)).status).toBe(404)

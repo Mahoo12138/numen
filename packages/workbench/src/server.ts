@@ -29,6 +29,7 @@ const mimeTypes: Record<string, string> = {
 }
 
 const workbenchRoute = /^\/(?:|automations(?:\/.*)?|runs(?:\/.*)?|connections(?:\/.*)?|plugins(?:\/.*)?|system(?:\/.*)?)$/
+const privateAssetPaths = new Set(['core-entry.js'])
 const contentSecurityPolicy = [
   "default-src 'none'",
   "script-src 'self'",
@@ -107,6 +108,10 @@ export function workbenchServerPlugin(ctx: Context, config: WorkbenchServerConfi
     try {
       requestedPath = decodeURIComponent(request.params[1] ?? '')
     } catch {
+      notFound(response)
+      return
+    }
+    if (privateAssetPaths.has(requestedPath)) {
       notFound(response)
       return
     }

@@ -1,20 +1,11 @@
 import type { FrontendPage } from '@numen/webui/extensions'
 import type { Context } from 'cordis'
 import { Activity, Boxes, Cable, Home, Network, Play, Settings } from 'lucide-react'
-import type { ComponentType } from 'react'
 import { AutomationEditor } from './AutomationEditor.js'
 import { coreWorkbenchRoutes, type CoreWorkbenchActivityId } from './routes.js'
+import type { WorkbenchPageComponent, WorkbenchPageProps } from './types.js'
 
-export interface WorkbenchPageProps {
-  automationId: string
-  activeStepId: string
-  activeTab: string
-  onOpenInspector(): void
-  onStepChange(id: string): void
-  onTabChange(tab: string): void
-}
-
-export type WorkbenchPageComponent = ComponentType<WorkbenchPageProps>
+export type { WorkbenchPageComponent, WorkbenchPageProps } from './types.js'
 
 function HomePage() {
   return (

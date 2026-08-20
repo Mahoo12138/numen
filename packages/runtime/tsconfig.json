@@ -16,6 +16,7 @@
     { "path": "../resources" },
     { "path": "../automation" },
     { "path": "../scheduler" },
-    { "path": "../triggers" }
+    { "path": "../triggers" },
+    { "path": "../workbench" }
   ]
 }

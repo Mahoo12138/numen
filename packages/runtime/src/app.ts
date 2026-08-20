@@ -19,6 +19,7 @@ import { CapabilityRegistry } from '@numen/core'
 import { DatabaseService } from '@numen/database'
 import { SchedulerService } from '@numen/scheduler'
 import { TriggerService } from '@numen/triggers'
+import { workbenchRuntimePlugin } from '@numen/workbench/runtime'
 import { Context } from 'cordis'
 import { sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -51,6 +52,7 @@ const builtins = {
   consoleEntries: ConsoleEntryRegistry,
   consoleAuth: SingleUserConsoleAuthService,
   server: Server,
+  workbench: workbenchRuntimePlugin,
   consoleSession: consoleSessionPlugin,
   consoleAssets: consoleAssetPlugin,
   consoleHttp: consoleHttpPlugin,
