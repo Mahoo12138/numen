@@ -13,7 +13,11 @@ import {
   coreWorkbenchEntryId,
   workbenchRuntimePlugin,
 } from '../src/runtime.js'
-import { workbenchHomeOverviewQueryRef, workbenchRunsIndexQueryRef } from '../src/contracts.js'
+import {
+  workbenchConnectionsIndexQueryRef,
+  workbenchHomeOverviewQueryRef,
+  workbenchRunsIndexQueryRef,
+} from '../src/contracts.js'
 
 const roots: Context[] = []
 const directories: string[] = []
@@ -45,6 +49,7 @@ describe('Workbench Runtime plugin', () => {
       id: coreWorkbenchEntryId,
       prod: entrySource,
     }])
+    expect(root.console.get(workbenchConnectionsIndexQueryRef)).toMatchObject({ providerAvailable: false })
     expect(root.console.get(workbenchHomeOverviewQueryRef)).toMatchObject({ providerAvailable: false })
     expect(root.console.get(workbenchRunsIndexQueryRef)).toMatchObject({ providerAvailable: false })
     const document = await fetch(`${root.server.baseUrl}/`)
@@ -58,6 +63,7 @@ describe('Workbench Runtime plugin', () => {
 
     await fiber.dispose()
     expect(root.consoleEntries.list()).toEqual([])
+    expect(root.console.get(workbenchConnectionsIndexQueryRef)).toBeUndefined()
     expect(root.console.get(workbenchHomeOverviewQueryRef)).toBeUndefined()
     expect(root.console.get(workbenchRunsIndexQueryRef)).toBeUndefined()
     expect((await fetch(`${root.server.baseUrl}/`)).status).toBe(404)

@@ -4,10 +4,11 @@ import { Activity, Boxes, Cable, Home, Network, Play, Settings } from 'lucide-re
 import { useMemo, useState } from 'react'
 import { AutomationEditor } from './AutomationEditor.js'
 import {
+  workbenchConnectionsIndexQueryRef,
   workbenchHomeOverviewQueryRef,
   workbenchRunsIndexQueryRef,
+  type WorkbenchConnectionsIndex,
   type WorkbenchHomeOverview,
-  type WorkbenchHomeRun,
   type WorkbenchRunsCursor,
   type WorkbenchRunsIndex,
   type WorkbenchRunsQueryInput,
@@ -26,7 +27,7 @@ function formatTime(value: string): string {
   return Number.isNaN(date.getTime()) ? value : timeFormatter.format(date)
 }
 
-function statusLabel(status: WorkbenchHomeRun['status']): string {
+function statusLabel(status: string): string {
   return status.charAt(0) + status.slice(1).toLowerCase()
 }
 
@@ -244,8 +245,72 @@ function formatCount(count: number, singular: string): string {
   return `${count} ${singular}${count === 1 ? '' : 's'}`
 }
 
-function ConnectionsPage() {
-  return <CoreIndexPage icon={Cable} title="Connections" description="Manage the systems and accounts available to automations." />
+function ConnectionsPage({ consoleClient }: WorkbenchPageProps) {
+  const [index, reload] = useConsoleQuery<Record<string, never>, WorkbenchConnectionsIndex>(
+    consoleClient,
+    workbenchConnectionsIndexQueryRef,
+    emptyQueryInput,
+  )
+  return (
+    <main className="main-workbench core-page">
+      <header className="core-page-header"><Cable size={22} /><div><h1>Connections</h1><p>Manage the systems and accounts available to automations.</p></div></header>
+      <ConnectionsIndex state={index} onReload={reload} />
+    </main>
+  )
+}
+
+function ConnectionsIndex({ state, onReload }: {
+  state: ConsoleQueryState<WorkbenchConnectionsIndex>
+  onReload(): void
+}) {
+  if (state.status === 'DISABLED') {
+    return <QueryStatePanel title="Runtime preview" message="Open Workbench from a running Numen Runtime to inspect Connections." />
+  }
+  if (state.status === 'LOADING') {
+    return <QueryStatePanel busy title="Loading Connections" message="Reading desired state, Adapter availability, and live Runtime health…" />
+  }
+  if (state.status === 'ERROR') {
+    return <QueryStatePanel action="Try again" message={state.message} onAction={onReload} title="Connections unavailable" tone="error" />
+  }
+  const { summary, items } = state.data
+  return (
+    <div className="connections-index">
+      <section aria-label="Connection summary" className="home-metrics connections-metrics">
+        <HomeMetric label="Total" value={summary.total} detail={`${summary.enabled} enabled`} />
+        <HomeMetric label="Runtime ready" value={summary.ready} detail={`${summary.total - summary.enabled} disabled`} />
+        <HomeMetric
+          label="Attention"
+          value={summary.unavailable + summary.errors}
+          detail={`${summary.unavailable} unavailable · ${summary.errors} errors`}
+          tone={summary.unavailable || summary.errors ? 'warning' : 'default'}
+        />
+      </section>
+      <section className="core-page-section connections-section">
+        <div className="runs-section-heading"><h2>Configured Connections</h2><span>Desired and live state are shown separately</span></div>
+        {items.length ? (
+          <div className="runs-table-wrap">
+            <table className="runs-table connections-table">
+              <thead><tr><th>Connection</th><th>Status</th><th>Adapter</th><th>Desired</th><th>Updated</th></tr></thead>
+              <tbody>
+                {items.map(connection => (
+                  <tr key={connection.id}>
+                    <td><strong>{connection.name}</strong><small>{connection.credentialBound ? 'Credential bound' : 'No credential'}</small></td>
+                    <td>
+                      <em data-connection-status={connection.status}>{statusLabel(connection.status)}</em>
+                      <small className="connection-status-detail">{connection.statusDetail}</small>
+                    </td>
+                    <td><strong>{connection.adapterTitle}</strong><small>{connection.adapterId}@{connection.adapterVersion}</small></td>
+                    <td>{connection.enabled ? 'Enabled' : 'Disabled'}</td>
+                    <td>{formatTime(connection.updatedAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : <p className="home-empty">No Connections are configured yet.</p>}
+      </section>
+    </div>
+  )
 }
 
 function PluginsPage() {

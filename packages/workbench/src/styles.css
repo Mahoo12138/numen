@@ -298,6 +298,18 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .runs-pagination { display: flex; gap: 8px; max-width: 980px; padding-top: 12px; }
 .runs-pagination button { min-width: 78px; height: 30px; padding: 0 12px; border: 1px solid var(--wb-border-strong); border-radius: 4px; background: white; cursor: pointer; font-size: 10.5px; }
 .runs-pagination button:disabled { cursor: default; opacity: .45; }
+.connections-index { padding-bottom: 28px; }
+.connections-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.connections-section { min-width: 0; }
+.connections-table td:nth-child(2) { min-width: 130px; }
+.connections-table td:nth-child(3) strong, .connections-table td:nth-child(3) small { display: block; }
+.connections-table td:nth-child(3) strong { color: var(--wb-text); font-size: 11.5px; }
+.connections-table td:nth-child(3) small, .connection-status-detail { max-width: 200px; margin-top: 4px; overflow: hidden; color: var(--wb-faint); font-size: 9.5px; text-overflow: ellipsis; }
+.connections-table em::before { content: "●"; margin-right: 5px; font-size: 7px; }
+.connections-table em[data-connection-status="READY"] { background: #e9f6ef; color: var(--wb-success); }
+.connections-table em[data-connection-status="ERROR"], .connections-table em[data-connection-status="UNAVAILABLE"] { background: #fbecec; color: #ae3c3c; }
+.connections-table em[data-connection-status="STARTING"], .connections-table em[data-connection-status="STOPPING"] { background: var(--wb-selection); color: var(--wb-accent-strong); }
+.connection-status-detail { display: block; }
 
 .inspector {
   grid-area: inspector;
@@ -416,6 +428,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .home-section { padding-inline: 16px; }
   .home-state { margin: 14px 16px; }
   .runs-section { padding-inline: 16px; }
+  .connections-section { padding-inline: 16px; }
   .runs-section-heading { align-items: flex-start; flex-direction: column; gap: 4px; }
   .bottom-panel { height: 42px; }
   .panel-tablist { height: 41px; }

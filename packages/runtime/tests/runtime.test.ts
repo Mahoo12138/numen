@@ -41,6 +41,7 @@ describe('Numen runtime', () => {
         consoleAuth: { token: 'runtime-console-token', ownerId: 'runtime-owner' },
         server: { host: '127.0.0.1', port: 0 },
         workbench: { root: workbenchRoot, entrySource: workbenchEntry },
+        workbenchConnections: {},
         workbenchHome: {},
         workbenchRuns: {},
         consoleSession: {},
@@ -55,6 +56,10 @@ describe('Numen runtime', () => {
     const application = await startRuntime({ configPath })
     applications.push(application)
     expect(application.context.console.list()).toEqual([
+      expect.objectContaining({
+        definition: expect.objectContaining({ id: 'numen:connections-index', version: 1, kind: 'query' }),
+        providerAvailable: true,
+      }),
       expect.objectContaining({
         definition: expect.objectContaining({ id: 'numen:home-overview', version: 1, kind: 'query' }),
         providerAvailable: true,
@@ -265,6 +270,70 @@ describe('Numen runtime', () => {
     expect(invalidRunsCursor.status).toBe(422)
     expect(await invalidRunsCursor.json()).toMatchObject({ error: { code: 'PROCEDURE_VALIDATION_FAILED' } })
 
+    const readyAdapter = { id: 'runtime:ready', version: 1, title: 'Ready Adapter', config: z.object({}) }
+    const unavailableAdapter = { id: 'runtime:unavailable', version: 1, title: 'Unavailable Adapter', config: z.object({}) }
+    const failingAdapter = { id: 'runtime:failing', version: 1, title: 'Failing Adapter', config: z.object({}) }
+    application.context.connections.defineAdapter(application.context, readyAdapter)
+    application.context.connections.defineAdapter(application.context, unavailableAdapter)
+    application.context.connections.defineAdapter(application.context, failingAdapter)
+    application.context.connections.provideAdapter(application.context, readyAdapter, { async open() {} })
+    application.context.connections.provideAdapter(application.context, failingAdapter, {
+      async open() {
+        throw new Error('runtime authentication failed')
+      },
+    })
+    const disabledConnection = application.context.connections.create({
+      name: 'Disabled account', adapter: readyAdapter, config: {}, enabled: false,
+    })
+    const readyConnection = application.context.connections.create({
+      name: 'Ready account', adapter: readyAdapter, config: {}, enabled: true,
+    })
+    const unavailableConnection = application.context.connections.create({
+      name: 'Unavailable account', adapter: unavailableAdapter, config: {}, enabled: true,
+    })
+    const failingConnection = application.context.connections.create({
+      name: 'Failing account', adapter: failingAdapter, config: {}, enabled: true,
+    })
+    await application.context.connections.reconcile()
+    const connectionsIndex = await fetch(`${baseUrl}/api/console/call`, {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer runtime-console-token',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ kind: 'query', procedure: 'numen:connections-index@1', input: {} }),
+    })
+    expect(connectionsIndex.status).toBe(200)
+    const connectionsDocument = await connectionsIndex.json()
+    expect(connectionsDocument).toMatchObject({
+      result: {
+        summary: { total: 4, enabled: 3, ready: 1, unavailable: 1, errors: 1 },
+        items: expect.arrayContaining([
+          expect.objectContaining({
+            id: disabledConnection.id,
+            name: 'Disabled account',
+            adapterTitle: 'Ready Adapter',
+            enabled: false,
+            adapterAvailable: true,
+            credentialBound: false,
+            status: 'DISABLED',
+          }),
+          expect.objectContaining({ id: readyConnection.id, status: 'READY' }),
+          expect.objectContaining({
+            id: unavailableConnection.id,
+            adapterAvailable: false,
+            status: 'UNAVAILABLE',
+          }),
+          expect.objectContaining({
+            id: failingConnection.id,
+            status: 'ERROR',
+            statusDetail: 'Runtime failed to start',
+          }),
+        ]),
+      },
+    })
+    expect(JSON.stringify(connectionsDocument)).not.toContain('runtime authentication failed')
+
     const health = await fetch(`${baseUrl}/api/health`)
     expect(health.status).toBe(200)
     expect(await health.json()).toMatchObject({ status: 'ok', name: 'numen' })
@@ -278,12 +347,12 @@ describe('Numen runtime', () => {
         automations: { ready: true, count: 1 },
         connections: {
           ready: true,
-          total: 0,
-          enabled: 0,
-          unavailable: 0,
+          total: 4,
+          enabled: 3,
+          unavailable: 1,
           starting: 0,
-          runtimeReady: 0,
-          errors: 0,
+          runtimeReady: 1,
+          errors: 1,
         },
         credentials: {
           ready: true,

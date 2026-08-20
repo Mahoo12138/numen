@@ -81,3 +81,44 @@ export interface WorkbenchRunsIndex {
   items: WorkbenchRunIndexItem[]
   nextCursor?: WorkbenchRunsCursor
 }
+
+export const workbenchConnectionsIndexQueryRef = {
+  id: 'numen:connections-index',
+  version: 1,
+} as const satisfies ConsoleProcedureRef
+
+export type WorkbenchConnectionStatus =
+  | 'DISABLED'
+  | 'UNAVAILABLE'
+  | 'STOPPED'
+  | 'STARTING'
+  | 'READY'
+  | 'ERROR'
+  | 'STOPPING'
+
+export interface WorkbenchConnectionIndexItem {
+  id: string
+  name: string
+  adapterId: string
+  adapterVersion: number
+  adapterTitle: string
+  enabled: boolean
+  adapterAvailable: boolean
+  credentialBound: boolean
+  status: WorkbenchConnectionStatus
+  statusDetail: string
+  generation: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface WorkbenchConnectionsIndex {
+  summary: {
+    total: number
+    enabled: number
+    ready: number
+    unavailable: number
+    errors: number
+  }
+  items: WorkbenchConnectionIndexItem[]
+}
