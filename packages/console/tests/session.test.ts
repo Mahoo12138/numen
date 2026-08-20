@@ -55,6 +55,14 @@ describe('Console browser session bootstrap', () => {
       expect(setCookie).toContain('Path=/api/console')
       const sessionCookie = setCookie.split(';')[0]!
 
+      const restored = await fetch(`${baseUrl}/api/console/session`, {
+        headers: { cookie: sessionCookie, 'sec-fetch-site': 'same-origin' },
+      })
+      expect(restored.status).toBe(200)
+      expect(await restored.json()).toMatchObject({
+        principal: { subject: { id: 'browser-owner' } },
+      })
+
       const call = (origin: string) => fetch(`${baseUrl}/api/console/call`, {
         method: 'POST',
         headers: {

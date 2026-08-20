@@ -1,0 +1,22 @@
+{
+  "name": "@numen/webui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@numen/console": "workspace:*",
+    "cordis": "^4.0.0-rc.8"
+  },
+  "devDependencies": {
+    "@cordisjs/plugin-server": "^1.7.0",
+    "schemastery": "^3.18.0"
+  }
+}

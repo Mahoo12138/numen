@@ -113,7 +113,8 @@ export class SingleUserConsoleAuthService extends Service {
   private hasSameOrigin(headers: Headers): boolean {
     const origin = headers.get('origin')
     const host = headers.get('host')
-    if (!origin || !host) return false
+    if (!origin) return headers.get('sec-fetch-site') === 'same-origin'
+    if (!host) return false
     try {
       return new URL(origin).host === host
     } catch {

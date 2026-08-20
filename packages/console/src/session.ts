@@ -1,3 +1,4 @@
+import type { Request, Response } from '@cordisjs/plugin-server'
 import type { Context } from 'cordis'
 import { consoleSessionCookieName } from './auth.js'
 import { ConsoleAuthenticationError, type ConsoleAuthenticationResult } from './service.js'
@@ -23,6 +24,25 @@ function cookie(value: string, secure: boolean, clear = false): string {
   ].join('; ')
 }
 
+function document(identity: ConsoleAuthenticationResult): ConsoleSessionDocument {
+  return { principal: identity.principal, session: identity.session! }
+}
+
+async function authenticate(ctx: Context, request: Request) {
+  return ctx.console.authenticate({
+    method: request.method,
+    path: request.path,
+    headers: request.headers,
+    ...(request._req.socket.remoteAddress ? { remoteAddress: request._req.socket.remoteAddress } : {}),
+    signal: new AbortController().signal,
+  })
+}
+
+function reject(response: Response, error: ConsoleAuthenticationError) {
+  response.status = 401
+  response.json({ error: { code: 'AUTHENTICATION_REQUIRED', message: error.message } })
+}
+
 export function consoleSessionPlugin(ctx: Context, config: ConsoleSessionConfig = {}): void {
   const path = config.path ?? '/api/console/session'
   const secure = config.secureCookie ?? false
@@ -31,31 +51,29 @@ export function consoleSessionPlugin(ctx: Context, config: ConsoleSessionConfig 
       const { cookieValue, identity } = ctx.consoleAuth.exchangeBootstrapToken(request.headers)
       response.headers.set('set-cookie', cookie(cookieValue, secure))
       response.headers.set('cache-control', 'no-store')
-      response.json({
-        principal: identity.principal,
-        session: identity.session!,
-      } satisfies ConsoleSessionDocument)
+      response.json(document(identity))
     } catch (error) {
       if (!(error instanceof ConsoleAuthenticationError)) throw error
-      response.status = 401
-      response.json({ error: { code: 'AUTHENTICATION_REQUIRED', message: error.message } })
+      reject(response, error)
+    }
+  })
+
+  ctx.server.get(path, async (request, response) => {
+    try {
+      response.headers.set('cache-control', 'no-store')
+      response.json(document(await authenticate(ctx, request)))
+    } catch (error) {
+      if (!(error instanceof ConsoleAuthenticationError)) throw error
+      reject(response, error)
     }
   })
 
   ctx.server.delete(path, async (request, response) => {
-    const controller = new AbortController()
     try {
-      await ctx.console.authenticate({
-        method: request.method,
-        path: request.path,
-        headers: request.headers,
-        ...(request._req.socket.remoteAddress ? { remoteAddress: request._req.socket.remoteAddress } : {}),
-        signal: controller.signal,
-      })
+      await authenticate(ctx, request)
     } catch (error) {
       if (!(error instanceof ConsoleAuthenticationError)) throw error
-      response.status = 401
-      response.json({ error: { code: 'AUTHENTICATION_REQUIRED', message: error.message } })
+      reject(response, error)
       return
     }
     response.headers.set('set-cookie', cookie('', secure, true))
