@@ -1,5 +1,5 @@
 import type { ConsoleFrontendEntry } from '@numen/console'
-import type { Context } from 'cordis'
+import { Service, type Context } from 'cordis'
 import { workbenchServerPlugin, type WorkbenchServerConfig } from './server.js'
 
 export const coreWorkbenchEntryId = 'numen:workbench-core'
@@ -8,15 +8,37 @@ export interface WorkbenchRuntimeConfig extends WorkbenchServerConfig {
   entrySource?: string
 }
 
-export function workbenchRuntimePlugin(ctx: Context, config: WorkbenchRuntimeConfig = {}): void {
-  workbenchServerPlugin(ctx, config)
-  const entry: ConsoleFrontendEntry = {
-    id: coreWorkbenchEntryId,
-    prod: config.entrySource ?? new URL('./app/core-entry.js', import.meta.url).href,
+declare module 'cordis' {
+  interface Context {
+    workbench: WorkbenchRuntimeService
   }
-  ctx.consoleEntries.addEntry(ctx, entry)
 }
 
-workbenchRuntimePlugin.inject = ['server', 'consoleEntries']
+export class WorkbenchRuntimeService extends Service {
+  static inject = ['server', 'consoleEntries', 'consoleAuth']
+
+  constructor(ctx: Context, config: WorkbenchRuntimeConfig = {}) {
+    super(ctx, 'workbench')
+    workbenchServerPlugin(ctx, config)
+    const entry: ConsoleFrontendEntry = {
+      id: coreWorkbenchEntryId,
+      prod: config.entrySource ?? new URL('./app/core-entry.js', import.meta.url).href,
+    }
+    ctx.consoleEntries.addEntry(ctx, entry)
+  }
+
+  getLaunchUrl(pathname = '/'): string {
+    const base = new URL(this.ctx.server.baseUrl)
+    const url = new URL(pathname, base)
+    if (url.origin !== base.origin) throw new TypeError('Workbench launch path must be same-origin')
+    url.search = ''
+    url.hash = new URLSearchParams({
+      'numen-bootstrap': this.ctx.consoleAuth.getBootstrapToken(),
+    }).toString()
+    return url.href
+  }
+}
+
+export const workbenchRuntimePlugin = WorkbenchRuntimeService
 
 export default workbenchRuntimePlugin

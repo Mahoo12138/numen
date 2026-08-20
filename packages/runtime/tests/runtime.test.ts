@@ -64,6 +64,11 @@ describe('Numen runtime', () => {
       key: 'workbench', builtin: true, disabled: false,
     }))
     const baseUrl = application.serverUrl!
+    const launchUrl = new URL(application.workbenchUrl!)
+    expect(launchUrl.origin).toBe(new URL(baseUrl).origin)
+    expect(launchUrl.pathname).toBe('/')
+    expect(launchUrl.search).toBe('')
+    expect(new URLSearchParams(launchUrl.hash.slice(1)).get('numen-bootstrap')).toBe('runtime-console-token')
     const currentUser = {
       id: 'runtime:current-user',
       version: 1,

@@ -1,5 +1,9 @@
 import Server from '@cordisjs/plugin-server'
-import { ConsoleEntryRegistry } from '@numen/console'
+import {
+  ConsoleEntryRegistry,
+  ConsoleService,
+  SingleUserConsoleAuthService,
+} from '@numen/console'
 import { Context } from 'cordis'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -32,6 +36,8 @@ describe('Workbench Runtime plugin', () => {
     roots.push(root)
     await root.plugin(Server, { host: '127.0.0.1', port: 0 })
     await root.plugin(ConsoleEntryRegistry)
+    await root.plugin(ConsoleService)
+    await root.plugin(SingleUserConsoleAuthService, { token: 'workbench-launch-token' })
     const fiber = await root.plugin(workbenchRuntimePlugin, { root: buildRoot, entrySource })
 
     expect(root.consoleEntries.list()).toEqual([{
@@ -41,6 +47,11 @@ describe('Workbench Runtime plugin', () => {
     const document = await fetch(`${root.server.baseUrl}/`)
     expect(document.status).toBe(200)
     expect(await document.text()).toContain('Numen')
+    const launchUrl = new URL(root.workbench.getLaunchUrl('/runs?unsafe=query'))
+    expect(launchUrl.pathname).toBe('/runs')
+    expect(launchUrl.search).toBe('')
+    expect(new URLSearchParams(launchUrl.hash.slice(1)).get('numen-bootstrap')).toBe('workbench-launch-token')
+    expect(() => root.workbench.getLaunchUrl('https://untrusted.example/')).toThrow('same-origin')
 
     await fiber.dispose()
     expect(root.consoleEntries.list()).toEqual([])

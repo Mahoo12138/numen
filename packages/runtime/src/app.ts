@@ -36,6 +36,7 @@ export interface NumenApplication {
   entries: RuntimeEntry[]
   safeMode: boolean
   serverUrl: string | undefined
+  workbenchUrl: string | undefined
   stop(): Promise<void>
 }
 
@@ -97,6 +98,7 @@ export async function startRuntime(options: StartRuntimeOptions = {}): Promise<N
     entries,
     safeMode,
     serverUrl: context.server?.baseUrl,
+    workbenchUrl: context.workbench?.getLaunchUrl(),
     stop() {
       return stopTask ??= Promise.resolve(context.fiber.dispose()).then(() => undefined)
     },

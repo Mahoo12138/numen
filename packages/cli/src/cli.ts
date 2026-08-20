@@ -7,7 +7,7 @@ import { parseArgs } from 'node:util'
 const help = `Numen personal automation runtime
 
 Usage:
-  numen start [--config <file>] [--safe]
+  numen start [--config <file>] [--safe] [--print-launch-url]
   numen config validate [--config <file>]
   numen doctor [--config <file>]
   numen --help
@@ -43,6 +43,7 @@ export async function runCli(argv = process.argv.slice(2), io = defaultIo): Prom
     options: {
       config: { type: 'string', short: 'c', default: 'numen.config.yml' },
       safe: { type: 'boolean', default: false },
+      'print-launch-url': { type: 'boolean', default: false },
       help: { type: 'boolean', short: 'h', default: false },
     },
   })
@@ -92,6 +93,9 @@ export async function runCli(argv = process.argv.slice(2), io = defaultIo): Prom
     const application = await startRuntime({ configPath: values.config, safeMode: values.safe })
     const serverUrl = application.serverUrl
     io.out(`Numen ${values.safe ? '(safe mode) ' : ''}started${serverUrl ? ` at ${serverUrl}` : ''}`)
+    if (values['print-launch-url'] && application.workbenchUrl) {
+      io.out(`Workbench launch URL (keep private): ${application.workbenchUrl}`)
+    }
     await waitForShutdown(application.stop)
     return 0
   }
