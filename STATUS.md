@@ -46,6 +46,8 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Durable first-success Race with branch failure tracking and RACE loser cancellation
 - [x] Durable ForEach iteration snapshots, bounded concurrency, loop bindings, fail-fast, and restart recovery
 - [x] Scope-lineage step binding isolation across concurrent and nested structured scopes
+- [x] Typed, versioned Console Query/Action/Subscription contracts with Schemastery validation
+- [x] Console Procedure/Provider Effect lifecycle and abort-safe Subscription cleanup
 
 ## Milestone 3 — Completed
 
@@ -53,16 +55,22 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Runtime readiness projection for Scheduler queues
 - [x] SQLite migration v2 for explicit execution block reasons
 
-## In Progress — Milestone 4
+## Milestone 4 — Completed
 
 - [x] Trigger subscription and durable event acceptance
 - [x] Retry policy and timeout handling
 - [x] Cancellation intent, propagation, and recovery
 - [x] Parallel/Race/ForEach structured concurrency
 
+## In Progress — Milestone 5
+
+- [x] Typed Console Query/Action/Subscription procedure registry
+- [ ] Console Server transport and authenticated request-context bridge
+- [ ] Browser Cordis Runtime and frontend extension lifecycle
+
 ## Next
 
-1. Typed Console Query/Action/Subscription protocol
+1. Console Server transport and authenticated request-context bridge
 2. Browser Cordis Runtime and the first Workbench UI
 3. State Trigger transition detection, filtering, debounce, and throttle
 
@@ -71,7 +79,7 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 ```text
 Typecheck: passing
 Build: passing
-Tests: 12 files, 55 tests passing
+Tests: 13 files, 59 tests passing
 CLI config validate: passing
 CLI doctor: passing
 SQLite schema migration: v10
@@ -92,6 +100,7 @@ pnpm dev
 - Drafts may remain invalid; authoritative validation happens during Publish.
 - The current Scheduler executes the Core IR subset emitted by the compiler, including retry, timeout, cancellation, recovery, and structured concurrency.
 - Parallel, first-success Race, and bounded ForEach use durable Execution scopes with interruptible concurrent dispatch; Try/Finally control flow remains planned work.
+- Typed Console procedures and provider lifecycles are operational in-process; HTTP/WebSocket transport and authentication binding remain planned work.
 - Manual Runs and event Trigger subscriptions are supported. State Trigger transition detection, filtering, debounce, and throttle remain planned work.
 - Connection desired state, Adapter contracts, generation-fenced Runtime recreation, and Credential snapshots are operational; automatic reconnect policy remains planned work.
 - Credential payloads use authenticated encryption with environment-provided keys; key-ring migration and external vault providers remain planned work.

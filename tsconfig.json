@@ -2,6 +2,7 @@
   "files": [],
   "references": [
     { "path": "packages/config" },
+    { "path": "packages/console" },
     { "path": "packages/core" },
     { "path": "packages/database" },
     { "path": "packages/connections" },
