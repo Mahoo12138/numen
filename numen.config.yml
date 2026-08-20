@@ -18,6 +18,7 @@ plugins:
   server:
     host: 127.0.0.1
     port: 5140
+  consoleSession: {}
   consoleHttp: {}
   consoleWs: {}
   health: {}

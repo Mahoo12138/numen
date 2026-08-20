@@ -54,4 +54,32 @@ describe('SingleUserConsoleAuthService', () => {
     })
     await root.fiber.dispose()
   })
+
+  it('accepts browser session cookies only for matching Origin and Host', async () => {
+    const root = new Context()
+    await root.plugin(ConsoleService)
+    await root.plugin(SingleUserConsoleAuthService, { token: 'bootstrap-token' })
+    const { cookieValue } = root.consoleAuth.exchangeBootstrapToken(
+      new Headers({ authorization: 'Bearer bootstrap-token' }),
+    )
+    const browserRequest = {
+      method: 'POST',
+      path: '/api/console/call',
+      headers: new Headers({
+        cookie: `numen_console_session=${cookieValue}`,
+        host: '127.0.0.1:5140',
+        origin: 'http://127.0.0.1:5140',
+      }),
+      signal: new AbortController().signal,
+    }
+
+    await expect(root.console.authenticate(browserRequest)).resolves.toMatchObject({
+      principal: { authenticated: true },
+    })
+    browserRequest.headers.set('origin', 'http://127.0.0.1:9999')
+    await expect(root.console.authenticate(browserRequest)).rejects.toThrow(ConsoleAuthenticationError)
+    browserRequest.headers.delete('origin')
+    await expect(root.console.authenticate(browserRequest)).rejects.toThrow(ConsoleAuthenticationError)
+    await root.fiber.dispose()
+  })
 })

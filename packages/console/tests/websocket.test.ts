@@ -198,6 +198,20 @@ describe('Console WebSocket transport', () => {
         socket.once('error', reject)
       })
       expect(status).toBe(401)
+
+      const { cookieValue } = root.consoleAuth.exchangeBootstrapToken(
+        new Headers({ authorization: 'Bearer socket-secret' }),
+      )
+      const browserSocket = new WebSocket(url, {
+        headers: {
+          cookie: `numen_console_session=${cookieValue}`,
+          origin: root.server.baseUrl,
+        },
+      })
+      await once(browserSocket, 'open')
+      const closed = once(browserSocket, 'close')
+      browserSocket.close()
+      await closed
     } finally {
       await root.fiber.dispose()
     }

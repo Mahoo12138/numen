@@ -34,6 +34,7 @@ describe('Numen runtime', () => {
         console: {},
         consoleAuth: { token: 'runtime-console-token', ownerId: 'runtime-owner' },
         server: { host: '127.0.0.1', port: 0 },
+        consoleSession: {},
         consoleHttp: {},
         consoleWs: {},
         health: {},
@@ -66,6 +67,23 @@ describe('Numen runtime', () => {
       body: JSON.stringify({ kind: 'query', procedure: 'runtime:current-user@1', input: {} }),
     })
     expect(unauthorizedConsole.status).toBe(401)
+    const browserSession = await fetch(`${baseUrl}/api/console/session`, {
+      method: 'POST',
+      headers: { authorization: 'Bearer runtime-console-token' },
+    })
+    expect(browserSession.status).toBe(200)
+    const sessionCookie = browserSession.headers.get('set-cookie')!.split(';')[0]!
+    const cookieConsole = await fetch(`${baseUrl}/api/console/call`, {
+      method: 'POST',
+      headers: {
+        cookie: sessionCookie,
+        origin: baseUrl,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ kind: 'query', procedure: 'runtime:current-user@1', input: {} }),
+    })
+    expect(cookieConsole.status).toBe(200)
+    expect(await cookieConsole.json()).toMatchObject({ result: 'runtime-owner' })
     const consoleResponse = await fetch(`${baseUrl}/api/console/call`, {
       method: 'POST',
       headers: {

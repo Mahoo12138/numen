@@ -6,6 +6,7 @@ import {
   ConsoleService,
   SingleUserConsoleAuthService,
   consoleHttpPlugin,
+  consoleSessionPlugin,
   consoleWebSocketPlugin,
 } from '@numen/console'
 import { createRuntimeEntries, loadConfig, type LoadedConfig, type RuntimeEntry } from '@numen/config'
@@ -47,6 +48,7 @@ const builtins = {
   console: ConsoleService,
   consoleAuth: SingleUserConsoleAuthService,
   server: Server,
+  consoleSession: consoleSessionPlugin,
   consoleHttp: consoleHttpPlugin,
   consoleWs: consoleWebSocketPlugin,
   health: healthPlugin,

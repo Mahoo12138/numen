@@ -12,7 +12,9 @@ it('reports the default Console service as a safe-mode builtin', async () => {
     await writeConfig(configPath, {
       version: 1,
       dataDir: 'data',
-      plugins: { console: {}, consoleAuth: {}, consoleHttp: {}, consoleWs: {} },
+      plugins: {
+        console: {}, consoleAuth: {}, consoleSession: {}, consoleHttp: {}, consoleWs: {},
+      },
     })
     const output: string[] = []
     const result = await runCli(['doctor', '--safe', '--config', configPath], {
@@ -25,6 +27,7 @@ it('reports the default Console service as a safe-mode builtin', async () => {
       plugins: [
         { key: 'console', package: 'cordis:console', enabled: true, builtin: true },
         { key: 'consoleAuth', package: 'cordis:consoleAuth', enabled: true, builtin: true },
+        { key: 'consoleSession', package: 'cordis:consoleSession', enabled: true, builtin: true },
         { key: 'consoleHttp', package: 'cordis:consoleHttp', enabled: true, builtin: true },
         { key: 'consoleWs', package: 'cordis:consoleWs', enabled: true, builtin: true },
       ],
