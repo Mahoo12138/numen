@@ -89,6 +89,12 @@ describe('AutomationService', () => {
     expect(activated).toMatchObject({ enabled: false, activeRevisionId: presentationRevision.id, activationGeneration: 1 })
     const enabled = root.automations.setEnabled(created.automation.id, true)
     expect(enabled).toMatchObject({ enabled: true, activationGeneration: 2 })
+    expect(root.automations.listSummaries()).toEqual([expect.objectContaining({
+      id: created.automation.id,
+      draftVersion: 3,
+      revisionCount: 2,
+      latestRevisionNumber: 2,
+    })])
     expect(changes).toEqual(Array.from({ length: 7 }, () => created.automation.id))
     await root.fiber.dispose()
 

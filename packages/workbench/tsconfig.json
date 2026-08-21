@@ -13,6 +13,7 @@
     { "path": "../automation" },
     { "path": "../console" },
     { "path": "../connections" },
+    { "path": "../core" },
     { "path": "../scheduler" },
     { "path": "../webui" }
   ]

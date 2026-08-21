@@ -14,6 +14,8 @@ import {
   workbenchRuntimePlugin,
 } from '../src/runtime.js'
 import {
+  workbenchAutomationDetailQueryRef,
+  workbenchAutomationsIndexQueryRef,
   workbenchConnectionsIndexQueryRef,
   workbenchHomeOverviewQueryRef,
   workbenchInvalidationSubscriptionRef,
@@ -50,6 +52,8 @@ describe('Workbench Runtime plugin', () => {
       id: coreWorkbenchEntryId,
       prod: entrySource,
     }])
+    expect(root.console.get(workbenchAutomationDetailQueryRef)).toMatchObject({ providerAvailable: false })
+    expect(root.console.get(workbenchAutomationsIndexQueryRef)).toMatchObject({ providerAvailable: false })
     expect(root.console.get(workbenchConnectionsIndexQueryRef)).toMatchObject({ providerAvailable: false })
     expect(root.console.get(workbenchHomeOverviewQueryRef)).toMatchObject({ providerAvailable: false })
     expect(root.console.get(workbenchInvalidationSubscriptionRef)).toMatchObject({ providerAvailable: false })
@@ -65,6 +69,8 @@ describe('Workbench Runtime plugin', () => {
 
     await fiber.dispose()
     expect(root.consoleEntries.list()).toEqual([])
+    expect(root.console.get(workbenchAutomationDetailQueryRef)).toBeUndefined()
+    expect(root.console.get(workbenchAutomationsIndexQueryRef)).toBeUndefined()
     expect(root.console.get(workbenchConnectionsIndexQueryRef)).toBeUndefined()
     expect(root.console.get(workbenchHomeOverviewQueryRef)).toBeUndefined()
     expect(root.console.get(workbenchInvalidationSubscriptionRef)).toBeUndefined()

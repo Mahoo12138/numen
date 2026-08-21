@@ -280,6 +280,9 @@ importers:
       '@numen/console':
         specifier: workspace:*
         version: link:../console
+      '@numen/core':
+        specifier: workspace:*
+        version: link:../core
       '@numen/scheduler':
         specifier: workspace:*
         version: link:../scheduler

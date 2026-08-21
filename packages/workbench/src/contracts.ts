@@ -1,4 +1,5 @@
 import type { ConsoleProcedureRef } from '@numen/console'
+import type { AutomationSource, NumenValue } from '@numen/core'
 
 export const workbenchHomeOverviewQueryRef = {
   id: 'numen:home-overview',
@@ -128,8 +129,70 @@ export const workbenchInvalidationSubscriptionRef = {
   version: 1,
 } as const satisfies ConsoleProcedureRef
 
-export type WorkbenchInvalidationScope = 'home' | 'runs' | 'connections'
+export type WorkbenchInvalidationScope = 'home' | 'automations' | 'runs' | 'connections'
 
 export interface WorkbenchInvalidationEvent {
   scopes: WorkbenchInvalidationScope[]
+}
+
+export const workbenchAutomationsIndexQueryRef = {
+  id: 'numen:automations-index',
+  version: 1,
+} as const satisfies ConsoleProcedureRef
+
+export interface WorkbenchAutomationIndexItem {
+  id: string
+  name: string
+  enabled: boolean
+  activeRevisionId?: string
+  activationGeneration: number
+  draftVersion: number
+  revisionCount: number
+  latestRevisionNumber?: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface WorkbenchAutomationsIndex {
+  summary: {
+    total: number
+    enabled: number
+    published: number
+  }
+  items: WorkbenchAutomationIndexItem[]
+}
+
+export const workbenchAutomationDetailQueryRef = {
+  id: 'numen:automation-detail',
+  version: 1,
+} as const satisfies ConsoleProcedureRef
+
+export interface WorkbenchAutomationDetailQueryInput {
+  automationId: string
+}
+
+export interface WorkbenchAutomationDetail {
+  automation: {
+    id: string
+    name: string
+    enabled: boolean
+    activeRevisionId?: string
+    activationGeneration: number
+    createdAt: string
+    updatedAt: string
+  }
+  draft: {
+    baseRevisionId?: string
+    source: AutomationSource
+    presentation: Record<string, NumenValue>
+    version: number
+    updatedAt: string
+  }
+  revisions: Array<{
+    id: string
+    number: number
+    contentHash: string
+    active: boolean
+    createdAt: string
+  }>
 }

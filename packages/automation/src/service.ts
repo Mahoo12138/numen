@@ -35,6 +35,12 @@ export interface SaveDraftInput {
   presentation?: Record<string, NumenValue>
 }
 
+export interface AutomationSummary extends Automation {
+  draftVersion: number
+  revisionCount: number
+  latestRevisionNumber?: number
+}
+
 interface AutomationRow {
   id: string
   name: string
@@ -43,6 +49,12 @@ interface AutomationRow {
   activation_generation: number
   created_at: string
   updated_at: string
+}
+
+interface AutomationSummaryRow extends AutomationRow {
+  draft_version: number
+  revision_count: number
+  latest_revision_number: number | null
 }
 
 interface DraftRow {
@@ -176,6 +188,25 @@ export class AutomationService extends Service {
   list(): Automation[] {
     return (this.ctx.database.db.prepare('SELECT * FROM automations ORDER BY created_at DESC').all() as AutomationRow[])
       .map(mapAutomation)
+  }
+
+  listSummaries(): AutomationSummary[] {
+    const rows = this.ctx.database.db.prepare(`
+      SELECT automations.*, automation_drafts.version AS draft_version,
+        COUNT(automation_revisions.id) AS revision_count,
+        MAX(automation_revisions.number) AS latest_revision_number
+      FROM automations
+      JOIN automation_drafts ON automation_drafts.automation_id = automations.id
+      LEFT JOIN automation_revisions ON automation_revisions.automation_id = automations.id
+      GROUP BY automations.id
+      ORDER BY automations.updated_at DESC, automations.id DESC
+    `).all() as AutomationSummaryRow[]
+    return rows.map(row => ({
+      ...mapAutomation(row),
+      draftVersion: row.draft_version,
+      revisionCount: row.revision_count,
+      ...(row.latest_revision_number === null ? {} : { latestRevisionNumber: row.latest_revision_number }),
+    }))
   }
 
   getDraft(automationId: string): AutomationDraft | undefined {

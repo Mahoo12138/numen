@@ -45,6 +45,7 @@ describe('Numen runtime', () => {
         consoleAuth: { token: 'runtime-console-token', ownerId: 'runtime-owner' },
         server: { host: '127.0.0.1', port: 0 },
         workbench: { root: workbenchRoot, entrySource: workbenchEntry },
+        workbenchAutomations: {},
         workbenchConnections: {},
         workbenchHome: {},
         workbenchInvalidation: {},
@@ -61,6 +62,14 @@ describe('Numen runtime', () => {
     const application = await startRuntime({ configPath })
     applications.push(application)
     expect(application.context.console.list()).toEqual([
+      expect.objectContaining({
+        definition: expect.objectContaining({ id: 'numen:automation-detail', version: 1, kind: 'query' }),
+        providerAvailable: true,
+      }),
+      expect.objectContaining({
+        definition: expect.objectContaining({ id: 'numen:automations-index', version: 1, kind: 'query' }),
+        providerAvailable: true,
+      }),
       expect.objectContaining({
         definition: expect.objectContaining({ id: 'numen:connections-index', version: 1, kind: 'query' }),
         providerAvailable: true,
@@ -91,11 +100,11 @@ describe('Numen runtime', () => {
       },
       event => invalidations.push(event),
     )
-    expect(invalidations).toEqual([{ scopes: ['home', 'runs', 'connections'] }])
+    expect(invalidations).toEqual([{ scopes: ['home', 'automations', 'runs', 'connections'] }])
     invalidations.length = 0
     application.context.emit('numen/run-change', 'synthetic-run')
     application.context.emit('numen/automation-change', 'synthetic-automation')
-    await vi.waitFor(() => expect(invalidations).toEqual([{ scopes: ['home', 'runs'] }]))
+    await vi.waitFor(() => expect(invalidations).toEqual([{ scopes: ['home', 'automations', 'runs'] }]))
     expect(application.context.consoleEntries.list()).toEqual([{
       id: 'numen:workbench-core',
       prod: workbenchEntry,
@@ -184,6 +193,52 @@ describe('Numen runtime', () => {
     const revision = application.context.automations.publishDraft(created.automation.id, 1)
     application.context.automations.activateRevision(created.automation.id, revision.id)
     application.context.automations.setEnabled(created.automation.id, true)
+    const automationsIndex = await fetch(`${baseUrl}/api/console/call`, {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer runtime-console-token',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ kind: 'query', procedure: 'numen:automations-index@1', input: {} }),
+    })
+    expect(automationsIndex.status).toBe(200)
+    expect(await automationsIndex.json()).toMatchObject({
+      result: {
+        summary: { total: 1, enabled: 1, published: 1 },
+        items: [{
+          id: created.automation.id,
+          name: 'Runtime smoke test',
+          enabled: true,
+          activeRevisionId: revision.id,
+          draftVersion: 1,
+          revisionCount: 1,
+          latestRevisionNumber: 1,
+        }],
+      },
+    })
+    const automationDetail = await fetch(`${baseUrl}/api/console/call`, {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer runtime-console-token',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        kind: 'query',
+        procedure: 'numen:automation-detail@1',
+        input: { automationId: created.automation.id },
+      }),
+    })
+    expect(automationDetail.status).toBe(200)
+    expect(await automationDetail.json()).toMatchObject({
+      result: {
+        automation: { id: created.automation.id, activeRevisionId: revision.id },
+        draft: {
+          version: 1,
+          source: { triggers: [], flow: { type: 'block', id: 'flow', steps: [] } },
+        },
+        revisions: [{ id: revision.id, number: 1, active: true }],
+      },
+    })
     const run = application.context.scheduler.startManual(created.automation.id)
     await application.context.scheduler.dispatchUntilIdle()
     expect(application.context.scheduler.getRun(run.id)?.status).toBe('COMPLETED')

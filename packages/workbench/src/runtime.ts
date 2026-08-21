@@ -1,11 +1,17 @@
 import type { ConsoleFrontendEntry } from '@numen/console'
 import { Service, type Context } from 'cordis'
+import { workbenchAutomationDetailQuery, workbenchAutomationsIndexQuery } from './automations-provider.js'
 import { workbenchConnectionsIndexQuery } from './connections-provider.js'
 import { workbenchHomeOverviewQuery } from './home-provider.js'
 import { workbenchInvalidationSubscription } from './invalidation-provider.js'
 import { workbenchRunsIndexQuery } from './runs-provider.js'
 import { workbenchServerPlugin, type WorkbenchServerConfig } from './server.js'
 
+export {
+  workbenchAutomationDetailQuery,
+  workbenchAutomationsIndexQuery,
+  workbenchAutomationsProviderPlugin,
+} from './automations-provider.js'
 export { workbenchConnectionsIndexQuery, workbenchConnectionsProviderPlugin } from './connections-provider.js'
 export { workbenchHomeOverviewQuery, workbenchHomeProviderPlugin } from './home-provider.js'
 export { workbenchInvalidationProviderPlugin, workbenchInvalidationSubscription } from './invalidation-provider.js'
@@ -29,6 +35,8 @@ export class WorkbenchRuntimeService extends Service {
   constructor(ctx: Context, config: WorkbenchRuntimeConfig = {}) {
     super(ctx, 'workbench')
     workbenchServerPlugin(ctx, config)
+    ctx.console.define(ctx, workbenchAutomationDetailQuery)
+    ctx.console.define(ctx, workbenchAutomationsIndexQuery)
     ctx.console.define(ctx, workbenchConnectionsIndexQuery)
     ctx.console.define(ctx, workbenchHomeOverviewQuery)
     ctx.console.define(ctx, workbenchInvalidationSubscription)

@@ -10,7 +10,7 @@ import {
   type WorkbenchInvalidationScope,
 } from './contracts.js'
 
-const scopeOrder: WorkbenchInvalidationScope[] = ['home', 'runs', 'connections']
+const scopeOrder: WorkbenchInvalidationScope[] = ['home', 'automations', 'runs', 'connections']
 const invalidationScope = z.union(scopeOrder).required()
 
 export const workbenchInvalidationSubscription: ConsoleSubscriptionDefinition<
@@ -48,7 +48,7 @@ export function workbenchInvalidationProviderPlugin(ctx: Context): void {
         scheduled = true
         queueMicrotask(flush)
       }
-      const disposeAutomation = ctx.on('numen/automation-change', () => invalidate('home'))
+      const disposeAutomation = ctx.on('numen/automation-change', () => invalidate('home', 'automations'))
       const disposeRun = ctx.on('numen/run-change', () => invalidate('home', 'runs'))
       const disposeConnection = ctx.on('numen/connection-change', () => invalidate('home', 'connections'))
       const disposeConnectionRuntime = ctx.on('numen/connection-runtime-change', () => invalidate('home', 'connections'))

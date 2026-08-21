@@ -32,6 +32,7 @@
     "@numen/automation": "workspace:*",
     "@numen/console": "workspace:*",
     "@numen/connections": "workspace:*",
+    "@numen/core": "workspace:*",
     "@numen/scheduler": "workspace:*",
     "@numen/webui": "workspace:*",
     "cordis": "^4.0.0-rc.8",

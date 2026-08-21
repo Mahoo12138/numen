@@ -20,6 +20,7 @@ import { DatabaseService } from '@numen/database'
 import { SchedulerService } from '@numen/scheduler'
 import { TriggerService } from '@numen/triggers'
 import {
+  workbenchAutomationsProviderPlugin,
   workbenchConnectionsProviderPlugin,
   workbenchHomeProviderPlugin,
   workbenchInvalidationProviderPlugin,
@@ -60,6 +61,7 @@ const builtins = {
   consoleAuth: SingleUserConsoleAuthService,
   server: Server,
   workbench: workbenchRuntimePlugin,
+  workbenchAutomations: workbenchAutomationsProviderPlugin,
   workbenchConnections: workbenchConnectionsProviderPlugin,
   workbenchHome: workbenchHomeProviderPlugin,
   workbenchInvalidation: workbenchInvalidationProviderPlugin,
