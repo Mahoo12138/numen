@@ -1,4 +1,4 @@
-import type { AutomationSource, ControlSource, ValueExpr } from '@numen/core'
+import type { AutomationSource, CompileDiagnostic, ControlSource, ValueExpr } from '@numen/core'
 import { Boxes, Clock3, GitBranch, Network, Play, Radio, Repeat2, Zap } from 'lucide-react'
 import type { AutomationStep } from './model.js'
 
@@ -103,7 +103,7 @@ function projectControl(source: ControlSource, depth: number, output: Automation
 }
 
 /** A read-only Canvas projection. AutomationSource remains the sole authoring truth. */
-export function projectAutomationSteps(source: AutomationSource): AutomationStep[] {
+export function projectAutomationSteps(source: AutomationSource, diagnostics: CompileDiagnostic[] = []): AutomationStep[] {
   const output = source.triggers.map<AutomationStep>(trigger => ({
     id: `trigger:${trigger.id}`,
     sourceId: trigger.id,
@@ -119,5 +119,14 @@ export function projectAutomationSteps(source: AutomationSource): AutomationStep
   } else {
     projectControl(source.flow, 0, output)
   }
-  return output
+  if (!diagnostics.length) return output
+  const problemCounts = new Map<string, number>()
+  for (const diagnostic of diagnostics) {
+    const nodeId = diagnostic.source?.nodeId
+    if (nodeId) problemCounts.set(nodeId, (problemCounts.get(nodeId) ?? 0) + 1)
+  }
+  return output.map(item => {
+    const problemCount = item.sourceId ? problemCounts.get(item.sourceId) : undefined
+    return problemCount ? { ...item, problemCount } : item
+  })
 }

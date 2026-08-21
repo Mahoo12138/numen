@@ -36,6 +36,7 @@ export interface AutomationStep {
   icon: LucideIcon
   tone: 'neutral' | 'accent'
   depth?: number
+  problemCount?: number
 }
 
 export const activities: ActivityItem[] = [

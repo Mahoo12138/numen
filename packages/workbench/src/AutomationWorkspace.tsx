@@ -1,3 +1,4 @@
+import type { SourceRef } from '@numen/core'
 import { createContext, useCallback, useContext, useMemo, useState } from 'react'
 import { AutomationEditor, type AutomationEditorProps } from './AutomationEditor.js'
 import { AutomationPanel, AutomationStatusBar } from './AutomationPanel.js'
@@ -10,7 +11,7 @@ import {
   type WorkbenchAutomationDetailQueryInput,
   type WorkbenchAutomationsIndex,
 } from './contracts.js'
-import { Inspector } from './Inspector.js'
+import { Inspector, type InspectorFieldFocus } from './Inspector.js'
 import type { WorkbenchPageChromeProps } from './types.js'
 import { useAutomationDraftDocument } from './useAutomationDraftDocument.js'
 import { useConsoleQuery, type ConsoleQueryState } from './useConsoleQuery.js'
@@ -34,6 +35,7 @@ export function AutomationPageChrome({
   const [requestedAutomationId, setRequestedAutomationId] = useState('morning-brief')
   const [activeTab, setActiveTab] = useState('Editor')
   const [requestedStepId, setRequestedStepId] = useState('notification')
+  const [fieldFocus, setFieldFocus] = useState<InspectorFieldFocus>()
   const [indexState, reloadIndex] = useConsoleQuery<Record<string, never>, WorkbenchAutomationsIndex>(
     consoleClient,
     workbenchAutomationsIndexQueryRef,
@@ -87,7 +89,9 @@ export function AutomationPageChrome({
     if (detailState?.status !== 'READY' || !detailState.data || !effectiveDetail) return detailState
     return { status: 'READY', data: effectiveDetail }
   }, [detailState, effectiveDetail])
-  const steps = useMemo(() => effectiveDetail ? projectAutomationSteps(effectiveDetail.draft.source) : [], [effectiveDetail])
+  const steps = useMemo(() => (
+    effectiveDetail ? projectAutomationSteps(effectiveDetail.draft.source, authoring.problems) : []
+  ), [authoring.problems, effectiveDetail])
   const activeStepId = consoleClient
     ? (steps.some(step => step.id === requestedStepId) ? requestedStepId : steps[0]?.id ?? '')
     : requestedStepId
@@ -100,17 +104,18 @@ export function AutomationPageChrome({
     ...(consoleClient ? { automations: liveItems, onAutomationChange: setRequestedAutomationId } : {}),
     ...(consoleClient ? {
       authoring: {
-        savePhase: authoring.savePhase,
-        saveMessage: authoring.saveMessage,
         canEdit: authoring.canEdit,
         canPublish: authoring.canPublish,
+        canUndo: authoring.canUndo,
+        canRedo: authoring.canRedo,
         publishPending: authoring.publishPending,
-        problemCount: authoring.problems.length,
         ...(authoring.conflict ? { conflict: authoring.conflict } : {}),
         ...(authoring.saveError ? { saveError: authoring.saveError } : {}),
         ...(authoring.publishError ? { publishError: authoring.publishError } : {}),
       },
       onAddWaitStep: authoring.addWaitStep,
+      onUndo: authoring.undo,
+      onRedo: authoring.redo,
       onPublish: authoring.publish,
       onReloadDraft: authoring.reload,
       onRetrySave: authoring.retrySave,
@@ -118,6 +123,7 @@ export function AutomationPageChrome({
     onOpenInspector: () => onInspectorOpenChange(true),
     onStepChange: id => {
       setRequestedStepId(id)
+      setFieldFocus(undefined)
       onInspectorOpenChange(true)
     },
     onTabChange: setActiveTab,
@@ -134,10 +140,17 @@ export function AutomationPageChrome({
     reloadDetail,
     steps,
   ])
-  const selectProblem = useCallback((nodeId: string) => {
+  const selectProblem = useCallback((sourceRef: SourceRef) => {
+    const nodeId = sourceRef.nodeId
+    if (!nodeId) return
     const step = steps.find(item => item.sourceId === nodeId)
     if (!step) return
     setRequestedStepId(step.id)
+    setFieldFocus(previous => ({
+      nodeId,
+      ...(sourceRef.fieldPath ? { fieldPath: sourceRef.fieldPath } : {}),
+      request: (previous?.request ?? 0) + 1,
+    }))
     onInspectorOpenChange(true)
   }, [onInspectorOpenChange, steps])
   const PageComponent = page.component
@@ -153,9 +166,14 @@ export function AutomationPageChrome({
       <PageComponent {...(consoleClient ? { consoleClient } : {})} />
       <Inspector
         activeStepId={activeStepId}
+        canEdit={authoring.canEdit}
+        {...(fieldFocus ? { fieldFocus } : {})}
         open={inspectorOpen}
+        problems={authoring.problems}
+        {...(authoring.document ? { source: authoring.document.source } : {})}
         {...(consoleClient ? { steps } : {})}
         onClose={() => onInspectorOpenChange(false)}
+        onWaitDurationChange={authoring.setWaitDuration}
       />
       <AutomationPanel
         problems={authoring.problems}

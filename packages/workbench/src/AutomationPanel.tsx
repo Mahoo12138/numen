@@ -1,4 +1,4 @@
-import type { CompileDiagnostic } from '@numen/core'
+import type { CompileDiagnostic, SourceRef } from '@numen/core'
 import { AlertTriangle, Save } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { AutomationDraftSavePhase } from './useAutomationDraftDocument.js'
@@ -8,7 +8,7 @@ const panelTabs = ['Problems', 'Preview', 'Logs'] as const
 export function AutomationPanel({ problems, preview = false, onProblemSelect }: {
   problems: CompileDiagnostic[]
   preview?: boolean
-  onProblemSelect(nodeId: string): void
+  onProblemSelect(source: SourceRef): void
 }) {
   const [open, setOpen] = useState(false)
   const [activeTab, setActiveTab] = useState('Problems')
@@ -48,7 +48,7 @@ export function AutomationPanel({ problems, preview = false, onProblemSelect }: 
               <button
                 className="automation-problem"
                 key={`${problem.code}:${problem.source?.nodeId ?? ''}:${problem.source?.fieldPath ?? ''}:${index}`}
-                onClick={() => problem.source?.nodeId && onProblemSelect(problem.source.nodeId)}
+                onClick={() => problem.source && onProblemSelect(problem.source)}
                 type="button"
               >
                 <AlertTriangle aria-hidden="true" size={14} />

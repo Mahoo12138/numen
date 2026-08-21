@@ -1,5 +1,5 @@
 import type { AutomationSource, CompileDiagnostic, NumenValue } from '@numen/core'
-import { useCallback, useEffect, useReducer } from 'react'
+import { useCallback, useEffect, useMemo, useReducer } from 'react'
 import {
   workbenchPublishAutomationDraftActionRef,
   workbenchSaveAutomationDraftActionRef,
@@ -10,6 +10,10 @@ import {
   type WorkbenchSaveAutomationDraftInput,
   type WorkbenchSaveAutomationDraftResult,
 } from './contracts.js'
+import {
+  applyAutomationSourceCommand,
+  type AutomationSourceCommand,
+} from './automation-source-editing.js'
 import type { WorkbenchConsoleClient } from './types.js'
 
 export type AutomationDraftSavePhase =
@@ -43,11 +47,18 @@ interface PendingPublish {
   expectedVersion: number
 }
 
+interface AutomationDraftSnapshot {
+  source: AutomationSource
+  presentation: Record<string, NumenValue>
+}
+
 export interface AutomationDraftDocumentState {
   selectedAutomationId: string | undefined
   document: AutomationDraftDocument | undefined
   savePhase: AutomationDraftSavePhase
   editRevision: number
+  undoStack: AutomationDraftSnapshot[]
+  redoStack: AutomationDraftSnapshot[]
   pendingSave: PendingSave | undefined
   conflict: { expectedVersion: number; actualVersion: number } | undefined
   saveError: string | undefined
@@ -60,7 +71,9 @@ export interface AutomationDraftDocumentState {
 export type AutomationDraftDocumentAction =
   | { type: 'SELECT'; automationId?: string }
   | { type: 'SERVER'; automationId: string; draft: WorkbenchAutomationDraft }
-  | { type: 'ADD_WAIT' }
+  | { type: 'EDIT'; command: AutomationSourceCommand }
+  | { type: 'UNDO' }
+  | { type: 'REDO' }
   | { type: 'SAVE_REQUEST' }
   | { type: 'SAVE_SUCCESS'; result: WorkbenchSaveAutomationDraftResult }
   | { type: 'SAVE_FAILURE'; error: unknown }
@@ -75,6 +88,8 @@ const initialState: AutomationDraftDocumentState = {
   document: undefined,
   savePhase: 'UNAVAILABLE',
   editRevision: 0,
+  undoStack: [],
+  redoStack: [],
   pendingSave: undefined,
   conflict: undefined,
   saveError: undefined,
@@ -95,59 +110,35 @@ function toDocument(automationId: string, draft: WorkbenchAutomationDraft): Auto
   }
 }
 
-function collectControlIds(source: AutomationSource): Set<string> {
-  const ids = new Set(source.triggers.map(trigger => trigger.id))
-  const visit = (control: AutomationSource['flow']): void => {
-    ids.add(control.id)
-    switch (control.type) {
-      case 'block':
-        control.steps.forEach(visit)
-        break
-      case 'if':
-        visit(control.then)
-        if (control.else) visit(control.else)
-        break
-      case 'parallel':
-      case 'race':
-        control.branches.forEach(visit)
-        break
-      case 'foreach':
-        visit(control.body)
-        break
-      default:
-        break
-    }
-  }
-  visit(source.flow)
-  return ids
+const historyLimit = 50
+
+function snapshot(document: AutomationDraftDocument): AutomationDraftSnapshot {
+  return { source: document.source, presentation: document.presentation }
 }
 
-function availableId(ids: Set<string>, prefix: string): string {
-  let suffix = 1
-  while (ids.has(`${prefix}-${suffix}`)) suffix += 1
-  return `${prefix}-${suffix}`
+function canChangeDocument(state: AutomationDraftDocumentState): boolean {
+  return !!state.document
+    && state.savePhase !== 'CONFLICT'
+    && state.savePhase !== 'RELOADING'
+    && !state.publishPending
 }
 
-export function appendDefaultWait(source: AutomationSource): AutomationSource {
-  const ids = collectControlIds(source)
-  const wait = {
-    type: 'wait' as const,
-    id: availableId(ids, 'wait'),
-    durationMs: { type: 'literal' as const, value: 60_000 },
-  }
-  if (source.flow.type === 'block') {
-    return {
-      ...source,
-      flow: { ...source.flow, steps: [...source.flow.steps, wait] },
-    }
-  }
+function changedState(
+  state: AutomationDraftDocumentState,
+  document: AutomationDraftDocument,
+  undoStack: AutomationDraftSnapshot[],
+  redoStack: AutomationDraftSnapshot[],
+): AutomationDraftDocumentState {
   return {
-    ...source,
-    flow: {
-      type: 'block',
-      id: availableId(ids, 'flow'),
-      steps: [source.flow, wait],
-    },
+    ...state,
+    document,
+    savePhase: state.savePhase === 'SAVING' ? 'SAVING' : 'DIRTY',
+    editRevision: state.editRevision + 1,
+    undoStack,
+    redoStack,
+    problems: [],
+    publishError: undefined,
+    saveError: undefined,
   }
 }
 
@@ -185,26 +176,48 @@ export function reduceAutomationDraftDocument(
     case 'SERVER':
       if (state.selectedAutomationId !== action.automationId) return state
       if (state.savePhase !== 'UNAVAILABLE' && state.savePhase !== 'CLEAN' && state.savePhase !== 'RELOADING') return state
+      const preserveHistory = state.document?.version === action.draft.version && state.savePhase === 'CLEAN'
       return {
         ...state,
         document: toDocument(action.automationId, action.draft),
         savePhase: 'CLEAN',
         editRevision: 0,
+        undoStack: preserveHistory ? state.undoStack : [],
+        redoStack: preserveHistory ? state.redoStack : [],
         publishError: undefined,
         conflict: undefined,
         saveError: undefined,
       }
-    case 'ADD_WAIT': {
-      if (!state.document || state.savePhase === 'CONFLICT' || state.savePhase === 'RELOADING' || state.publishPending) return state
-      return {
-        ...state,
-        document: { ...state.document, source: appendDefaultWait(state.document.source) },
-        savePhase: state.savePhase === 'SAVING' ? 'SAVING' : 'DIRTY',
-        editRevision: state.editRevision + 1,
-        problems: [],
-        publishError: undefined,
-        saveError: undefined,
-      }
+    case 'EDIT': {
+      if (!state.document || !canChangeDocument(state)) return state
+      const source = applyAutomationSourceCommand(state.document.source, action.command)
+      if (source === state.document.source) return state
+      return changedState(
+        state,
+        { ...state.document, source },
+        [...state.undoStack.slice(-(historyLimit - 1)), snapshot(state.document)],
+        [],
+      )
+    }
+    case 'UNDO': {
+      if (!state.document || !canChangeDocument(state) || !state.undoStack.length) return state
+      const previous = state.undoStack.at(-1)!
+      return changedState(
+        state,
+        { ...state.document, source: previous.source, presentation: previous.presentation },
+        state.undoStack.slice(0, -1),
+        [...state.redoStack.slice(-(historyLimit - 1)), snapshot(state.document)],
+      )
+    }
+    case 'REDO': {
+      if (!state.document || !canChangeDocument(state) || !state.redoStack.length) return state
+      const next = state.redoStack.at(-1)!
+      return changedState(
+        state,
+        { ...state.document, source: next.source, presentation: next.presentation },
+        [...state.undoStack.slice(-(historyLimit - 1)), snapshot(state.document)],
+        state.redoStack.slice(0, -1),
+      )
     }
     case 'SAVE_REQUEST':
       if (!state.document || state.savePhase !== 'DIRTY') return state
@@ -304,7 +317,12 @@ export interface AutomationDraftDocumentModel {
   problems: CompileDiagnostic[]
   canEdit: boolean
   canPublish: boolean
+  canUndo: boolean
+  canRedo: boolean
   addWaitStep(): void
+  setWaitDuration(nodeId: string, durationMs: number): void
+  undo(): void
+  redo(): void
   publish(): void
   reload(): void
   retrySave(): void
@@ -395,7 +413,12 @@ export function useAutomationDraftDocument({
     return () => controller.abort()
   }, [client, state.pendingPublish, state.publishPending])
 
-  const addWaitStep = useCallback(() => dispatch({ type: 'ADD_WAIT' }), [])
+  const addWaitStep = useCallback(() => dispatch({ type: 'EDIT', command: { type: 'ADD_WAIT' } }), [])
+  const setWaitDuration = useCallback((nodeId: string, durationMs: number) => {
+    dispatch({ type: 'EDIT', command: { type: 'SET_WAIT_DURATION', nodeId, durationMs } })
+  }, [])
+  const undo = useCallback(() => dispatch({ type: 'UNDO' }), [])
+  const redo = useCallback(() => dispatch({ type: 'REDO' }), [])
   const publish = useCallback(() => dispatch({ type: 'PUBLISH_REQUEST' }), [])
   const reload = useCallback(() => {
     dispatch({ type: 'RELOAD' })
@@ -408,7 +431,7 @@ export function useAutomationDraftDocument({
     && !state.publishPending
   const canPublish = !!state.document && state.savePhase === 'CLEAN' && !state.publishPending
 
-  return {
+  return useMemo(() => ({
     ...(state.document ? { document: state.document } : {}),
     savePhase: state.savePhase,
     saveMessage: saveMessage(state.savePhase),
@@ -419,9 +442,33 @@ export function useAutomationDraftDocument({
     problems: state.problems,
     canEdit,
     canPublish,
+    canUndo: canEdit && !!state.undoStack.length,
+    canRedo: canEdit && !!state.redoStack.length,
     addWaitStep,
+    setWaitDuration,
+    undo,
+    redo,
     publish,
     reload,
     retrySave,
-  }
+  }), [
+    addWaitStep,
+    canEdit,
+    canPublish,
+    publish,
+    redo,
+    reload,
+    retrySave,
+    setWaitDuration,
+    state.conflict,
+    state.document,
+    state.problems,
+    state.publishError,
+    state.publishPending,
+    state.redoStack.length,
+    state.saveError,
+    state.savePhase,
+    state.undoStack.length,
+    undo,
+  ])
 }

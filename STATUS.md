@@ -112,6 +112,8 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Caller-safe Console Procedure errors with constrained 4xx status, code, and structured details
 - [x] Typed Automation Draft save and publish Actions with optimistic conflict and compile diagnostics
 - [x] Page-owned local Automation Draft document with debounced autosave, conflict recovery, publish controls, and clickable Problems diagnostics
+- [x] Structured Automation Source command module with editable Wait duration and bounded full-document undo/redo history
+- [x] Publish diagnostics projected consistently into Canvas nodes, Inspector fields, and the Problems panel
 
 ## Milestone 3 — Completed
 
@@ -154,10 +156,11 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Stable public Procedure error transport for domain Action conflicts and validation failures
 - [x] Optional Automation authoring Provider for full-document Draft save and immutable Revision publish
 - [x] Automation editor local Draft projection, autosave/publish lifecycle, conflict protection, and Problems/Status regions
+- [x] Wait Inspector structured editing and 50-snapshot local undo/redo lifecycle
 
 ## Next
 
-1. Expand structured Automation Source editing beyond the first Add Wait operation, including undo/redo history
+1. Add a registry-driven Quick Picker with Capability and structured control insertion commands
 2. Connection enable/disable Actions with optimistic generation checks
 3. Run detail Query with timeline and execution diagnostics
 
@@ -169,13 +172,14 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - **Console error seam — pass:** Procedure Providers may deliberately expose constrained 4xx failures through one transport-neutral error interface; the Console HTTP Adapter serializes only that public code/message/details contract, while unexpected implementation errors remain private and become generic 500 responses.
 - **Automation authoring seam — pass:** Workbench owns the stable save/publish Action definitions and shared schemas, while the optional authoring Provider Adapter owns AutomationService calls and public error mapping. Save accepts a complete invalid/incomplete Draft document with optimistic versioning; Publish performs authoritative compilation into an immutable, inactive Revision and remains separate from Activate.
 - **Local Draft document seam — pass:** the Automation Page owns one temporary full-document editing state and derives Canvas, Inspector, Problems, and status projections from it. Background Query invalidations cannot replace dirty, saving, or conflicted local Source; optimistic saves use stable snapshots, Publish diagnostics retain server source references, and the generic Shell only exposes optional Page-owned panel/status slots.
+- **Structured Source command seam — pass:** Inspector and Canvas controls issue small typed commands rather than traversing or mutating Source themselves. One pure command module preserves nested structured-control shape and stable IDs, while the Draft module owns a bounded history of complete Source/presentation snapshots, coordinates undo/redo with in-flight autosave, preserves history across same-version refresh, and resets it on external versions. Diagnostics remain server-authored and are projected by source reference into all three editor views.
 
 ## Verification Baseline
 
 ```text
 Typecheck: passing
 Build: passing
-Tests: 35 files, 131 tests passing
+Tests: 35 files, 136 tests passing
 CLI config validate: passing
 CLI doctor: passing
 SQLite schema migration: v10
@@ -197,7 +201,7 @@ pnpm dev
 - The current Scheduler executes the Core IR subset emitted by the compiler, including retry, timeout, cancellation, recovery, and structured concurrency.
 - Parallel, first-success Race, and bounded ForEach use durable Execution scopes with interruptible concurrent dispatch; Try/Finally control flow remains planned work.
 - Typed Console transports, browser sessions, Browser Cordis clients, frontend extension registries, atomic Entry generations, authenticated revision-fenced asset delivery, and Browser Entry reconciliation/rollback are operational. Generated bootstrap tokens and sessions rotate on restart; the CLI prints a fragment-only Workbench launch URL only with explicit `--print-launch-url` authorization.
-- The responsive Workbench shell, six core Page entries, stable browser Route/Page reconciliation, a secret-free production bootstrap, and authenticated core Entry loading are operational through the default Runtime. Home, Automations, the keyset-paginated Runs index, and the desired/runtime-separated Connections index display live data and refresh through coalesced typed invalidations without replacing server truth in the browser. Automation authoring now supports the first structured Add Wait edit, debounced full-document autosave, explicit conflict recovery, immutable Revision publish, and source-linked Problems; general node insertion/configuration, undo/redo, compare/save-copy conflict options, and activation controls remain planned.
+- The responsive Workbench shell, six core Page entries, stable browser Route/Page reconciliation, a secret-free production bootstrap, and authenticated core Entry loading are operational through the default Runtime. Home, Automations, the keyset-paginated Runs index, and the desired/runtime-separated Connections index display live data and refresh through coalesced typed invalidations without replacing server truth in the browser. Automation authoring now supports Add Wait, literal duration editing, bounded undo/redo, debounced full-document autosave, explicit conflict recovery, immutable Revision publish, and source-linked diagnostics; registry-driven Capability/control insertion, non-literal Wait modes, compare/save-copy conflict options, and activation controls remain planned.
 - Manual Runs and event Trigger subscriptions are supported. State Trigger transition detection, filtering, debounce, and throttle remain planned work.
 - Connection desired state, Adapter contracts, generation-fenced Runtime recreation, and Credential snapshots are operational; automatic reconnect policy remains planned work.
 - Credential payloads use authenticated encryption with environment-provided keys; key-ring migration and external vault providers remain planned work.

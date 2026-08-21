@@ -225,6 +225,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .toolbar-group { display: flex; gap: 2px; padding-right: 7px; margin-right: 3px; border-right: 1px solid var(--wb-border); }
 .toolbar-spacer { margin-left: auto; }
 .toolbar-button { color: #4c5562; }
+.toolbar-button:disabled { color: var(--wb-faint); cursor: not-allowed; }
+.toolbar-button:disabled:hover { background: transparent; }
 .layout-control { display: flex; align-items: center; gap: 7px; height: 28px; padding: 0 8px; border: 0; border-radius: 4px; background: transparent; cursor: pointer; color: #49515d; font-size: 11.5px; }
 .layout-control:hover { background: var(--wb-surface-subtle); }
 
@@ -237,6 +239,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .step-unit[data-depth="4"] { padding-left: 88px; }
 .step-index { position: absolute; right: calc(100% + 12px); top: 27px; color: #424a56; font-size: 15px; }
 .automation-step {
+  position: relative;
   display: grid;
   grid-template-columns: 42px minmax(0, 1fr) 24px;
   align-items: center;
@@ -258,6 +261,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .step-copy strong { font-size: 13px; font-weight: 650; }
 .step-copy small { overflow: hidden; color: var(--wb-muted); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
 .step-menu { color: var(--wb-muted); }
+.step-problem-badge { position: absolute; top: 6px; right: 30px; display: grid; place-items: center; width: 15px; height: 15px; border-radius: 50%; background: #b84032; color: white; font-size: 9px; font-weight: 800; }
 .step-connector { display: grid; place-items: center; height: 38px; }
 .step-connector::before { content: ""; position: absolute; width: 1px; height: 38px; background: var(--wb-border-strong); }
 .step-connector span { z-index: 1; display: grid; place-items: center; width: 20px; height: 20px; border: 1px solid var(--wb-border-strong); border-radius: 50%; background: white; color: #4d5663; }
@@ -400,6 +404,12 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .inspector-source-fields > div { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 8px; }
 .inspector-source-fields dt { color: var(--wb-muted); font-size: 10.5px; }
 .inspector-source-fields dd { margin: 0; overflow-wrap: anywhere; color: var(--wb-text); font: 10.5px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.inspector-edit-field[data-invalid="true"] input { border-color: #c94d40; }
+.inspector-field-help, .inspector-field-error { margin: -3px 0 0 104px; font-size: 10px; line-height: 1.4; }
+.inspector-field-help { color: var(--wb-muted); }
+.inspector-field-error { color: #a13a2d; }
+.inspector-diagnostics { display: grid; gap: 5px; padding-top: 4px; }
+.inspector-diagnostics p { margin: 0; color: #a13a2d; font-size: 10px; line-height: 1.4; }
 
 .bottom-panel { grid-area: panel; z-index: 2; height: 46px; border-top: 1px solid var(--wb-border); background: var(--wb-chrome); }
 .bottom-panel[data-open="true"] { height: 176px; }

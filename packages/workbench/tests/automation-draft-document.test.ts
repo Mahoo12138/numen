@@ -1,8 +1,8 @@
 import type { AutomationSource } from '@numen/core'
 import { describe, expect, it } from 'vitest'
 import type { WorkbenchAutomationDraft } from '../src/contracts.js'
+import { applyAutomationSourceCommand } from '../src/automation-source-editing.js'
 import {
-  appendDefaultWait,
   reduceAutomationDraftDocument,
   type AutomationDraftDocumentState,
 } from '../src/useAutomationDraftDocument.js'
@@ -27,6 +27,8 @@ function unavailableState(): AutomationDraftDocumentState {
     document: undefined,
     savePhase: 'UNAVAILABLE',
     editRevision: 0,
+    undoStack: [],
+    redoStack: [],
     pendingSave: undefined,
     conflict: undefined,
     saveError: undefined,
@@ -45,16 +47,16 @@ function loadedState(): AutomationDraftDocumentState {
 
 describe('local Automation Draft document', () => {
   it('appends stable wait ids and preserves a non-block flow by wrapping it', () => {
-    const once = appendDefaultWait(source)
-    const twice = appendDefaultWait(once)
+    const once = applyAutomationSourceCommand(source, { type: 'ADD_WAIT' })
+    const twice = applyAutomationSourceCommand(once, { type: 'ADD_WAIT' })
 
     expect(once.flow).toMatchObject({ type: 'block', steps: [{ id: 'wait-1' }] })
     expect(twice.flow).toMatchObject({ type: 'block', steps: [{ id: 'wait-1' }, { id: 'wait-2' }] })
 
-    const wrapped = appendDefaultWait({
+    const wrapped = applyAutomationSourceCommand({
       triggers: [],
       flow: { type: 'wait', id: 'existing', durationMs: { type: 'literal', value: 1_000 } },
-    })
+    }, { type: 'ADD_WAIT' })
     expect(wrapped.flow).toMatchObject({
       type: 'block',
       id: 'flow-1',
@@ -63,10 +65,13 @@ describe('local Automation Draft document', () => {
   })
 
   it('keeps newer local edits when an earlier autosave completes', () => {
-    let state = reduceAutomationDraftDocument(loadedState(), { type: 'ADD_WAIT' })
+    let state = reduceAutomationDraftDocument(loadedState(), { type: 'EDIT', command: { type: 'ADD_WAIT' } })
     state = reduceAutomationDraftDocument(state, { type: 'SAVE_REQUEST' })
-    state = reduceAutomationDraftDocument(state, { type: 'ADD_WAIT' })
-    state = reduceAutomationDraftDocument(state, { type: 'SAVE_SUCCESS', result: { draft: draft(2, appendDefaultWait(source)) } })
+    state = reduceAutomationDraftDocument(state, { type: 'EDIT', command: { type: 'ADD_WAIT' } })
+    state = reduceAutomationDraftDocument(state, {
+      type: 'SAVE_SUCCESS',
+      result: { draft: draft(2, applyAutomationSourceCommand(source, { type: 'ADD_WAIT' })) },
+    })
 
     expect(state.savePhase).toBe('DIRTY')
     expect(state.document?.version).toBe(2)
@@ -82,7 +87,7 @@ describe('local Automation Draft document', () => {
   })
 
   it('protects a conflicted local document until the user explicitly reloads', () => {
-    let state = reduceAutomationDraftDocument(loadedState(), { type: 'ADD_WAIT' })
+    let state = reduceAutomationDraftDocument(loadedState(), { type: 'EDIT', command: { type: 'ADD_WAIT' } })
     state = reduceAutomationDraftDocument(state, { type: 'SAVE_REQUEST' })
     state = reduceAutomationDraftDocument(state, {
       type: 'SAVE_FAILURE',
@@ -105,6 +110,126 @@ describe('local Automation Draft document', () => {
     expect(state.savePhase).toBe('CLEAN')
     expect(state.document?.version).toBe(2)
     expect(state.document?.source).toEqual(source)
+  })
+
+  it('edits nested Wait duration through one Source command and ignores mismatched nodes', () => {
+    const nested: AutomationSource = {
+      triggers: [],
+      flow: {
+        type: 'if',
+        id: 'condition',
+        condition: { type: 'literal', value: true },
+        then: {
+          type: 'block',
+          id: 'then',
+          steps: [{ type: 'wait', id: 'nested-wait', until: { type: 'literal', value: 'later' } }],
+        },
+      },
+    }
+
+    const edited = applyAutomationSourceCommand(nested, {
+      type: 'SET_WAIT_DURATION',
+      nodeId: 'nested-wait',
+      durationMs: 12_500,
+    })
+    expect(edited.flow).toMatchObject({
+      type: 'if',
+      then: {
+        steps: [{
+          type: 'wait',
+          id: 'nested-wait',
+          durationMs: { type: 'literal', value: 12_500 },
+        }],
+      },
+    })
+    expect(JSON.stringify(edited)).not.toContain('until')
+    expect(applyAutomationSourceCommand(edited, {
+      type: 'SET_WAIT_DURATION',
+      nodeId: 'missing',
+      durationMs: 1_000,
+    })).toBe(edited)
+  })
+
+  it('maintains bounded full-document undo and redo history across saved edits', () => {
+    let state = loadedState()
+    state = reduceAutomationDraftDocument(state, { type: 'EDIT', command: { type: 'ADD_WAIT' } })
+    state = reduceAutomationDraftDocument(state, {
+      type: 'EDIT',
+      command: { type: 'SET_WAIT_DURATION', nodeId: 'wait-1', durationMs: 5_000 },
+    })
+
+    expect(state.undoStack).toHaveLength(2)
+    expect(state.redoStack).toHaveLength(0)
+    expect(state.document?.source.flow).toMatchObject({ steps: [{ durationMs: { value: 5_000 } }] })
+
+    state = reduceAutomationDraftDocument(state, { type: 'UNDO' })
+    expect(state.document?.source.flow).toMatchObject({ steps: [{ durationMs: { value: 60_000 } }] })
+    expect(state.redoStack).toHaveLength(1)
+
+    state = reduceAutomationDraftDocument(state, { type: 'UNDO' })
+    expect(state.document?.source.flow).toMatchObject({ steps: [] })
+
+    state = reduceAutomationDraftDocument(state, { type: 'REDO' })
+    expect(state.document?.source.flow).toMatchObject({ steps: [{ durationMs: { value: 60_000 } }] })
+
+    state = reduceAutomationDraftDocument(state, { type: 'SAVE_REQUEST' })
+    state = reduceAutomationDraftDocument(state, {
+      type: 'SAVE_SUCCESS',
+      result: { draft: draft(2, state.document!.source) },
+    })
+    expect(state.savePhase).toBe('CLEAN')
+    expect(state.undoStack).toHaveLength(1)
+    expect(state.redoStack).toHaveLength(1)
+  })
+
+  it('caps history and preserves an undo made while autosave is in flight', () => {
+    let state = reduceAutomationDraftDocument(loadedState(), { type: 'EDIT', command: { type: 'ADD_WAIT' } })
+    for (let durationMs = 1; durationMs <= 55; durationMs += 1) {
+      state = reduceAutomationDraftDocument(state, {
+        type: 'EDIT',
+        command: { type: 'SET_WAIT_DURATION', nodeId: 'wait-1', durationMs },
+      })
+    }
+    expect(state.undoStack).toHaveLength(50)
+
+    const requestedSource = state.document!.source
+    state = reduceAutomationDraftDocument(state, { type: 'SAVE_REQUEST' })
+    state = reduceAutomationDraftDocument(state, { type: 'UNDO' })
+    const undoneSource = state.document!.source
+    state = reduceAutomationDraftDocument(state, {
+      type: 'SAVE_SUCCESS',
+      result: { draft: draft(2, requestedSource) },
+    })
+
+    expect(state.savePhase).toBe('DIRTY')
+    expect(state.document?.version).toBe(2)
+    expect(state.document?.source).toBe(undoneSource)
+    expect(state.document?.source).not.toBe(requestedSource)
+  })
+
+  it('preserves history across same-version refresh and resets it for an external version', () => {
+    let state = reduceAutomationDraftDocument(loadedState(), { type: 'EDIT', command: { type: 'ADD_WAIT' } })
+    state = reduceAutomationDraftDocument(state, { type: 'SAVE_REQUEST' })
+    state = reduceAutomationDraftDocument(state, {
+      type: 'SAVE_SUCCESS',
+      result: { draft: draft(2, state.document!.source) },
+    })
+    expect(state.undoStack).toHaveLength(1)
+
+    state = reduceAutomationDraftDocument(state, {
+      type: 'SERVER',
+      automationId: 'automation-1',
+      draft: draft(2, state.document!.source),
+    })
+    expect(state.undoStack).toHaveLength(1)
+
+    state = reduceAutomationDraftDocument(state, {
+      type: 'SERVER',
+      automationId: 'automation-1',
+      draft: draft(3),
+    })
+    expect(state.undoStack).toHaveLength(0)
+    expect(state.redoStack).toHaveLength(0)
   })
 
   it('projects authoritative publish diagnostics without changing the Draft', () => {

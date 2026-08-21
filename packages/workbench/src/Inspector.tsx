@@ -1,10 +1,25 @@
+import type { AutomationSource, CompileDiagnostic } from '@numen/core'
 import { ChevronDown, X } from 'lucide-react'
+import { findAutomationControl } from './automation-source-editing.js'
 import { automationSteps, type AutomationStep } from './model.js'
+
+const noDiagnostics: CompileDiagnostic[] = []
+
+export interface InspectorFieldFocus {
+  nodeId: string
+  fieldPath?: string
+  request: number
+}
 
 export interface InspectorProps {
   activeStepId: string
   open: boolean
   steps?: AutomationStep[]
+  source?: AutomationSource
+  problems?: CompileDiagnostic[]
+  canEdit?: boolean
+  fieldFocus?: InspectorFieldFocus
+  onWaitDurationChange?(nodeId: string, durationMs: number): void
   onClose(): void
 }
 
@@ -23,10 +38,90 @@ function InspectorGroup({ title, children, open = true }: {
   )
 }
 
-export function Inspector({ activeStepId, open, steps, onClose }: InspectorProps) {
+function WaitConfiguration({
+  nodeId,
+  durationMs,
+  replacesUntil,
+  canEdit,
+  problem,
+  focusRequest,
+  onChange,
+}: {
+  nodeId: string
+  durationMs: number | undefined
+  replacesUntil: boolean
+  canEdit: boolean
+  problem: CompileDiagnostic | undefined
+  focusRequest: number | undefined
+  onChange?(nodeId: string, durationMs: number): void
+}) {
+  const seconds = durationMs === undefined ? '' : String(durationMs / 1_000)
+  return (
+    <>
+      <label className="inspector-edit-field" data-invalid={!!problem}>
+        Duration
+        <span className="input-with-unit">
+          <input
+            aria-describedby={problem ? `${nodeId}-duration-problem` : undefined}
+            aria-invalid={!!problem}
+            aria-label="Wait duration in seconds"
+            autoFocus={focusRequest !== undefined}
+            defaultValue={seconds}
+            disabled={!canEdit}
+            key={`${nodeId}:${durationMs ?? 'empty'}:${focusRequest ?? 'idle'}`}
+            min="0"
+            onBlur={event => {
+              const nextSeconds = Number(event.currentTarget.value)
+              const nextDurationMs = Math.round(nextSeconds * 1_000)
+              if (!event.currentTarget.value || !Number.isFinite(nextSeconds) || nextSeconds < 0) {
+                event.currentTarget.value = seconds
+                return
+              }
+              if (nextDurationMs !== durationMs) onChange?.(nodeId, nextDurationMs)
+            }}
+            onKeyDown={event => {
+              if (event.key === 'Enter') event.currentTarget.blur()
+            }}
+            placeholder={replacesUntil ? 'until expression' : 'seconds'}
+            step="0.001"
+            type="number"
+          />
+          <span>s</span>
+        </span>
+      </label>
+      {replacesUntil ? <p className="inspector-field-help">Setting a duration replaces the current until expression.</p> : null}
+      {problem ? <p className="inspector-field-error" id={`${nodeId}-duration-problem`}>{problem.message}</p> : null}
+    </>
+  )
+}
+
+export function Inspector({
+  activeStepId,
+  open,
+  steps,
+  source,
+  problems = noDiagnostics,
+  canEdit = false,
+  fieldFocus,
+  onWaitDurationChange,
+  onClose,
+}: InspectorProps) {
   const projectedSteps = steps ?? automationSteps
   const step = projectedSteps.find(item => item.id === activeStepId) ?? projectedSteps[0]
   const isNotification = !steps && step?.id === 'notification'
+  const control = source && step?.sourceId ? findAutomationControl(source, step.sourceId) : undefined
+  const stepProblems = step?.sourceId
+    ? problems.filter(problem => problem.source?.nodeId === step.sourceId)
+    : []
+  const durationProblem = stepProblems.find(problem => (
+    problem.source?.fieldPath === 'durationMs'
+    || (problem.code === 'WAIT_SOURCE_INVALID' && !problem.source?.fieldPath)
+  ))
+  const durationMs = control?.type === 'wait'
+    && control.durationMs?.type === 'literal'
+    && typeof control.durationMs.value === 'number'
+    ? control.durationMs.value
+    : undefined
   return (
     <aside className="inspector" data-open={open} aria-label="Inspector">
       <header className="inspector-header">
@@ -57,6 +152,24 @@ export function Inspector({ activeStepId, open, steps, onClose }: InspectorProps
             </label>
           </InspectorGroup>
         </>
+      ) : control?.type === 'wait' && step.sourceId ? (
+        <InspectorGroup title="Configuration">
+          <WaitConfiguration
+            canEdit={canEdit}
+            durationMs={durationMs}
+            focusRequest={fieldFocus?.nodeId === step.sourceId && fieldFocus.fieldPath === 'durationMs'
+              ? fieldFocus.request
+              : undefined}
+            nodeId={step.sourceId}
+            {...(onWaitDurationChange ? { onChange: onWaitDurationChange } : {})}
+            problem={durationProblem}
+            replacesUntil={!!control.until}
+          />
+          <dl className="inspector-source-fields">
+            <div><dt>Source ID</dt><dd>{step.sourceId}</dd></div>
+            <div><dt>Kind</dt><dd>wait</dd></div>
+          </dl>
+        </InspectorGroup>
       ) : (
         <InspectorGroup title="Configuration">
           <p className="inspector-summary">{step.summary}</p>
@@ -64,6 +177,11 @@ export function Inspector({ activeStepId, open, steps, onClose }: InspectorProps
             <div><dt>Source ID</dt><dd>{step.sourceId ?? step.id}</dd></div>
             <div><dt>Kind</dt><dd>{step.kind ?? 'step'}</dd></div>
           </dl>
+          {stepProblems.length ? (
+            <div className="inspector-diagnostics">
+              {stepProblems.map(problem => <p key={`${problem.code}:${problem.source?.fieldPath ?? ''}`}>{problem.message}</p>)}
+            </div>
+          ) : null}
         </InspectorGroup>
       )}
     </aside>

@@ -14,7 +14,6 @@ import {
 import type { WorkbenchAutomationDetail, WorkbenchAutomationIndexItem } from './contracts.js'
 import { automations, automationSteps } from './model.js'
 import type { AutomationStep } from './model.js'
-import type { AutomationDraftSavePhase } from './useAutomationDraftDocument.js'
 import type { ConsoleQueryState } from './useConsoleQuery.js'
 
 const tabs = ['Editor', 'Runs', 'Revisions', 'State', 'Settings'] as const
@@ -27,12 +26,11 @@ export interface AutomationEditorProps {
   detailState?: ConsoleQueryState<WorkbenchAutomationDetail | null>
   steps?: AutomationStep[]
   authoring?: {
-    savePhase: AutomationDraftSavePhase
-    saveMessage: string
     canEdit: boolean
     canPublish: boolean
+    canUndo: boolean
+    canRedo: boolean
     publishPending: boolean
-    problemCount: number
     conflict?: { expectedVersion: number; actualVersion: number }
     saveError?: string
     publishError?: string
@@ -42,14 +40,21 @@ export interface AutomationEditorProps {
   onOpenInspector(): void
   onAutomationChange?(id: string): void
   onAddWaitStep?(): void
+  onUndo?(): void
+  onRedo?(): void
   onPublish?(): void
   onReloadDraft?(): void
   onRetrySave?(): void
   onReload?(): void
 }
 
-function ToolbarButton({ label, children }: { label: string; children: React.ReactNode }) {
-  return <button aria-label={label} className="toolbar-button" title={label} type="button">{children}</button>
+function ToolbarButton({ label, children, disabled = false, onClick }: {
+  label: string
+  children: React.ReactNode
+  disabled?: boolean
+  onClick?(): void
+}) {
+  return <button aria-label={label} className="toolbar-button" disabled={disabled} onClick={onClick} title={label} type="button">{children}</button>
 }
 
 export function AutomationEditor({
@@ -65,6 +70,8 @@ export function AutomationEditor({
   onOpenInspector,
   onAutomationChange,
   onAddWaitStep,
+  onUndo,
+  onRedo,
   onPublish,
   onReloadDraft,
   onRetrySave,
@@ -160,8 +167,8 @@ export function AutomationEditor({
         <>
           <div className="editor-toolbar" aria-label="Editor toolbar">
             <div className="toolbar-group">
-              <ToolbarButton label="Undo"><Undo2 size={16} /></ToolbarButton>
-              <ToolbarButton label="Redo"><Redo2 size={16} /></ToolbarButton>
+              <ToolbarButton disabled={authoring ? !authoring.canUndo : false} label="Undo" {...(onUndo ? { onClick: onUndo } : {})}><Undo2 size={16} /></ToolbarButton>
+              <ToolbarButton disabled={authoring ? !authoring.canRedo : false} label="Redo" {...(onRedo ? { onClick: onRedo } : {})}><Redo2 size={16} /></ToolbarButton>
             </div>
             <div className="toolbar-group">
               <ToolbarButton label="Cut"><Scissors size={16} /></ToolbarButton>
@@ -198,6 +205,9 @@ export function AutomationEditor({
                         <strong>{step.label}</strong>
                         <small>{step.summary}</small>
                       </span>
+                      {step.problemCount ? (
+                        <span aria-label={`${step.problemCount} ${step.problemCount === 1 ? 'problem' : 'problems'}`} className="step-problem-badge">!</span>
+                      ) : null}
                       <MoreVertical aria-hidden="true" className="step-menu" size={18} />
                     </button>
                     {index < steps.length - 1 ? (

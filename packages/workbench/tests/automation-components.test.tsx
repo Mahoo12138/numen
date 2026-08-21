@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 import { AutomationEditor } from '../src/AutomationEditor.js'
 import { AutomationPanel, AutomationStatusBar } from '../src/AutomationPanel.js'
+import { Inspector } from '../src/Inspector.js'
 import { AutomationSidebar } from '../src/AutomationSidebar.js'
 import { projectAutomationSteps } from '../src/automation-projection.js'
 import type { WorkbenchAutomationDetail, WorkbenchAutomationsIndex } from '../src/contracts.js'
@@ -108,12 +109,11 @@ describe('live Automation workspace projections', () => {
       activeStepId={steps[0]!.id}
       automationId={inactiveDetail.automation.id}
       authoring={{
-        savePhase: 'CLEAN',
-        saveMessage: 'Saved',
         canEdit: true,
         canPublish: true,
+        canUndo: true,
+        canRedo: false,
         publishPending: false,
-        problemCount: 0,
       }}
       detailState={{ status: 'READY', data: inactiveDetail }}
       onAddWaitStep={vi.fn()}
@@ -136,12 +136,11 @@ describe('live Automation workspace projections', () => {
       activeStepId=""
       automationId={detail.automation.id}
       authoring={{
-        savePhase: 'CONFLICT',
-        saveMessage: 'Draft conflict',
         canEdit: false,
         canPublish: false,
+        canUndo: false,
+        canRedo: false,
         publishPending: false,
-        problemCount: 1,
         conflict: { expectedVersion: 3, actualVersion: 4 },
       }}
       detailState={{ status: 'READY', data: detail }}
@@ -171,5 +170,36 @@ describe('live Automation workspace projections', () => {
     expect(panelMarkup).toContain('problem-count')
     expect(statusMarkup).toContain('1 publish problem')
     expect(statusMarkup).toContain('Draft conflict')
+  })
+
+  it('projects editable Wait fields and source diagnostics into the Inspector', () => {
+    const steps = projectAutomationSteps(detail.draft.source, [{
+      severity: 'error',
+      code: 'WAIT_SOURCE_INVALID',
+      message: 'Wait duration is invalid.',
+      source: { nodeId: 'pause' },
+    }])
+    const inspectorMarkup = renderToStaticMarkup(<Inspector
+      activeStepId={steps[0]!.id}
+      canEdit
+      fieldFocus={{ nodeId: 'pause', fieldPath: 'durationMs', request: 1 }}
+      onClose={vi.fn()}
+      onWaitDurationChange={vi.fn()}
+      open
+      problems={[{
+        severity: 'error',
+        code: 'WAIT_SOURCE_INVALID',
+        message: 'Wait duration is invalid.',
+        source: { nodeId: 'pause' },
+      }]}
+      source={detail.draft.source}
+      steps={steps}
+    />)
+
+    expect(steps[0]).toMatchObject({ problemCount: 1 })
+    expect(inspectorMarkup).toContain('aria-label="Wait duration in seconds"')
+    expect(inspectorMarkup).toContain('value="5"')
+    expect(inspectorMarkup).toContain('aria-invalid="true"')
+    expect(inspectorMarkup).toContain('Wait duration is invalid.')
   })
 })
