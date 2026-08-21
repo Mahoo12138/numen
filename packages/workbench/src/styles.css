@@ -207,12 +207,19 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .automation-badges em { padding: 2px 5px; border-radius: 3px; background: var(--wb-surface-subtle); color: var(--wb-muted); font-style: normal; font-size: 9px; font-weight: 650; }
 .automation-badges em[data-tone="enabled"] { background: #e9f6ef; color: var(--wb-success); }
 .automation-badges em[data-tone="disabled"] { background: #f1f2f4; color: #616976; }
+.entity-title-actions { display: flex; align-items: center; gap: 8px; }
+.publish-button { height: 30px; padding: 0 13px; border: 1px solid var(--wb-accent); border-radius: 4px; background: var(--wb-accent); color: white; cursor: pointer; font-size: 11.5px; font-weight: 650; }
+.publish-button:hover:not(:disabled) { background: var(--wb-accent-strong); }
+.publish-button:disabled { border-color: var(--wb-border-strong); background: var(--wb-surface-subtle); color: var(--wb-faint); cursor: not-allowed; }
 .mobile-inspector-button { display: none; }
 .mobile-automation-switcher { display: none; }
 .context-tabs { display: flex; gap: 2px; height: 38px; padding: 0 12px; }
 .context-tab { position: relative; min-width: 62px; height: 38px; padding: 0 10px; border: 0; background: transparent; color: #3e4652; cursor: pointer; font-size: 12px; }
 .context-tab[data-active="true"] { color: var(--wb-accent-strong); font-weight: 600; }
 .context-tab[data-active="true"]::after { content: ""; position: absolute; inset: auto 9px -1px; height: 2px; background: var(--wb-accent); }
+.authoring-notice { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 42px; padding: 7px 16px; border-bottom: 1px solid #ead4af; background: #fff9ed; color: #68450e; font-size: 11px; line-height: 1.4; }
+.authoring-notice[data-tone="error"] { border-color: #ebcccc; background: #fff6f6; color: #8c2929; }
+.authoring-notice button { flex: 0 0 auto; height: 28px; padding: 0 9px; border: 1px solid currentColor; border-radius: 4px; background: white; cursor: pointer; font-size: 10.5px; }
 
 .editor-toolbar { display: flex; align-items: center; gap: 5px; min-height: 44px; padding: 0 14px; border-bottom: 1px solid var(--wb-border); background: #fbfcfd; }
 .toolbar-group { display: flex; gap: 2px; padding-right: 7px; margin-right: 3px; border-right: 1px solid var(--wb-border); }
@@ -256,6 +263,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .step-connector span { z-index: 1; display: grid; place-items: center; width: 20px; height: 20px; border: 1px solid var(--wb-border-strong); border-radius: 50%; background: white; color: #4d5663; }
 .add-step-button { display: flex; align-items: center; gap: 7px; height: 34px; margin: 26px auto 0; padding: 0 15px; border: 1px solid var(--wb-border-strong); border-radius: 5px; background: white; cursor: pointer; font-size: 12px; }
 .add-step-button:hover { border-color: var(--wb-accent); color: var(--wb-accent); }
+.add-step-button:disabled { border-color: var(--wb-border); color: var(--wb-faint); cursor: not-allowed; }
 .automation-flow-empty { margin: 28px 0; color: var(--wb-muted); font-size: 11.5px; text-align: center; }
 .automation-state { display: grid; align-self: center; gap: 6px; width: min(520px, calc(100% - 40px)); margin: 42px 20px; padding: 20px; border: 1px solid var(--wb-border); border-radius: 6px; background: white; }
 .automation-state strong { font-size: 13px; }
@@ -403,11 +411,22 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .panel-tablist .panel-toggle { margin-left: auto; font-size: 16px; transform: rotate(180deg); }
 .bottom-panel[data-open="true"] .panel-toggle { transform: none; }
 .panel-content { height: 130px; padding: 14px 22px; border-top: 1px solid var(--wb-border); color: var(--wb-muted); font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.automation-panel-content { overflow: auto; }
+.automation-panel-content > p { margin: 0; }
+.automation-problem { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; gap: 8px; width: 100%; padding: 7px 8px; border: 0; border-radius: 4px; background: transparent; color: #8c2929; cursor: pointer; text-align: left; }
+.automation-problem:hover { background: #fff3f3; }
+.automation-problem > span { display: flex; min-width: 0; gap: 8px; }
+.automation-problem strong { flex: 0 0 auto; }
+.automation-problem small { overflow: hidden; color: #754d4d; text-overflow: ellipsis; white-space: nowrap; }
+.automation-problem code { color: var(--wb-muted); font-size: 9.5px; }
 
 .status-bar { grid-area: status; z-index: 5; display: flex; align-items: center; justify-content: space-between; padding: 0 13px; border-top: 1px solid var(--wb-border); background: #fbfcfd; color: #45505c; font-size: 10.5px; }
 .status-bar > span { display: flex; align-items: center; gap: 5px; }
 .ready-status { color: var(--wb-success); }
+.problem-status, .status-bar[data-save-phase="CONFLICT"], .status-bar[data-save-phase="ERROR"] { color: #a13a2d; }
+.status-bar[data-save-phase="DIRTY"], .status-bar[data-save-phase="SAVING"], .status-bar[data-save-phase="RELOADING"] { color: var(--wb-warning); }
 .status-check { display: grid; place-items: center; width: 15px; height: 15px; border: 1px solid var(--wb-success); border-radius: 50%; font-size: 9px; font-weight: 800; }
+.problem-status .status-check { border-color: currentColor; }
 .inspector-backdrop { display: none; }
 
 @media (max-width: 1279px) {
@@ -455,6 +474,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .activity-button svg { width: 17px; height: 17px; }
   .primary-sidebar { display: none; }
   .entity-title-row { min-height: 58px; padding-inline: 14px; }
+  .authoring-notice { align-items: flex-start; flex-direction: column; gap: 7px; padding: 9px 14px; }
   .breadcrumb { display: none; }
   .context-tabs { overflow-x: auto; padding-inline: 5px; }
   .mobile-automation-switcher { display: flex; align-items: center; gap: 8px; padding: 7px 14px; border-top: 1px solid var(--wb-border); color: var(--wb-muted); font-size: 10px; }

@@ -57,4 +57,16 @@ describe('WorkbenchShell', () => {
     expect(markup).toContain('Plugin-owned main')
     expect(markup).not.toContain('aria-label="Inspector"')
   })
+
+  it('lets a Page extension own panel and status regions without duplicate shell chrome', () => {
+    const automationPage = corePageForActivity('automations')
+    const markup = renderToStaticMarkup(<WorkbenchShell standalonePages={[{
+      ...automationPage,
+      component: PluginMain,
+      chrome: { component: PluginChrome, ownsPanel: true, ownsStatus: true },
+    }]} />)
+
+    expect(markup).not.toContain('aria-label="Bottom panel"')
+    expect(markup).not.toContain('>Saved<')
+  })
 })

@@ -1,5 +1,6 @@
-import { createContext, useContext, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useMemo, useState } from 'react'
 import { AutomationEditor, type AutomationEditorProps } from './AutomationEditor.js'
+import { AutomationPanel, AutomationStatusBar } from './AutomationPanel.js'
 import { AutomationSidebar } from './AutomationSidebar.js'
 import { projectAutomationSteps } from './automation-projection.js'
 import {
@@ -11,6 +12,7 @@ import {
 } from './contracts.js'
 import { Inspector } from './Inspector.js'
 import type { WorkbenchPageChromeProps } from './types.js'
+import { useAutomationDraftDocument } from './useAutomationDraftDocument.js'
 import { useConsoleQuery, type ConsoleQueryState } from './useConsoleQuery.js'
 
 const emptyQueryInput: Record<string, never> = {}
@@ -59,9 +61,33 @@ export function AutomationPageChrome({
     return { status: 'LOADING' }
   }, [automationId, consoleClient, indexState, queriedDetailState])
   const detail = detailState?.status === 'READY' && detailState.data?.automation.id === automationId
-    ? detailState.data
+    ? detailState.data ?? undefined
     : undefined
-  const steps = useMemo(() => detail ? projectAutomationSteps(detail.draft.source) : [], [detail])
+  const authoring = useAutomationDraftDocument({
+    ...(consoleClient ? { client: consoleClient } : {}),
+    ...(automationId ? { automationId } : {}),
+    ...(detail ? { detail } : {}),
+    reloadDetail,
+  })
+  const effectiveDetail = useMemo<WorkbenchAutomationDetail | undefined>(() => {
+    if (!detail || authoring.document?.automationId !== detail.automation.id) return detail
+    const document = authoring.document
+    return {
+      ...detail,
+      draft: {
+        source: document.source,
+        presentation: document.presentation,
+        version: document.version,
+        updatedAt: document.updatedAt,
+        ...(document.baseRevisionId ? { baseRevisionId: document.baseRevisionId } : {}),
+      },
+    }
+  }, [authoring.document, detail])
+  const effectiveDetailState = useMemo<ConsoleQueryState<WorkbenchAutomationDetail | null> | undefined>(() => {
+    if (detailState?.status !== 'READY' || !detailState.data || !effectiveDetail) return detailState
+    return { status: 'READY', data: effectiveDetail }
+  }, [detailState, effectiveDetail])
+  const steps = useMemo(() => effectiveDetail ? projectAutomationSteps(effectiveDetail.draft.source) : [], [effectiveDetail])
   const activeStepId = consoleClient
     ? (steps.some(step => step.id === requestedStepId) ? requestedStepId : steps[0]?.id ?? '')
     : requestedStepId
@@ -69,9 +95,26 @@ export function AutomationPageChrome({
     ...(automationId ? { automationId } : {}),
     activeStepId,
     activeTab,
-    ...(detailState ? { detailState } : {}),
+    ...(effectiveDetailState ? { detailState: effectiveDetailState } : {}),
     ...(consoleClient ? { steps } : {}),
     ...(consoleClient ? { automations: liveItems, onAutomationChange: setRequestedAutomationId } : {}),
+    ...(consoleClient ? {
+      authoring: {
+        savePhase: authoring.savePhase,
+        saveMessage: authoring.saveMessage,
+        canEdit: authoring.canEdit,
+        canPublish: authoring.canPublish,
+        publishPending: authoring.publishPending,
+        problemCount: authoring.problems.length,
+        ...(authoring.conflict ? { conflict: authoring.conflict } : {}),
+        ...(authoring.saveError ? { saveError: authoring.saveError } : {}),
+        ...(authoring.publishError ? { publishError: authoring.publishError } : {}),
+      },
+      onAddWaitStep: authoring.addWaitStep,
+      onPublish: authoring.publish,
+      onReloadDraft: authoring.reload,
+      onRetrySave: authoring.retrySave,
+    } : {}),
     onOpenInspector: () => onInspectorOpenChange(true),
     onStepChange: id => {
       setRequestedStepId(id)
@@ -79,7 +122,24 @@ export function AutomationPageChrome({
     },
     onTabChange: setActiveTab,
     onReload: reloadDetail,
-  }), [activeStepId, activeTab, automationId, consoleClient, detailState, liveItems, onInspectorOpenChange, reloadDetail, steps])
+  }), [
+    activeStepId,
+    activeTab,
+    automationId,
+    authoring,
+    consoleClient,
+    effectiveDetailState,
+    liveItems,
+    onInspectorOpenChange,
+    reloadDetail,
+    steps,
+  ])
+  const selectProblem = useCallback((nodeId: string) => {
+    const step = steps.find(item => item.sourceId === nodeId)
+    if (!step) return
+    setRequestedStepId(step.id)
+    onInspectorOpenChange(true)
+  }, [onInspectorOpenChange, steps])
   const PageComponent = page.component
 
   return (
@@ -96,6 +156,17 @@ export function AutomationPageChrome({
         open={inspectorOpen}
         {...(consoleClient ? { steps } : {})}
         onClose={() => onInspectorOpenChange(false)}
+      />
+      <AutomationPanel
+        problems={authoring.problems}
+        preview={!consoleClient}
+        onProblemSelect={selectProblem}
+      />
+      <AutomationStatusBar
+        message={authoring.saveMessage}
+        phase={authoring.savePhase}
+        problemCount={authoring.problems.length}
+        preview={!consoleClient}
       />
     </AutomationWorkspaceContext.Provider>
   )

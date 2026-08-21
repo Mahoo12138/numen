@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 import { AutomationEditor } from '../src/AutomationEditor.js'
+import { AutomationPanel, AutomationStatusBar } from '../src/AutomationPanel.js'
 import { AutomationSidebar } from '../src/AutomationSidebar.js'
 import { projectAutomationSteps } from '../src/automation-projection.js'
 import type { WorkbenchAutomationDetail, WorkbenchAutomationsIndex } from '../src/contracts.js'
@@ -86,5 +87,89 @@ describe('live Automation workspace projections', () => {
     expect(editorMarkup).toContain('Pause')
     expect(editorMarkup).toContain('aria-label="Select automation"')
     expect(editor('Revisions')).toContain('abc123')
+  })
+
+  it('renders authoring actions and separates published from active state', () => {
+    const inactiveDetail: WorkbenchAutomationDetail = {
+      ...detail,
+      automation: {
+        id: detail.automation.id,
+        name: detail.automation.name,
+        enabled: detail.automation.enabled,
+        activationGeneration: detail.automation.activationGeneration,
+        createdAt: detail.automation.createdAt,
+        updatedAt: detail.automation.updatedAt,
+      },
+      revisions: detail.revisions.map(revision => ({ ...revision, active: false })),
+    }
+    const steps = projectAutomationSteps(inactiveDetail.draft.source)
+    const markup = renderToStaticMarkup(<AutomationEditor
+      activeTab="Editor"
+      activeStepId={steps[0]!.id}
+      automationId={inactiveDetail.automation.id}
+      authoring={{
+        savePhase: 'CLEAN',
+        saveMessage: 'Saved',
+        canEdit: true,
+        canPublish: true,
+        publishPending: false,
+        problemCount: 0,
+      }}
+      detailState={{ status: 'READY', data: inactiveDetail }}
+      onAddWaitStep={vi.fn()}
+      onOpenInspector={vi.fn()}
+      onPublish={vi.fn()}
+      onStepChange={vi.fn()}
+      onTabChange={vi.fn()}
+      steps={steps}
+    />)
+
+    expect(markup).toContain('Published r1')
+    expect(markup).toContain('Not active')
+    expect(markup).toContain('>Publish<')
+    expect(markup).toContain('Add wait step')
+  })
+
+  it('renders conflict recovery and publish diagnostics in Page-owned regions', () => {
+    const editorMarkup = renderToStaticMarkup(<AutomationEditor
+      activeTab="Editor"
+      activeStepId=""
+      automationId={detail.automation.id}
+      authoring={{
+        savePhase: 'CONFLICT',
+        saveMessage: 'Draft conflict',
+        canEdit: false,
+        canPublish: false,
+        publishPending: false,
+        problemCount: 1,
+        conflict: { expectedVersion: 3, actualVersion: 4 },
+      }}
+      detailState={{ status: 'READY', data: detail }}
+      onOpenInspector={vi.fn()}
+      onReloadDraft={vi.fn()}
+      onStepChange={vi.fn()}
+      onTabChange={vi.fn()}
+      steps={[]}
+    />)
+    const panelMarkup = renderToStaticMarkup(<AutomationPanel
+      onProblemSelect={vi.fn()}
+      problems={[{
+        severity: 'error',
+        code: 'WAIT_SOURCE_INVALID',
+        message: 'Wait duration must be positive.',
+        source: { nodeId: 'wait-1', fieldPath: 'durationMs' },
+      }]}
+    />)
+    const statusMarkup = renderToStaticMarkup(<AutomationStatusBar
+      message="Draft conflict"
+      phase="CONFLICT"
+      problemCount={1}
+    />)
+
+    expect(editorMarkup).toContain('Draft changed elsewhere.')
+    expect(editorMarkup).toContain('Reload server Draft')
+    expect(panelMarkup).toContain('problem-count')
+    expect(statusMarkup).toContain('1 publish problem')
+    expect(statusMarkup).toContain('Draft conflict')
   })
 })

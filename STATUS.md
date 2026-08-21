@@ -111,6 +111,7 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Live Automation workspace with Source-derived Canvas, Revision projection, and mobile selection
 - [x] Caller-safe Console Procedure errors with constrained 4xx status, code, and structured details
 - [x] Typed Automation Draft save and publish Actions with optimistic conflict and compile diagnostics
+- [x] Page-owned local Automation Draft document with debounced autosave, conflict recovery, publish controls, and clickable Problems diagnostics
 
 ## Milestone 3 — Completed
 
@@ -152,10 +153,11 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Live Automation Sidebar/detail binding with responsive Page-owned selection
 - [x] Stable public Procedure error transport for domain Action conflicts and validation failures
 - [x] Optional Automation authoring Provider for full-document Draft save and immutable Revision publish
+- [x] Automation editor local Draft projection, autosave/publish lifecycle, conflict protection, and Problems/Status regions
 
 ## Next
 
-1. Bind Automation editor autosave/publish/conflict/Problems UI to the authoring Actions
+1. Expand structured Automation Source editing beyond the first Add Wait operation, including undo/redo history
 2. Connection enable/disable Actions with optimistic generation checks
 3. Run detail Query with timeline and execution diagnostics
 
@@ -166,13 +168,14 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - **Automation projection boundary — pass:** Canvas steps and Inspector selection are pure, read-only projections of the current Draft `AutomationSource`; Revision metadata is rendered separately as immutable history. Desktop Sidebar and mobile selector remain Page-owned views over the same typed index, with no parallel client truth or Automation coupling in the generic Shell.
 - **Console error seam — pass:** Procedure Providers may deliberately expose constrained 4xx failures through one transport-neutral error interface; the Console HTTP Adapter serializes only that public code/message/details contract, while unexpected implementation errors remain private and become generic 500 responses.
 - **Automation authoring seam — pass:** Workbench owns the stable save/publish Action definitions and shared schemas, while the optional authoring Provider Adapter owns AutomationService calls and public error mapping. Save accepts a complete invalid/incomplete Draft document with optimistic versioning; Publish performs authoritative compilation into an immutable, inactive Revision and remains separate from Activate.
+- **Local Draft document seam — pass:** the Automation Page owns one temporary full-document editing state and derives Canvas, Inspector, Problems, and status projections from it. Background Query invalidations cannot replace dirty, saving, or conflicted local Source; optimistic saves use stable snapshots, Publish diagnostics retain server source references, and the generic Shell only exposes optional Page-owned panel/status slots.
 
 ## Verification Baseline
 
 ```text
 Typecheck: passing
 Build: passing
-Tests: 34 files, 124 tests passing
+Tests: 35 files, 131 tests passing
 CLI config validate: passing
 CLI doctor: passing
 SQLite schema migration: v10
@@ -194,7 +197,7 @@ pnpm dev
 - The current Scheduler executes the Core IR subset emitted by the compiler, including retry, timeout, cancellation, recovery, and structured concurrency.
 - Parallel, first-success Race, and bounded ForEach use durable Execution scopes with interruptible concurrent dispatch; Try/Finally control flow remains planned work.
 - Typed Console transports, browser sessions, Browser Cordis clients, frontend extension registries, atomic Entry generations, authenticated revision-fenced asset delivery, and Browser Entry reconciliation/rollback are operational. Generated bootstrap tokens and sessions rotate on restart; the CLI prints a fragment-only Workbench launch URL only with explicit `--print-launch-url` authorization.
-- The responsive Workbench shell, six core Page entries, stable browser Route/Page reconciliation, a secret-free production bootstrap, and authenticated core Entry loading are operational through the default Runtime. Home, Automations, the keyset-paginated Runs index, and the desired/runtime-separated Connections index display live data and refresh through coalesced typed invalidations without replacing server truth in the browser. Backend Automation Draft save/publish Actions are operational; editor controls remain presentational until the local document, autosave, conflict, and Problems interaction layer is bound to them.
+- The responsive Workbench shell, six core Page entries, stable browser Route/Page reconciliation, a secret-free production bootstrap, and authenticated core Entry loading are operational through the default Runtime. Home, Automations, the keyset-paginated Runs index, and the desired/runtime-separated Connections index display live data and refresh through coalesced typed invalidations without replacing server truth in the browser. Automation authoring now supports the first structured Add Wait edit, debounced full-document autosave, explicit conflict recovery, immutable Revision publish, and source-linked Problems; general node insertion/configuration, undo/redo, compare/save-copy conflict options, and activation controls remain planned.
 - Manual Runs and event Trigger subscriptions are supported. State Trigger transition detection, filtering, debounce, and throttle remain planned work.
 - Connection desired state, Adapter contracts, generation-fenced Runtime recreation, and Credential snapshots are operational; automatic reconnect policy remains planned work.
 - Credential payloads use authenticated encryption with environment-provided keys; key-ring migration and external vault providers remain planned work.

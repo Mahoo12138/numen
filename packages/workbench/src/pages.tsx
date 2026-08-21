@@ -343,7 +343,7 @@ export const coreWorkbenchPageDefinitions: ReadonlyArray<WorkbenchPageDefinition
     path: '/automations',
     title: 'Automations',
     component: AutomationWorkspacePage,
-    chrome: { component: AutomationPageChrome, hasInspector: true },
+    chrome: { component: AutomationPageChrome, hasInspector: true, ownsPanel: true, ownsStatus: true },
   },
   { ...coreWorkbenchRoutes.runs, path: '/runs', title: 'Runs', component: RunsPage },
   { ...coreWorkbenchRoutes.connections, path: '/connections', title: 'Connections', component: ConnectionsPage },

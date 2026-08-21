@@ -31,6 +31,8 @@ export type WorkbenchPageChromeComponent = ComponentType<WorkbenchPageChromeProp
 export interface WorkbenchPageChromeDefinition {
   component: WorkbenchPageChromeComponent
   hasInspector?: boolean
+  ownsPanel?: boolean
+  ownsStatus?: boolean
 }
 
 export interface WorkbenchPageDefinition extends FrontendPage<WorkbenchPageComponent> {

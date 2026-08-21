@@ -86,6 +86,8 @@ export function WorkbenchShell({ router, consoleClient, standalonePages = [] }: 
   ) as WorkbenchPageDefinition | undefined
   const PageChrome = activePage?.chrome?.component ?? DefaultPageChrome
   const hasInspector = !!activePage?.chrome?.hasInspector
+  const ownsPanel = !!activePage?.chrome?.ownsPanel
+  const ownsStatus = !!activePage?.chrome?.ownsStatus
   const onActivityChange = useCallback((nextActivityId: CoreWorkbenchActivityId) => {
     if (router) {
       router.navigate(coreWorkbenchRoutes[nextActivityId])
@@ -123,7 +125,7 @@ export function WorkbenchShell({ router, consoleClient, standalonePages = [] }: 
       ) : (
         <NotFoundPageChrome pathname={routeState.pathname} />
       )}
-      <section className="bottom-panel" data-open={panelOpen} aria-label="Bottom panel">
+      {ownsPanel ? null : <section className="bottom-panel" data-open={panelOpen} aria-label="Bottom panel">
         <div className="panel-tablist" role="tablist">
           {panelTabs.map(tab => (
             <button
@@ -143,11 +145,11 @@ export function WorkbenchShell({ router, consoleClient, standalonePages = [] }: 
           >⌃</button>
         </div>
         {panelOpen ? <div className="panel-content">{panelTab} output will appear here.</div> : null}
-      </section>
-      <footer className="status-bar">
+      </section>}
+      {ownsStatus ? null : <footer className="status-bar">
         <span className="ready-status"><span className="status-check">✓</span>Ready</span>
         <span><Save size={14} />Saved</span>
-      </footer>
+      </footer>}
       <button
         aria-label="Close inspector overlay"
         className="inspector-backdrop"

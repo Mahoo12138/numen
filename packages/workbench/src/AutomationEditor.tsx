@@ -14,6 +14,7 @@ import {
 import type { WorkbenchAutomationDetail, WorkbenchAutomationIndexItem } from './contracts.js'
 import { automations, automationSteps } from './model.js'
 import type { AutomationStep } from './model.js'
+import type { AutomationDraftSavePhase } from './useAutomationDraftDocument.js'
 import type { ConsoleQueryState } from './useConsoleQuery.js'
 
 const tabs = ['Editor', 'Runs', 'Revisions', 'State', 'Settings'] as const
@@ -25,10 +26,25 @@ export interface AutomationEditorProps {
   activeTab: string
   detailState?: ConsoleQueryState<WorkbenchAutomationDetail | null>
   steps?: AutomationStep[]
+  authoring?: {
+    savePhase: AutomationDraftSavePhase
+    saveMessage: string
+    canEdit: boolean
+    canPublish: boolean
+    publishPending: boolean
+    problemCount: number
+    conflict?: { expectedVersion: number; actualVersion: number }
+    saveError?: string
+    publishError?: string
+  }
   onStepChange(id: string): void
   onTabChange(tab: string): void
   onOpenInspector(): void
   onAutomationChange?(id: string): void
+  onAddWaitStep?(): void
+  onPublish?(): void
+  onReloadDraft?(): void
+  onRetrySave?(): void
   onReload?(): void
 }
 
@@ -43,10 +59,15 @@ export function AutomationEditor({
   activeTab,
   detailState,
   steps: projectedSteps,
+  authoring,
   onStepChange,
   onTabChange,
   onOpenInspector,
   onAutomationChange,
+  onAddWaitStep,
+  onPublish,
+  onReloadDraft,
+  onRetrySave,
   onReload,
 }: AutomationEditorProps) {
   const previewAutomation = automations.find(item => item.id === automationId) ?? automations[0]!
@@ -57,6 +78,8 @@ export function AutomationEditor({
     : undefined
   const automationName = detail?.automation.name ?? (live ? 'Automation' : previewAutomation.label)
   const steps = detail ? (projectedSteps ?? []) : automationSteps
+  const latestRevision = detail?.revisions[0]
+  const activeRevision = detail?.revisions.find(item => item.active)
   return (
     <main className="main-workbench">
       <header className="entity-header">
@@ -67,11 +90,22 @@ export function AutomationEditor({
               <span className="automation-badges">
                 <em data-tone={detail.automation.enabled ? 'enabled' : 'disabled'}>{detail.automation.enabled ? 'Enabled' : 'Disabled'}</em>
                 <em>Draft v{detail.draft.version}</em>
-                <em>{detail.automation.activeRevisionId ? `Published r${detail.revisions.find(item => item.active)?.number ?? '?'}` : 'Unpublished'}</em>
+                <em>{latestRevision ? `Published r${latestRevision.number}` : 'No revisions'}</em>
+                <em>{activeRevision ? `Active r${activeRevision.number}` : 'Not active'}</em>
               </span>
             ) : null}</div>
           </div>
-          <button className="mobile-inspector-button" onClick={onOpenInspector} type="button">Inspector</button>
+          <div className="entity-title-actions">
+            {authoring && onPublish ? (
+              <button
+                className="publish-button"
+                disabled={!authoring.canPublish}
+                onClick={onPublish}
+                type="button"
+              >{authoring.publishPending ? 'Publishing…' : 'Publish'}</button>
+            ) : null}
+            <button className="mobile-inspector-button" onClick={onOpenInspector} type="button">Inspector</button>
+          </div>
         </div>
         {liveAutomations?.length && automationId && onAutomationChange ? (
           <label className="mobile-automation-switcher">
@@ -95,6 +129,21 @@ export function AutomationEditor({
           ))}
         </nav>
       </header>
+      {authoring?.conflict ? (
+        <section className="authoring-notice" data-tone="conflict" role="alert">
+          <span><strong>Draft changed elsewhere.</strong> Local version {authoring.conflict.expectedVersion} cannot overwrite server version {authoring.conflict.actualVersion}.</span>
+          {onReloadDraft ? <button onClick={onReloadDraft} type="button">Reload server Draft</button> : null}
+        </section>
+      ) : authoring?.saveError ? (
+        <section className="authoring-notice" data-tone="error" role="alert">
+          <span><strong>Autosave failed.</strong> {authoring.saveError}</span>
+          {onRetrySave ? <button onClick={onRetrySave} type="button">Retry autosave</button> : null}
+        </section>
+      ) : authoring?.publishError ? (
+        <section className="authoring-notice" data-tone="error" role="alert">
+          <span><strong>Publish failed.</strong> {authoring.publishError}</span>
+        </section>
+      ) : null}
       {live && (!automationId || detailState?.status === 'LOADING' || (detailState?.status === 'READY' && detailState.data && !detail)) ? (
         <AutomationState title="Loading automation" message="Reading the current Draft Source and Revision history…" busy />
       ) : live && detailState?.status === 'ERROR' ? (
@@ -158,7 +207,12 @@ export function AutomationEditor({
                 )
               })}
               {!steps.length ? <p className="automation-flow-empty">This Draft has no triggers or flow steps yet.</p> : null}
-              <button className="add-step-button" type="button"><Plus size={15} /> Add step</button>
+              <button
+                className="add-step-button"
+                disabled={authoring ? !authoring.canEdit : false}
+                onClick={onAddWaitStep}
+                type="button"
+              ><Plus size={15} /> {authoring ? 'Add wait step' : 'Add step'}</button>
             </div>
           </section>
         </>
