@@ -8,6 +8,7 @@ import {
   workbenchAutomationsIndexQueryRef,
   type WorkbenchAutomationDetail,
   type WorkbenchAutomationDetailQueryInput,
+  type WorkbenchAutomationIndexItem,
   type WorkbenchAutomationsIndex,
 } from './contracts.js'
 
@@ -77,16 +78,22 @@ export const workbenchAutomationDetailQuery: ConsoleQueryDefinition<
   output: z.union([automationDetail, z.const(null)]).required(),
 }
 
+export function summarizeAutomationIndex(
+  items: WorkbenchAutomationIndexItem[],
+): WorkbenchAutomationsIndex['summary'] {
+  return {
+    total: items.length,
+    enabled: items.filter(item => item.enabled).length,
+    published: items.filter(item => item.revisionCount > 0).length,
+  }
+}
+
 export function workbenchAutomationsProviderPlugin(ctx: Context): void {
   ctx.console.provideQuery(ctx, workbenchAutomationsIndexQueryRef, {
     query(): WorkbenchAutomationsIndex {
       const items = ctx.automations.listSummaries()
       return {
-        summary: {
-          total: items.length,
-          enabled: items.filter(item => item.enabled).length,
-          published: items.filter(item => !!item.activeRevisionId).length,
-        },
+        summary: summarizeAutomationIndex(items),
         items,
       }
     },
