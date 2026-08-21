@@ -1,9 +1,10 @@
 import { ChevronDown, X } from 'lucide-react'
-import { automationSteps } from './model.js'
+import { automationSteps, type AutomationStep } from './model.js'
 
 export interface InspectorProps {
   activeStepId: string
   open: boolean
+  steps?: AutomationStep[]
   onClose(): void
 }
 
@@ -22,16 +23,19 @@ function InspectorGroup({ title, children, open = true }: {
   )
 }
 
-export function Inspector({ activeStepId, open, onClose }: InspectorProps) {
-  const step = automationSteps.find(item => item.id === activeStepId) ?? automationSteps.at(-1)!
-  const isNotification = step.id === 'notification'
+export function Inspector({ activeStepId, open, steps, onClose }: InspectorProps) {
+  const projectedSteps = steps ?? automationSteps
+  const step = projectedSteps.find(item => item.id === activeStepId) ?? projectedSteps[0]
+  const isNotification = !steps && step?.id === 'notification'
   return (
     <aside className="inspector" data-open={open} aria-label="Inspector">
       <header className="inspector-header">
-        <div><span>STEP {automationSteps.indexOf(step) + 1}</span><h2>{step.label}</h2></div>
+        <div><span>{step ? `STEP ${projectedSteps.indexOf(step) + 1}` : 'NO SELECTION'}</span><h2>{step?.label ?? 'Inspector'}</h2></div>
         <button aria-label="Close inspector" className="icon-button inspector-close" onClick={onClose} type="button"><X size={17} /></button>
       </header>
-      {isNotification ? (
+      {!step ? (
+        <div className="inspector-empty">Select a projected Source step to inspect its configuration.</div>
+      ) : isNotification ? (
         <>
           <InspectorGroup title="Connection">
             <label>Provider<select defaultValue="Slack"><option>Slack</option></select></label>
@@ -56,8 +60,10 @@ export function Inspector({ activeStepId, open, onClose }: InspectorProps) {
       ) : (
         <InspectorGroup title="Configuration">
           <p className="inspector-summary">{step.summary}</p>
-          <label>Name<input defaultValue={step.label} /></label>
-          <label>Status<select defaultValue="Enabled"><option>Enabled</option></select></label>
+          <dl className="inspector-source-fields">
+            <div><dt>Source ID</dt><dd>{step.sourceId ?? step.id}</dd></div>
+            <div><dt>Kind</dt><dd>{step.kind ?? 'step'}</dd></div>
+          </dl>
         </InspectorGroup>
       )}
     </aside>

@@ -1,4 +1,5 @@
 export * from './contracts.js'
+export * from './automation-projection.js'
 export * from './pages.js'
 export * from './routes.js'
 export * from './types.js'

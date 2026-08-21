@@ -11,17 +11,25 @@ import {
   ZoomIn,
   ZoomOut,
 } from 'lucide-react'
+import type { WorkbenchAutomationDetail, WorkbenchAutomationIndexItem } from './contracts.js'
 import { automations, automationSteps } from './model.js'
+import type { AutomationStep } from './model.js'
+import type { ConsoleQueryState } from './useConsoleQuery.js'
 
 const tabs = ['Editor', 'Runs', 'Revisions', 'State', 'Settings'] as const
 
 export interface AutomationEditorProps {
-  automationId: string
+  automationId?: string
+  automations?: WorkbenchAutomationIndexItem[]
   activeStepId: string
   activeTab: string
+  detailState?: ConsoleQueryState<WorkbenchAutomationDetail | null>
+  steps?: AutomationStep[]
   onStepChange(id: string): void
   onTabChange(tab: string): void
   onOpenInspector(): void
+  onAutomationChange?(id: string): void
+  onReload?(): void
 }
 
 function ToolbarButton({ label, children }: { label: string; children: React.ReactNode }) {
@@ -30,23 +38,49 @@ function ToolbarButton({ label, children }: { label: string; children: React.Rea
 
 export function AutomationEditor({
   automationId,
+  automations: liveAutomations,
   activeStepId,
   activeTab,
+  detailState,
+  steps: projectedSteps,
   onStepChange,
   onTabChange,
   onOpenInspector,
+  onAutomationChange,
+  onReload,
 }: AutomationEditorProps) {
-  const automation = automations.find(item => item.id === automationId) ?? automations[0]!
+  const previewAutomation = automations.find(item => item.id === automationId) ?? automations[0]!
+  const live = !!detailState && detailState.status !== 'DISABLED'
+  const detail = detailState?.status === 'READY'
+    && detailState.data?.automation.id === automationId
+    ? detailState.data
+    : undefined
+  const automationName = detail?.automation.name ?? (live ? 'Automation' : previewAutomation.label)
+  const steps = detail ? (projectedSteps ?? []) : automationSteps
   return (
     <main className="main-workbench">
       <header className="entity-header">
         <div className="entity-title-row">
           <div>
-            <span className="breadcrumb">Automations / {automation.label}</span>
-            <h1>{automation.label}</h1>
+            <span className="breadcrumb">Automations / {automationName}</span>
+            <div className="automation-title"><h1>{automationName}</h1>{detail ? (
+              <span className="automation-badges">
+                <em data-tone={detail.automation.enabled ? 'enabled' : 'disabled'}>{detail.automation.enabled ? 'Enabled' : 'Disabled'}</em>
+                <em>Draft v{detail.draft.version}</em>
+                <em>{detail.automation.activeRevisionId ? `Published r${detail.revisions.find(item => item.active)?.number ?? '?'}` : 'Unpublished'}</em>
+              </span>
+            ) : null}</div>
           </div>
           <button className="mobile-inspector-button" onClick={onOpenInspector} type="button">Inspector</button>
         </div>
+        {liveAutomations?.length && automationId && onAutomationChange ? (
+          <label className="mobile-automation-switcher">
+            <span>Automation</span>
+            <select aria-label="Select automation" onChange={event => onAutomationChange(event.target.value)} value={automationId}>
+              {liveAutomations.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+            </select>
+          </label>
+        ) : null}
         <nav className="context-tabs" aria-label="Automation sections">
           {tabs.map(tab => (
             <button
@@ -61,7 +95,19 @@ export function AutomationEditor({
           ))}
         </nav>
       </header>
-      {activeTab === 'Editor' ? (
+      {live && (!automationId || detailState?.status === 'LOADING' || (detailState?.status === 'READY' && detailState.data && !detail)) ? (
+        <AutomationState title="Loading automation" message="Reading the current Draft Source and Revision history…" busy />
+      ) : live && detailState?.status === 'ERROR' ? (
+        <AutomationState
+          title="Automation unavailable"
+          message={detailState.message}
+          action="Try again"
+          {...(onReload ? { onAction: onReload } : {})}
+          tone="error"
+        />
+      ) : live && detailState?.status === 'READY' && !detailState.data ? (
+        <AutomationState title="Automation not found" message="The selected Automation no longer exists. Choose another item from the Sidebar." />
+      ) : activeTab === 'Editor' ? (
         <>
           <div className="editor-toolbar" aria-label="Editor toolbar">
             <div className="toolbar-group">
@@ -83,13 +129,13 @@ export function AutomationEditor({
             </div>
             <button className="layout-control" type="button">Layout <span>⌄</span></button>
           </div>
-          <section className="automation-canvas" aria-label={`${automation.label} automation flow`}>
+          <section className="automation-canvas" aria-label={`${automationName} automation flow`}>
             <div className="step-flow">
-              {automationSteps.map((step, index) => {
+              {steps.map((step, index) => {
                 const Icon = step.icon
                 const selected = step.id === activeStepId
                 return (
-                  <div className="step-unit" key={step.id}>
+                  <div className="step-unit" data-depth={Math.min(step.depth ?? 0, 4)} key={step.id}>
                     <div className="step-index" aria-hidden="true">{index + 1}</div>
                     <button
                       aria-pressed={selected}
@@ -105,16 +151,32 @@ export function AutomationEditor({
                       </span>
                       <MoreVertical aria-hidden="true" className="step-menu" size={18} />
                     </button>
-                    {index < automationSteps.length - 1 ? (
+                    {index < steps.length - 1 ? (
                       <div className="step-connector" aria-hidden="true"><span><Plus size={13} /></span></div>
                     ) : null}
                   </div>
                 )
               })}
+              {!steps.length ? <p className="automation-flow-empty">This Draft has no triggers or flow steps yet.</p> : null}
               <button className="add-step-button" type="button"><Plus size={15} /> Add step</button>
             </div>
           </section>
         </>
+      ) : activeTab === 'Revisions' && detail ? (
+        <section className="automation-revisions">
+          <div className="runs-section-heading"><h2>Immutable revisions</h2><span>Newest first</span></div>
+          {detail.revisions.length ? (
+            <div className="revision-list">
+              {detail.revisions.map(revision => (
+                <article data-active={revision.active} key={revision.id}>
+                  <div><strong>Revision {revision.number}</strong>{revision.active ? <em>Active</em> : null}</div>
+                  <small>{revision.contentHash}</small>
+                  <time dateTime={revision.createdAt}>{revision.createdAt}</time>
+                </article>
+              ))}
+            </div>
+          ) : <p className="automation-flow-empty">No immutable Revision has been published from this Draft.</p>}
+        </section>
       ) : (
         <section className="secondary-view">
           <h2>{activeTab}</h2>
@@ -122,5 +184,22 @@ export function AutomationEditor({
         </section>
       )}
     </main>
+  )
+}
+
+function AutomationState({ title, message, busy = false, tone = 'default', action, onAction }: {
+  title: string
+  message: string
+  busy?: boolean
+  tone?: 'default' | 'error'
+  action?: string
+  onAction?(): void
+}) {
+  return (
+    <section aria-busy={busy} className="automation-state" data-tone={tone} role={tone === 'error' ? 'alert' : 'status'}>
+      <strong>{title}</strong>
+      <p>{message}</p>
+      {action ? <button className="secondary-button" onClick={onAction} type="button">{action}</button> : null}
+    </section>
   )
 }

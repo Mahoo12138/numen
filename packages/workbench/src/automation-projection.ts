@@ -1,0 +1,123 @@
+import type { AutomationSource, ControlSource, ValueExpr } from '@numen/core'
+import { Boxes, Clock3, GitBranch, Network, Play, Radio, Repeat2, Zap } from 'lucide-react'
+import type { AutomationStep } from './model.js'
+
+function humanize(identifier: string, fallback: string): string {
+  const localName = identifier.split(/[.:/]/).at(-1) ?? identifier
+  const words = localName.replace(/[-_]+/g, ' ').trim()
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : fallback
+}
+
+function describeExpression(expression: ValueExpr): string {
+  switch (expression.type) {
+    case 'literal': {
+      const value = JSON.stringify(expression.value)
+      return value.length > 44 ? `${value.slice(0, 41)}…` : value
+    }
+    case 'ref': return expression.path
+    case 'template': return 'Template expression'
+    case 'array': return `${expression.items.length} item array`
+    case 'object': return `${Object.keys(expression.entries).length} field object`
+    case 'call': return `${expression.function}(…)`
+  }
+}
+
+function step(
+  sourceId: string,
+  kind: string,
+  label: string,
+  summary: string,
+  icon: AutomationStep['icon'],
+  depth: number,
+): AutomationStep {
+  return {
+    id: `source:${sourceId}`,
+    sourceId,
+    kind,
+    label,
+    summary,
+    icon,
+    tone: kind === 'capability' ? 'accent' : 'neutral',
+    depth,
+  }
+}
+
+function projectControl(source: ControlSource, depth: number, output: AutomationStep[]): void {
+  switch (source.type) {
+    case 'block':
+      output.push(step(
+        source.id,
+        'block',
+        humanize(source.id, 'Block'),
+        `${source.steps.length} step${source.steps.length === 1 ? '' : 's'}`,
+        Boxes,
+        depth,
+      ))
+      for (const child of source.steps) projectControl(child, depth + 1, output)
+      break
+    case 'capability':
+      output.push(step(
+        source.id,
+        'capability',
+        humanize(source.id, 'Capability'),
+        `Capability · ${source.capability.id}@${source.capability.version}${source.connection ? ` · ${source.connection}` : ''}`,
+        Zap,
+        depth,
+      ))
+      break
+    case 'wait':
+      output.push(step(
+        source.id,
+        'wait',
+        humanize(source.id, 'Wait'),
+        `Wait · ${source.durationMs ? describeExpression(source.durationMs) : source.until ? `until ${describeExpression(source.until)}` : 'no duration configured'}`,
+        Clock3,
+        depth,
+      ))
+      break
+    case 'if':
+      output.push(step(source.id, 'if', humanize(source.id, 'Condition'), `If · ${describeExpression(source.condition)}`, GitBranch, depth))
+      projectControl(source.then, depth + 1, output)
+      if (source.else) projectControl(source.else, depth + 1, output)
+      break
+    case 'parallel':
+      output.push(step(source.id, 'parallel', humanize(source.id, 'Parallel'), `${source.branches.length} parallel branches`, Network, depth))
+      for (const branch of source.branches) projectControl(branch, depth + 1, output)
+      break
+    case 'race':
+      output.push(step(source.id, 'race', humanize(source.id, 'Race'), `${source.branches.length} first-success branches`, Play, depth))
+      for (const branch of source.branches) projectControl(branch, depth + 1, output)
+      break
+    case 'foreach':
+      output.push(step(
+        source.id,
+        'foreach',
+        humanize(source.id, 'For each'),
+        `For each · concurrency ${source.concurrency ?? 1} · ${describeExpression(source.items)}`,
+        Repeat2,
+        depth,
+      ))
+      projectControl(source.body, depth + 1, output)
+      break
+  }
+}
+
+/** A read-only Canvas projection. AutomationSource remains the sole authoring truth. */
+export function projectAutomationSteps(source: AutomationSource): AutomationStep[] {
+  const output = source.triggers.map<AutomationStep>(trigger => ({
+    id: `trigger:${trigger.id}`,
+    sourceId: trigger.id,
+    kind: 'trigger',
+    label: humanize(trigger.id, 'Trigger'),
+    summary: `Trigger · ${trigger.capability.id}@${trigger.capability.version}${trigger.connection ? ` · ${trigger.connection}` : ''}`,
+    icon: Radio,
+    tone: 'neutral',
+    depth: 0,
+  }))
+  if (source.flow.type === 'block') {
+    for (const child of source.flow.steps) projectControl(child, 0, output)
+  } else {
+    projectControl(source.flow, 0, output)
+  }
+  return output
+}

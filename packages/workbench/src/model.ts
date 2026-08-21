@@ -29,10 +29,13 @@ export interface AutomationItem {
 
 export interface AutomationStep {
   id: string
+  sourceId?: string
+  kind?: string
   label: string
   summary: string
   icon: LucideIcon
   tone: 'neutral' | 'accent'
+  depth?: number
 }
 
 export const activities: ActivityItem[] = [
