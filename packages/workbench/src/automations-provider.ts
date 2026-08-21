@@ -1,8 +1,13 @@
 import '@numen/automation'
 import type { ConsoleQueryDefinition } from '@numen/console'
-import type { AutomationSource, NumenValue } from '@numen/core'
 import type { Context } from 'cordis'
 import z from 'schemastery'
+import {
+  automationDraftSchema,
+  automationIdSchema,
+  automationIdentityFields,
+  automationRevisionSummarySchema,
+} from './automation-schemas.js'
 import {
   workbenchAutomationDetailQueryRef,
   workbenchAutomationsIndexQueryRef,
@@ -11,16 +16,6 @@ import {
   type WorkbenchAutomationIndexItem,
   type WorkbenchAutomationsIndex,
 } from './contracts.js'
-
-const automationIdentity = {
-  id: z.string().required(),
-  name: z.string().required(),
-  enabled: z.boolean().required(),
-  activeRevisionId: z.string(),
-  activationGeneration: z.number().required(),
-  createdAt: z.string().required(),
-  updatedAt: z.string().required(),
-}
 
 export const workbenchAutomationsIndexQuery: ConsoleQueryDefinition<
   Record<string, unknown>,
@@ -38,7 +33,7 @@ export const workbenchAutomationsIndexQuery: ConsoleQueryDefinition<
       published: z.number().required(),
     }).required(),
     items: z.array(z.object({
-      ...automationIdentity,
+      ...automationIdentityFields,
       draftVersion: z.number().required(),
       revisionCount: z.number().required(),
       latestRevisionNumber: z.number(),
@@ -47,21 +42,9 @@ export const workbenchAutomationsIndexQuery: ConsoleQueryDefinition<
 }
 
 const automationDetail = z.object({
-  automation: z.object(automationIdentity).required(),
-  draft: z.object({
-    baseRevisionId: z.string(),
-    source: z.any<AutomationSource>().required(),
-    presentation: z.any<Record<string, NumenValue>>().required(),
-    version: z.number().required(),
-    updatedAt: z.string().required(),
-  }).required(),
-  revisions: z.array(z.object({
-    id: z.string().required(),
-    number: z.number().required(),
-    contentHash: z.string().required(),
-    active: z.boolean().required(),
-    createdAt: z.string().required(),
-  })).required(),
+  automation: z.object(automationIdentityFields).required(),
+  draft: automationDraftSchema.required(),
+  revisions: z.array(automationRevisionSummarySchema).required(),
 })
 
 export const workbenchAutomationDetailQuery: ConsoleQueryDefinition<
@@ -73,7 +56,7 @@ export const workbenchAutomationDetailQuery: ConsoleQueryDefinition<
   title: 'Workbench Automation detail',
   description: 'The current mutable Draft Source and immutable Revision metadata for one Automation.',
   input: z.object({
-    automationId: z.string().pattern(/^auto_[a-f0-9]{32}$/).required(),
+    automationId: automationIdSchema,
   }),
   output: z.union([automationDetail, z.const(null)]).required(),
 }

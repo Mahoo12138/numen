@@ -171,28 +171,65 @@ export interface WorkbenchAutomationDetailQueryInput {
   automationId: string
 }
 
+export interface WorkbenchAutomationIdentity {
+  id: string
+  name: string
+  enabled: boolean
+  activeRevisionId?: string
+  activationGeneration: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface WorkbenchAutomationDraft {
+  baseRevisionId?: string
+  source: AutomationSource
+  presentation: Record<string, NumenValue>
+  version: number
+  updatedAt: string
+}
+
+export interface WorkbenchAutomationRevisionSummary {
+  id: string
+  number: number
+  contentHash: string
+  active: boolean
+  createdAt: string
+}
+
 export interface WorkbenchAutomationDetail {
-  automation: {
-    id: string
-    name: string
-    enabled: boolean
-    activeRevisionId?: string
-    activationGeneration: number
-    createdAt: string
-    updatedAt: string
-  }
-  draft: {
-    baseRevisionId?: string
-    source: AutomationSource
-    presentation: Record<string, NumenValue>
-    version: number
-    updatedAt: string
-  }
-  revisions: Array<{
-    id: string
-    number: number
-    contentHash: string
-    active: boolean
-    createdAt: string
-  }>
+  automation: WorkbenchAutomationIdentity
+  draft: WorkbenchAutomationDraft
+  revisions: WorkbenchAutomationRevisionSummary[]
+}
+
+export const workbenchSaveAutomationDraftActionRef = {
+  id: 'numen:automation-save-draft',
+  version: 1,
+} as const satisfies ConsoleProcedureRef
+
+export interface WorkbenchSaveAutomationDraftInput {
+  automationId: string
+  expectedVersion: number
+  source: AutomationSource
+  presentation: Record<string, NumenValue>
+}
+
+export interface WorkbenchSaveAutomationDraftResult {
+  draft: WorkbenchAutomationDraft
+}
+
+export const workbenchPublishAutomationDraftActionRef = {
+  id: 'numen:automation-publish-draft',
+  version: 1,
+} as const satisfies ConsoleProcedureRef
+
+export interface WorkbenchPublishAutomationDraftInput {
+  automationId: string
+  expectedVersion: number
+}
+
+export interface WorkbenchPublishAutomationDraftResult {
+  draft: WorkbenchAutomationDraft
+  revision: WorkbenchAutomationRevisionSummary
 }

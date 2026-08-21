@@ -16,6 +16,8 @@ import {
 import {
   workbenchAutomationDetailQueryRef,
   workbenchAutomationsIndexQueryRef,
+  workbenchPublishAutomationDraftActionRef,
+  workbenchSaveAutomationDraftActionRef,
   workbenchConnectionsIndexQueryRef,
   workbenchHomeOverviewQueryRef,
   workbenchInvalidationSubscriptionRef,
@@ -54,6 +56,8 @@ describe('Workbench Runtime plugin', () => {
     }])
     expect(root.console.get(workbenchAutomationDetailQueryRef)).toMatchObject({ providerAvailable: false })
     expect(root.console.get(workbenchAutomationsIndexQueryRef)).toMatchObject({ providerAvailable: false })
+    expect(root.console.get(workbenchPublishAutomationDraftActionRef)).toMatchObject({ providerAvailable: false })
+    expect(root.console.get(workbenchSaveAutomationDraftActionRef)).toMatchObject({ providerAvailable: false })
     expect(root.console.get(workbenchConnectionsIndexQueryRef)).toMatchObject({ providerAvailable: false })
     expect(root.console.get(workbenchHomeOverviewQueryRef)).toMatchObject({ providerAvailable: false })
     expect(root.console.get(workbenchInvalidationSubscriptionRef)).toMatchObject({ providerAvailable: false })
@@ -71,6 +75,8 @@ describe('Workbench Runtime plugin', () => {
     expect(root.consoleEntries.list()).toEqual([])
     expect(root.console.get(workbenchAutomationDetailQueryRef)).toBeUndefined()
     expect(root.console.get(workbenchAutomationsIndexQueryRef)).toBeUndefined()
+    expect(root.console.get(workbenchPublishAutomationDraftActionRef)).toBeUndefined()
+    expect(root.console.get(workbenchSaveAutomationDraftActionRef)).toBeUndefined()
     expect(root.console.get(workbenchConnectionsIndexQueryRef)).toBeUndefined()
     expect(root.console.get(workbenchHomeOverviewQueryRef)).toBeUndefined()
     expect(root.console.get(workbenchInvalidationSubscriptionRef)).toBeUndefined()

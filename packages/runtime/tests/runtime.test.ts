@@ -45,6 +45,7 @@ describe('Numen runtime', () => {
         consoleAuth: { token: 'runtime-console-token', ownerId: 'runtime-owner' },
         server: { host: '127.0.0.1', port: 0 },
         workbench: { root: workbenchRoot, entrySource: workbenchEntry },
+        workbenchAutomationAuthoring: {},
         workbenchAutomations: {},
         workbenchConnections: {},
         workbenchHome: {},
@@ -64,6 +65,14 @@ describe('Numen runtime', () => {
     expect(application.context.console.list()).toEqual([
       expect.objectContaining({
         definition: expect.objectContaining({ id: 'numen:automation-detail', version: 1, kind: 'query' }),
+        providerAvailable: true,
+      }),
+      expect.objectContaining({
+        definition: expect.objectContaining({ id: 'numen:automation-publish-draft', version: 1, kind: 'action' }),
+        providerAvailable: true,
+      }),
+      expect.objectContaining({
+        definition: expect.objectContaining({ id: 'numen:automation-save-draft', version: 1, kind: 'action' }),
         providerAvailable: true,
       }),
       expect.objectContaining({
@@ -190,7 +199,113 @@ describe('Numen runtime', () => {
     expect(workbenchDocument.status).toBe(200)
     expect(await workbenchDocument.text()).toContain('Runtime Workbench')
     const created = application.context.automations.create({ name: 'Runtime smoke test' })
-    const revision = application.context.automations.publishDraft(created.automation.id, 1)
+    const invalidSource = {
+      triggers: [],
+      flow: {
+        type: 'block' as const,
+        id: 'flow',
+        steps: [{ type: 'wait' as const, id: 'incomplete-wait' }],
+      },
+    }
+    const saveDraft = await fetch(`${baseUrl}/api/console/call`, {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer runtime-console-token',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        kind: 'action',
+        procedure: 'numen:automation-save-draft@1',
+        input: {
+          automationId: created.automation.id,
+          expectedVersion: 1,
+          source: invalidSource,
+          presentation: {},
+        },
+      }),
+    })
+    expect(saveDraft.status).toBe(200)
+    expect(await saveDraft.json()).toMatchObject({ result: { draft: { version: 2, source: invalidSource } } })
+    const staleSave = await fetch(`${baseUrl}/api/console/call`, {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer runtime-console-token',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        kind: 'action',
+        procedure: 'numen:automation-save-draft@1',
+        input: {
+          automationId: created.automation.id,
+          expectedVersion: 1,
+          source: invalidSource,
+          presentation: {},
+        },
+      }),
+    })
+    expect(staleSave.status).toBe(409)
+    expect(await staleSave.json()).toMatchObject({
+      error: {
+        code: 'DRAFT_VERSION_CONFLICT',
+        details: { expectedVersion: 1, actualVersion: 2 },
+      },
+    })
+    const invalidPublish = await fetch(`${baseUrl}/api/console/call`, {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer runtime-console-token',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        kind: 'action',
+        procedure: 'numen:automation-publish-draft@1',
+        input: { automationId: created.automation.id, expectedVersion: 2 },
+      }),
+    })
+    expect(invalidPublish.status).toBe(422)
+    expect(await invalidPublish.json()).toMatchObject({
+      error: {
+        code: 'AUTOMATION_PUBLISH_INVALID',
+        details: { diagnostics: [expect.objectContaining({ code: 'WAIT_SOURCE_INVALID' })] },
+      },
+    })
+    const repairDraft = await fetch(`${baseUrl}/api/console/call`, {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer runtime-console-token',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        kind: 'action',
+        procedure: 'numen:automation-save-draft@1',
+        input: {
+          automationId: created.automation.id,
+          expectedVersion: 2,
+          source: created.draft.source,
+          presentation: {},
+        },
+      }),
+    })
+    expect(repairDraft.status).toBe(200)
+    expect(await repairDraft.json()).toMatchObject({ result: { draft: { version: 3 } } })
+    const publishDraft = await fetch(`${baseUrl}/api/console/call`, {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer runtime-console-token',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        kind: 'action',
+        procedure: 'numen:automation-publish-draft@1',
+        input: { automationId: created.automation.id, expectedVersion: 3 },
+      }),
+    })
+    expect(publishDraft.status).toBe(200)
+    const publishDocument = await publishDraft.json() as {
+      result: { revision: { id: string; number: number; active: boolean } }
+    }
+    expect(publishDocument.result.revision).toMatchObject({ number: 1, active: false })
+    const revision = publishDocument.result.revision
     application.context.automations.activateRevision(created.automation.id, revision.id)
     application.context.automations.setEnabled(created.automation.id, true)
     const automationsIndex = await fetch(`${baseUrl}/api/console/call`, {
@@ -210,7 +325,7 @@ describe('Numen runtime', () => {
           name: 'Runtime smoke test',
           enabled: true,
           activeRevisionId: revision.id,
-          draftVersion: 1,
+          draftVersion: 3,
           revisionCount: 1,
           latestRevisionNumber: 1,
         }],
@@ -233,7 +348,7 @@ describe('Numen runtime', () => {
       result: {
         automation: { id: created.automation.id, activeRevisionId: revision.id },
         draft: {
-          version: 1,
+          version: 3,
           source: { triggers: [], flow: { type: 'block', id: 'flow', steps: [] } },
         },
         revisions: [{ id: revision.id, number: 1, active: true }],
