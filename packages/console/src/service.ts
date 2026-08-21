@@ -159,6 +159,27 @@ export class ConsoleProcedureKindError extends Error {
   override name = 'ConsoleProcedureKindError'
 }
 
+/** An expected, caller-safe failure raised by a Procedure Provider. */
+export class ConsoleProcedureError extends Error {
+  override name = 'ConsoleProcedureError'
+
+  constructor(
+    public readonly status: number,
+    public readonly code: string,
+    message: string,
+    public readonly details: unknown | undefined = undefined,
+  ) {
+    super(message)
+    if (!Number.isSafeInteger(status) || status < 400 || status > 499) {
+      throw new TypeError('console procedure error status must be a 4xx integer')
+    }
+    if (!/^[A-Z][A-Z0-9_]*$/.test(code)) {
+      throw new TypeError('console procedure error code must be uppercase snake case')
+    }
+    if (!message) throw new TypeError('console procedure error message is required')
+  }
+}
+
 export class ConsoleAuthenticatorUnavailableError extends Error {
   override name = 'ConsoleAuthenticatorUnavailableError'
 }

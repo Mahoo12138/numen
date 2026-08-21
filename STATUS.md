@@ -109,6 +109,7 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Plugin-owned Page Chrome composition for activity-specific Sidebar/Main/Inspector regions
 - [x] Typed Automation index/detail Queries with aggregate Draft/Revision summaries
 - [x] Live Automation workspace with Source-derived Canvas, Revision projection, and mobile selection
+- [x] Caller-safe Console Procedure errors with constrained 4xx status, code, and structured details
 
 ## Milestone 3 — Completed
 
@@ -148,6 +149,7 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Visible Workbench Query invalidation Subscription
 - [x] Automation index/detail Console Query contracts and Provider
 - [x] Live Automation Sidebar/detail binding with responsive Page-owned selection
+- [x] Stable public Procedure error transport for domain Action conflicts and validation failures
 
 ## Next
 
@@ -160,13 +162,14 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - **Page Chrome boundary — pass:** the generic Workbench Shell owns global routing and chrome only; each Page definition may supply its own Sidebar/Main/Inspector composition. Automation-specific selection state and components remain inside the Automation Page plugin and retain frontend Entry/Fiber lifecycle ownership.
 - **Automation read boundary — pass:** the Automation service computes Sidebar summaries with one aggregate query, while the optional Workbench Provider projects typed Automation, mutable Draft Source, and immutable Revision metadata. Published counts follow Revision existence independently from activation, and the boundary does not introduce client-owned node/edge state or move Automation truth into the generic shell.
 - **Automation projection boundary — pass:** Canvas steps and Inspector selection are pure, read-only projections of the current Draft `AutomationSource`; Revision metadata is rendered separately as immutable history. Desktop Sidebar and mobile selector remain Page-owned views over the same typed index, with no parallel client truth or Automation coupling in the generic Shell.
+- **Console error seam — pass:** Procedure Providers may deliberately expose constrained 4xx failures through one transport-neutral error interface; the Console HTTP Adapter serializes only that public code/message/details contract, while unexpected implementation errors remain private and become generic 500 responses.
 
 ## Verification Baseline
 
 ```text
 Typecheck: passing
 Build: passing
-Tests: 33 files, 122 tests passing
+Tests: 33 files, 123 tests passing
 CLI config validate: passing
 CLI doctor: passing
 SQLite schema migration: v10

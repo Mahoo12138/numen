@@ -3,6 +3,7 @@ import z from 'schemastery'
 import { describe, expect, it, vi } from 'vitest'
 import {
   ConsoleProcedureKindError,
+  ConsoleProcedureError,
   ConsoleProcedureUnavailableError,
   ConsoleService,
   type ConsoleRequestContext,
@@ -19,6 +20,18 @@ function request(signal = new AbortController().signal): ConsoleRequestContext {
 }
 
 describe('ConsoleService', () => {
+  it('constrains caller-safe Procedure errors to stable 4xx codes', () => {
+    expect(new ConsoleProcedureError(422, 'DRAFT_INVALID', 'Draft validation failed', {
+      diagnostics: [],
+    })).toMatchObject({
+      status: 422,
+      code: 'DRAFT_INVALID',
+      details: { diagnostics: [] },
+    })
+    expect(() => new ConsoleProcedureError(500, 'DRAFT_INVALID', 'invalid status')).toThrow('4xx')
+    expect(() => new ConsoleProcedureError(409, 'draft-invalid', 'invalid code')).toThrow('uppercase snake case')
+  })
+
   it('validates and invokes versioned Query and Action providers', async () => {
     const root = new Context()
     await root.plugin(ConsoleService)

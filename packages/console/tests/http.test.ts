@@ -4,6 +4,7 @@ import z from 'schemastery'
 import { describe, expect, it, vi } from 'vitest'
 import {
   ConsoleAuthenticationError,
+  ConsoleProcedureError,
   ConsoleService,
   consoleHttpPlugin,
   type ConsoleAuthenticationRequest,
@@ -165,13 +166,30 @@ describe('Console HTTP transport', () => {
         input: z.object({}),
         output: z.object({}),
       }
+      const expectedFailure = {
+        id: 'test:expected-failure',
+        version: 1,
+        kind: 'action' as const,
+        title: 'Expected failure',
+        input: z.object({}),
+        output: z.object({}),
+      }
       root.console.define(root, query)
       root.console.provideQuery(root, query, { query: ({ input }) => input.value })
       root.console.define(root, unavailable)
       root.console.define(root, failing)
+      root.console.define(root, expectedFailure)
       root.console.provideAction(root, failing, {
         action() {
           throw new Error('private provider details')
+        },
+      })
+      root.console.provideAction(root, expectedFailure, {
+        action() {
+          throw new ConsoleProcedureError(409, 'VERSION_CONFLICT', 'The document changed', {
+            expectedVersion: 2,
+            actualVersion: 3,
+          })
         },
       })
       await root.plugin(consoleHttpPlugin)
@@ -196,6 +214,18 @@ describe('Console HTTP transport', () => {
       const failedText = await failed.text()
       expect(failedText).toContain('INTERNAL_ERROR')
       expect(failedText).not.toContain('private provider details')
+
+      const expected = await call(baseUrl, {
+        kind: 'action', procedure: 'test:expected-failure@1', input: {},
+      }, { token: 'secret' })
+      expect(expected.status).toBe(409)
+      expect(await expected.json()).toMatchObject({
+        error: {
+          code: 'VERSION_CONFLICT',
+          message: 'The document changed',
+          details: { expectedVersion: 2, actualVersion: 3 },
+        },
+      })
 
       const invalidJson = await fetch(`${baseUrl}/api/console/call`, {
         method: 'POST',

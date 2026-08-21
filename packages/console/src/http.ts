@@ -7,6 +7,7 @@ import {
   ConsoleAuthenticatorUnavailableError,
   ConsoleProcedureKindError,
   ConsoleProcedureNotFoundError,
+  ConsoleProcedureError,
   ConsoleProcedureUnavailableError,
   parseConsoleProcedureKey,
   type ConsoleProcedureKind,
@@ -147,6 +148,8 @@ async function handleCall(ctx: Context, request: Request, response: Response): P
       respondError(response, requestId, 409, 'PROCEDURE_KIND_MISMATCH', error.message)
     } else if (error instanceof ConsoleProcedureUnavailableError) {
       respondError(response, requestId, 503, 'PROCEDURE_UNAVAILABLE', error.message)
+    } else if (error instanceof ConsoleProcedureError) {
+      respondError(response, requestId, error.status, error.code, error.message, error.details)
     } else if (error instanceof z.ValidationError) {
       respondError(response, requestId, 422, 'PROCEDURE_VALIDATION_FAILED', error.message)
     } else {
