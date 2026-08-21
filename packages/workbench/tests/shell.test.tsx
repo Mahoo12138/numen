@@ -1,6 +1,16 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import { coreWorkbenchPageDefinitions, WorkbenchShell } from '../src/index.js'
+import { corePageForActivity, coreWorkbenchPageDefinitions, WorkbenchShell } from '../src/index.js'
+import type { WorkbenchPageChromeProps } from '../src/types.js'
+
+function PluginMain() {
+  return <main className="main-workbench">Plugin-owned main</main>
+}
+
+function PluginChrome({ page }: WorkbenchPageChromeProps) {
+  const PageComponent = page.component
+  return <><aside className="primary-sidebar">Plugin-owned sidebar</aside><PageComponent /></>
+}
 
 describe('WorkbenchShell', () => {
   it('renders the documented Workbench regions and primary navigation', () => {
@@ -33,5 +43,18 @@ describe('WorkbenchShell', () => {
     expect(markup).toContain('aria-pressed="true"')
     expect(markup).toContain('{{ summary }}')
     expect(markup).toContain('Continue to next step')
+  })
+
+  it('delegates activity-specific workspace chrome to the Page definition', () => {
+    const automationPage = corePageForActivity('automations')
+    const markup = renderToStaticMarkup(<WorkbenchShell standalonePages={[{
+      ...automationPage,
+      component: PluginMain,
+      chrome: { component: PluginChrome },
+    }]} />)
+
+    expect(markup).toContain('Plugin-owned sidebar')
+    expect(markup).toContain('Plugin-owned main')
+    expect(markup).not.toContain('aria-label="Inspector"')
   })
 })

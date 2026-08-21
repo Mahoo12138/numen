@@ -1,4 +1,5 @@
 import type { ConsoleProcedureRef } from '@numen/console'
+import type { FrontendPage } from '@numen/webui/extensions'
 import type { ComponentType } from 'react'
 
 export interface WorkbenchConsoleClient {
@@ -12,13 +13,25 @@ export interface WorkbenchConsoleClient {
 }
 
 export interface WorkbenchPageProps {
-  automationId: string
-  activeStepId: string
-  activeTab: string
   consoleClient?: WorkbenchConsoleClient
-  onOpenInspector(): void
-  onStepChange(id: string): void
-  onTabChange(tab: string): void
 }
 
 export type WorkbenchPageComponent = ComponentType<WorkbenchPageProps>
+
+export interface WorkbenchPageChromeProps {
+  page: WorkbenchPageDefinition
+  consoleClient?: WorkbenchConsoleClient
+  inspectorOpen: boolean
+  onInspectorOpenChange(open: boolean): void
+}
+
+export type WorkbenchPageChromeComponent = ComponentType<WorkbenchPageChromeProps>
+
+export interface WorkbenchPageChromeDefinition {
+  component: WorkbenchPageChromeComponent
+  hasInspector?: boolean
+}
+
+export interface WorkbenchPageDefinition extends FrontendPage<WorkbenchPageComponent> {
+  chrome?: WorkbenchPageChromeDefinition
+}

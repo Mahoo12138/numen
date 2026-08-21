@@ -1,7 +1,4 @@
-import type {
-  FrontendExtensionRef,
-  FrontendPage,
-} from '@numen/webui/extensions'
+import type { FrontendExtensionRef } from '@numen/webui/extensions'
 import type {
   BrowserNavigateOptions,
   BrowserRouteState,
@@ -9,15 +6,17 @@ import type {
 import { CircleHelp, Clock3, Command, Play, Plus, Save, Search, Settings } from 'lucide-react'
 import { useCallback, useState, useSyncExternalStore } from 'react'
 import { ActivityRail } from './ActivityRail.js'
-import { AutomationSidebar } from './AutomationSidebar.js'
-import { Inspector } from './Inspector.js'
 import {
   activityIdForRoute,
   coreWorkbenchRoutes,
   type CoreWorkbenchActivityId,
 } from './routes.js'
 import './styles.css'
-import type { WorkbenchConsoleClient, WorkbenchPageComponent } from './types.js'
+import type {
+  WorkbenchConsoleClient,
+  WorkbenchPageChromeProps,
+  WorkbenchPageDefinition,
+} from './types.js'
 
 const panelTabs = ['Problems', 'Preview', 'Logs'] as const
 const standaloneRouteState: BrowserRouteState = {
@@ -33,14 +32,40 @@ export interface WorkbenchRouter {
 export interface WorkbenchShellProps {
   router?: WorkbenchRouter
   consoleClient?: WorkbenchConsoleClient
-  standalonePages?: ReadonlyArray<FrontendPage<WorkbenchPageComponent>>
+  standalonePages?: ReadonlyArray<WorkbenchPageDefinition>
+}
+
+function DefaultPageChrome({ page, consoleClient }: WorkbenchPageChromeProps) {
+  const PageComponent = page.component
+  return (
+    <>
+      <aside className="primary-sidebar simple-sidebar">
+        <div className="sidebar-heading">{page.title.toUpperCase()}</div>
+        <p>Browse {page.title.toLowerCase()} in the main workspace.</p>
+      </aside>
+      <PageComponent {...(consoleClient ? { consoleClient } : {})} />
+    </>
+  )
+}
+
+function NotFoundPageChrome({ pathname }: { pathname: string }) {
+  return (
+    <>
+      <aside className="primary-sidebar simple-sidebar">
+        <div className="sidebar-heading">NOT FOUND</div>
+        <p>No Page matches the current URL.</p>
+      </aside>
+      <main className="main-workbench secondary-view activity-placeholder">
+        <Command size={24} />
+        <h1>Page not found</h1>
+        <p>No registered Page matches {pathname}.</p>
+      </main>
+    </>
+  )
 }
 
 export function WorkbenchShell({ router, consoleClient, standalonePages = [] }: WorkbenchShellProps = {}) {
   const [standaloneActivityId, setStandaloneActivityId] = useState<CoreWorkbenchActivityId>('automations')
-  const [automationId, setAutomationId] = useState('morning-brief')
-  const [activeTab, setActiveTab] = useState('Editor')
-  const [stepId, setStepId] = useState('notification')
   const [panelOpen, setPanelOpen] = useState(false)
   const [panelTab, setPanelTab] = useState('Problems')
   const [inspectorOpen, setInspectorOpen] = useState(() => (
@@ -55,28 +80,22 @@ export function WorkbenchShell({ router, consoleClient, standalonePages = [] }: 
   const routeState = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
   const routedActivityId = activityIdForRoute(routeState.page)
   const activityId = router ? routedActivityId : standaloneActivityId
-  const isAutomations = activityId === 'automations'
   const activePage = (router
     ? routeState.page
     : standalonePages.find(page => activityIdForRoute(page) === standaloneActivityId)
-  ) as FrontendPage<WorkbenchPageComponent> | undefined
-  const PageComponent = activePage?.component
+  ) as WorkbenchPageDefinition | undefined
+  const PageChrome = activePage?.chrome?.component ?? DefaultPageChrome
+  const hasInspector = !!activePage?.chrome?.hasInspector
   const onActivityChange = useCallback((nextActivityId: CoreWorkbenchActivityId) => {
     if (router) {
       router.navigate(coreWorkbenchRoutes[nextActivityId])
     } else {
       setStandaloneActivityId(nextActivityId)
     }
-    if (nextActivityId === 'automations') {
-      setInspectorOpen(
-        typeof globalThis.matchMedia !== 'function'
-        || globalThis.matchMedia('(min-width: 1280px)').matches,
-      )
-    }
   }, [router])
 
   return (
-    <div className="workbench-shell" data-inspector-open={isAutomations && inspectorOpen}>
+    <div className="workbench-shell" data-inspector-open={hasInspector && inspectorOpen}>
       <header className="top-bar">
         <div className="brand"><span className="brand-mark">N</span><strong>Numen Workbench</strong></div>
         <label className="command-center">
@@ -94,32 +113,16 @@ export function WorkbenchShell({ router, consoleClient, standalonePages = [] }: 
         </div>
       </header>
       <ActivityRail activeId={activityId} onChange={onActivityChange} />
-      {isAutomations ? (
-        <AutomationSidebar activeId={automationId} onChange={setAutomationId} />
-      ) : (
-        <aside className="primary-sidebar simple-sidebar">
-          <div className="sidebar-heading">{activePage?.title.toUpperCase() ?? 'NOT FOUND'}</div>
-          <p>{activePage ? `Browse ${activePage.title.toLowerCase()} in the main workspace.` : 'No Page matches the current URL.'}</p>
-        </aside>
-      )}
-      {PageComponent ? (
-        <PageComponent
-          automationId={automationId}
-          activeStepId={stepId}
-          activeTab={activeTab}
+      {activePage ? (
+        <PageChrome
+          page={activePage}
           {...(consoleClient ? { consoleClient } : {})}
-          onOpenInspector={() => setInspectorOpen(true)}
-          onStepChange={(id) => { setStepId(id); setInspectorOpen(true) }}
-          onTabChange={setActiveTab}
+          inspectorOpen={inspectorOpen}
+          onInspectorOpenChange={setInspectorOpen}
         />
       ) : (
-        <main className="main-workbench secondary-view activity-placeholder">
-          <Command size={24} />
-          <h1>Page not found</h1>
-          <p>No registered Page matches {routeState.pathname}.</p>
-        </main>
+        <NotFoundPageChrome pathname={routeState.pathname} />
       )}
-      <Inspector activeStepId={stepId} open={isAutomations && inspectorOpen} onClose={() => setInspectorOpen(false)} />
       <section className="bottom-panel" data-open={panelOpen} aria-label="Bottom panel">
         <div className="panel-tablist" role="tablist">
           {panelTabs.map(tab => (
@@ -148,7 +151,7 @@ export function WorkbenchShell({ router, consoleClient, standalonePages = [] }: 
       <button
         aria-label="Close inspector overlay"
         className="inspector-backdrop"
-        data-open={inspectorOpen}
+        data-open={hasInspector && inspectorOpen}
         onClick={() => setInspectorOpen(false)}
         type="button"
       />

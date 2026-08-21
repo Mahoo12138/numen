@@ -2,7 +2,7 @@ import type { FrontendPage } from '@numen/webui/extensions'
 import type { Context } from 'cordis'
 import { Activity, Boxes, Cable, Home, Network, Play, Settings } from 'lucide-react'
 import { useMemo, useState } from 'react'
-import { AutomationEditor } from './AutomationEditor.js'
+import { AutomationPageChrome, AutomationWorkspacePage } from './AutomationWorkspace.js'
 import {
   workbenchConnectionsIndexQueryRef,
   workbenchHomeOverviewQueryRef,
@@ -14,10 +14,10 @@ import {
   type WorkbenchRunsQueryInput,
 } from './contracts.js'
 import { coreWorkbenchRoutes, type CoreWorkbenchActivityId } from './routes.js'
-import type { WorkbenchPageComponent, WorkbenchPageProps } from './types.js'
+import type { WorkbenchPageDefinition, WorkbenchPageProps } from './types.js'
 import { useConsoleQuery, type ConsoleQueryState } from './useConsoleQuery.js'
 
-export type { WorkbenchPageComponent, WorkbenchPageProps } from './types.js'
+export type { WorkbenchPageComponent, WorkbenchPageDefinition, WorkbenchPageProps } from './types.js'
 
 const emptyQueryInput: Record<string, never> = {}
 const timeFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' })
@@ -126,10 +126,6 @@ function QueryStatePanel({ title, message, busy = false, tone = 'default', actio
       {action ? <button className="secondary-button home-retry" onClick={onAction} type="button">{action}</button> : null}
     </section>
   )
-}
-
-function AutomationsPage(props: WorkbenchPageProps) {
-  return <AutomationEditor {...props} />
 }
 
 interface RunsPosition {
@@ -340,16 +336,22 @@ function CoreIndexPage({ icon: Icon, title, description }: {
   )
 }
 
-export const coreWorkbenchPageDefinitions: ReadonlyArray<FrontendPage<WorkbenchPageComponent>> = [
+export const coreWorkbenchPageDefinitions: ReadonlyArray<WorkbenchPageDefinition> = [
   { ...coreWorkbenchRoutes.home, path: '/', title: 'Home', component: HomePage },
-  { ...coreWorkbenchRoutes.automations, path: '/automations', title: 'Automations', component: AutomationsPage },
+  {
+    ...coreWorkbenchRoutes.automations,
+    path: '/automations',
+    title: 'Automations',
+    component: AutomationWorkspacePage,
+    chrome: { component: AutomationPageChrome, hasInspector: true },
+  },
   { ...coreWorkbenchRoutes.runs, path: '/runs', title: 'Runs', component: RunsPage },
   { ...coreWorkbenchRoutes.connections, path: '/connections', title: 'Connections', component: ConnectionsPage },
   { ...coreWorkbenchRoutes.plugins, path: '/plugins/installed', title: 'Plugins', component: PluginsPage },
   { ...coreWorkbenchRoutes.system, path: '/system/overview', title: 'System', component: SystemPage },
 ]
 
-const pageByActivity = new Map<CoreWorkbenchActivityId, FrontendPage<WorkbenchPageComponent>>(
+const pageByActivity = new Map<CoreWorkbenchActivityId, WorkbenchPageDefinition>(
   coreWorkbenchPageDefinitions.map(page => [activityIdForPage(page), page]),
 )
 
@@ -361,7 +363,7 @@ function activityIdForPage(page: FrontendPage): CoreWorkbenchActivityId {
   return entry[0] as CoreWorkbenchActivityId
 }
 
-export function corePageForActivity(activityId: CoreWorkbenchActivityId): FrontendPage<WorkbenchPageComponent> {
+export function corePageForActivity(activityId: CoreWorkbenchActivityId): WorkbenchPageDefinition {
   return pageByActivity.get(activityId)!
 }
 

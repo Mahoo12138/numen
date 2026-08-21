@@ -106,6 +106,7 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Complete Automation, Run, Connection config, and Connection Runtime change notifications
 - [x] Typed coalesced Workbench invalidation Subscription with reconnect snapshot barrier
 - [x] Abort-safe background refresh for visible Home, Runs, and Connections Queries
+- [x] Plugin-owned Page Chrome composition for activity-specific Sidebar/Main/Inspector regions
 
 ## Milestone 3 — Completed
 
@@ -149,6 +150,10 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 1. Automation index/detail data bindings and authoring actions
 2. Connection enable/disable Actions with optimistic generation checks
 3. Run detail Query with timeline and execution diagnostics
+
+## Design Review
+
+- **Page Chrome boundary — pass:** the generic Workbench Shell owns global routing and chrome only; each Page definition may supply its own Sidebar/Main/Inspector composition. Automation-specific selection state and components remain inside the Automation Page plugin and retain frontend Entry/Fiber lifecycle ownership.
 
 ## Verification Baseline
 
