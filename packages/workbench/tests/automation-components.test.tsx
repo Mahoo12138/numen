@@ -5,6 +5,8 @@ import { AutomationPanel, AutomationStatusBar } from '../src/AutomationPanel.js'
 import { Inspector } from '../src/Inspector.js'
 import { AutomationSidebar } from '../src/AutomationSidebar.js'
 import { projectAutomationSteps } from '../src/automation-projection.js'
+import { coreSchemaLiteralRenderers } from '../src/SchemaRenderers.js'
+import type { SchemaUIResolver } from '@numen/webui/schema-ui'
 import type {
   WorkbenchAutomationDetail,
   WorkbenchAutomationInsertCatalog,
@@ -55,6 +57,15 @@ const index: WorkbenchAutomationsIndex = {
     revisionCount: 1,
     latestRevisionNumber: 1,
   }],
+}
+
+const schemaUI: SchemaUIResolver = {
+  getSnapshot: () => 1,
+  subscribe: () => () => {},
+  resolveRenderer<Renderer>(request, mode): Renderer | undefined {
+    if (mode !== 'editor') return
+    return coreSchemaLiteralRenderers.find(renderer => renderer.type === request.type)?.editor as Renderer | undefined
+  },
 }
 
 describe('live Automation workspace projections', () => {
@@ -271,23 +282,25 @@ describe('live Automation workspace projections', () => {
       canEdit
       catalog={catalog}
       onCapabilityConnectionChange={vi.fn()}
-      onCapabilityLiteralInputChange={vi.fn()}
+      onCapabilityInputChange={vi.fn()}
       onClose={vi.fn()}
       open
       problems={problems}
       source={capabilitySource}
       steps={steps}
+      schemaUI={schemaUI}
     />)
 
     expect(markup).toContain('>Connection<')
     expect(markup).toContain('aria-label="account connection"')
     expect(markup).toContain('Ready account')
-    expect(markup).toContain('aria-label="Message"')
+    expect(markup).toContain('for="send-message-input-message"')
+    expect(markup).toContain('aria-label="Message value mode"')
     expect(markup).toContain('value="Hello"')
     expect(markup).toContain('aria-describedby="send-message-input-message-problem"')
     expect(markup).toContain('aria-invalid="true"')
     expect(markup).toContain('numen/expression')
-    expect(markup).toContain('aria-label="Payload JSON"')
+    expect(markup).toContain('for="send-message-input-payload"')
     expect(markup).toContain('Message is invalid.')
   })
 })

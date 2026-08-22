@@ -31,6 +31,7 @@ export function useAutomationWorkspace(): AutomationEditorProps {
 export function AutomationPageChrome({
   page,
   consoleClient,
+  schemaUI,
   inspectorOpen,
   onInspectorOpenChange,
 }: WorkbenchPageChromeProps) {
@@ -184,7 +185,7 @@ export function AutomationPageChrome({
         onReload={reloadIndex}
         state={indexState}
       />
-      <PageComponent {...(consoleClient ? { consoleClient } : {})} />
+      <PageComponent {...(consoleClient ? { consoleClient } : {})} {...(schemaUI ? { schemaUI } : {})} />
       <Inspector
         activeStepId={activeStepId}
         canEdit={authoring.canEdit}
@@ -196,8 +197,9 @@ export function AutomationPageChrome({
         {...(consoleClient ? { steps } : {})}
         onClose={() => onInspectorOpenChange(false)}
         onCapabilityConnectionChange={authoring.setCapabilityConnection}
-        onCapabilityLiteralInputChange={authoring.setCapabilityLiteralInput}
+        onCapabilityInputChange={authoring.setCapabilityInput}
         onWaitDurationChange={authoring.setWaitDuration}
+        {...(schemaUI ? { schemaUI } : {})}
       />
       <AutomationPanel
         problems={authoring.problems}

@@ -1,4 +1,5 @@
-import type { AutomationSource, CompileDiagnostic, NumenValue } from '@numen/core'
+import type { AutomationSource, CompileDiagnostic, ValueExpr } from '@numen/core'
+import type { SchemaUIResolver } from '@numen/webui/schema-ui'
 import { ChevronDown, X } from 'lucide-react'
 import { CapabilityConnectionFields, CapabilityInputFields } from './CapabilityInspector.js'
 import { findAutomationControl } from './automation-source-editing.js'
@@ -22,8 +23,9 @@ export interface InspectorProps {
   canEdit?: boolean
   fieldFocus?: InspectorFieldFocus
   catalog?: WorkbenchAutomationInsertCatalog
+  schemaUI?: SchemaUIResolver
   onCapabilityConnectionChange?(nodeId: string, slotName: string, connectionId?: string): void
-  onCapabilityLiteralInputChange?(nodeId: string, fieldName: string, value?: NumenValue): void
+  onCapabilityInputChange?(nodeId: string, fieldName: string, expression?: ValueExpr): void
   onWaitDurationChange?(nodeId: string, durationMs: number): void
   onClose(): void
 }
@@ -109,8 +111,9 @@ export function Inspector({
   canEdit = false,
   fieldFocus,
   catalog,
+  schemaUI,
   onCapabilityConnectionChange,
-  onCapabilityLiteralInputChange,
+  onCapabilityInputChange,
   onWaitDurationChange,
   onClose,
 }: InspectorProps) {
@@ -210,8 +213,9 @@ export function Inspector({
                 control={control}
                 definition={capabilityDefinition}
                 nodeId={step.sourceId}
-                {...(onCapabilityLiteralInputChange ? { onChange: onCapabilityLiteralInputChange } : {})}
+                {...(onCapabilityInputChange ? { onChange: onCapabilityInputChange } : {})}
                 problems={stepProblems}
+                {...(schemaUI ? { schemaUI } : {})}
               />
             ) : (
               <div className="inspector-schema-notice">

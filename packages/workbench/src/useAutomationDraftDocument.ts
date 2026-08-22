@@ -1,4 +1,4 @@
-import type { AutomationSource, CompileDiagnostic, NumenValue } from '@numen/core'
+import type { AutomationSource, CompileDiagnostic, NumenValue, ValueExpr } from '@numen/core'
 import { useCallback, useEffect, useMemo, useReducer } from 'react'
 import {
   workbenchPublishAutomationDraftActionRef,
@@ -345,7 +345,7 @@ export interface AutomationDraftDocumentModel {
   insert(item: WorkbenchAutomationInsertItem): void
   selectNode(nodeId?: string): void
   setCapabilityConnection(nodeId: string, slotName: string, connectionId?: string): void
-  setCapabilityLiteralInput(nodeId: string, fieldName: string, value?: NumenValue): void
+  setCapabilityInput(nodeId: string, fieldName: string, expression?: ValueExpr): void
   setWaitDuration(nodeId: string, durationMs: number): void
   undo(): void
   redo(): void
@@ -451,10 +451,10 @@ export function useAutomationDraftDocument({
       command: { type: 'SET_CAPABILITY_CONNECTION', nodeId, slotName, ...(connectionId ? { connectionId } : {}) },
     })
   }, [])
-  const setCapabilityLiteralInput = useCallback((nodeId: string, fieldName: string, value?: NumenValue) => {
+  const setCapabilityInput = useCallback((nodeId: string, fieldName: string, expression?: ValueExpr) => {
     dispatch({
       type: 'EDIT',
-      command: { type: 'SET_CAPABILITY_LITERAL_INPUT', nodeId, fieldName, ...(value !== undefined ? { value } : {}) },
+      command: { type: 'SET_CAPABILITY_INPUT', nodeId, fieldName, ...(expression ? { expression } : {}) },
     })
   }, [])
   const setWaitDuration = useCallback((nodeId: string, durationMs: number) => {
@@ -491,7 +491,7 @@ export function useAutomationDraftDocument({
     insert,
     selectNode,
     setCapabilityConnection,
-    setCapabilityLiteralInput,
+    setCapabilityInput,
     setWaitDuration,
     undo,
     redo,
@@ -508,7 +508,7 @@ export function useAutomationDraftDocument({
     retrySave,
     selectNode,
     setCapabilityConnection,
-    setCapabilityLiteralInput,
+    setCapabilityInput,
     setWaitDuration,
     state.conflict,
     state.document,

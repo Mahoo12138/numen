@@ -207,9 +207,11 @@ describe('BrowserExtensionRegistry', () => {
       },
     })
     expect(runtime.context.consoleClient.session).toBeDefined()
+    expect(runtime.context.schemaUI.getSnapshot()).toBe(0)
     expect(runtime.context.webuiExtensions.listPages()).toEqual([])
     await runtime.stop()
     await runtime.stop()
     expect(runtime.context.consoleClient).toBeUndefined()
+    expect(runtime.context.schemaUI).toBeUndefined()
   })
 })

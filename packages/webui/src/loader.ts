@@ -119,7 +119,7 @@ function asLoaderError(error: unknown): BrowserEntryLoaderError {
 }
 
 export class BrowserEntryLoader extends Service {
-  static inject = ['consoleClient', 'webuiExtensions']
+  static inject = ['consoleClient', 'webuiExtensions', 'schemaUI']
 
   private readonly autoLoad: boolean
   private readonly moduleImporter: BrowserEntryModuleImporter

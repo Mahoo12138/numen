@@ -1,4 +1,5 @@
 import type { FrontendExtensionRef } from '@numen/webui/extensions'
+import type { SchemaUIResolver } from '@numen/webui/schema-ui'
 import type {
   BrowserNavigateOptions,
   BrowserRouteState,
@@ -32,10 +33,11 @@ export interface WorkbenchRouter {
 export interface WorkbenchShellProps {
   router?: WorkbenchRouter
   consoleClient?: WorkbenchConsoleClient
+  schemaUI?: SchemaUIResolver
   standalonePages?: ReadonlyArray<WorkbenchPageDefinition>
 }
 
-function DefaultPageChrome({ page, consoleClient }: WorkbenchPageChromeProps) {
+function DefaultPageChrome({ page, consoleClient, schemaUI }: WorkbenchPageChromeProps) {
   const PageComponent = page.component
   return (
     <>
@@ -43,7 +45,7 @@ function DefaultPageChrome({ page, consoleClient }: WorkbenchPageChromeProps) {
         <div className="sidebar-heading">{page.title.toUpperCase()}</div>
         <p>Browse {page.title.toLowerCase()} in the main workspace.</p>
       </aside>
-      <PageComponent {...(consoleClient ? { consoleClient } : {})} />
+      <PageComponent {...(consoleClient ? { consoleClient } : {})} {...(schemaUI ? { schemaUI } : {})} />
     </>
   )
 }
@@ -64,7 +66,7 @@ function NotFoundPageChrome({ pathname }: { pathname: string }) {
   )
 }
 
-export function WorkbenchShell({ router, consoleClient, standalonePages = [] }: WorkbenchShellProps = {}) {
+export function WorkbenchShell({ router, consoleClient, schemaUI, standalonePages = [] }: WorkbenchShellProps = {}) {
   const [standaloneActivityId, setStandaloneActivityId] = useState<CoreWorkbenchActivityId>('automations')
   const [panelOpen, setPanelOpen] = useState(false)
   const [panelTab, setPanelTab] = useState('Problems')
@@ -119,6 +121,7 @@ export function WorkbenchShell({ router, consoleClient, standalonePages = [] }: 
         <PageChrome
           page={activePage}
           {...(consoleClient ? { consoleClient } : {})}
+          {...(schemaUI ? { schemaUI } : {})}
           inspectorOpen={inspectorOpen}
           onInspectorOpenChange={setInspectorOpen}
         />

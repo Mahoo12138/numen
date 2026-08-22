@@ -21,6 +21,10 @@
     "./runtime": {
       "types": "./dist/runtime.d.ts",
       "default": "./dist/runtime.js"
+    },
+    "./schema-ui": {
+      "types": "./dist/schema-ui.d.ts",
+      "default": "./dist/schema-ui.js"
     }
   },
   "dependencies": {

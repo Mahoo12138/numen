@@ -1,10 +1,10 @@
-import type { AutomationSource, BlockSource, ControlSource, NumenValue } from '@numen/core'
+import type { AutomationSource, BlockSource, ControlSource, ValueExpr } from '@numen/core'
 import type { WorkbenchAutomationInsertItem } from './contracts.js'
 
 export type AutomationSourceCommand =
   | { type: 'INSERT'; item: WorkbenchAutomationInsertItem }
   | { type: 'SET_CAPABILITY_CONNECTION'; nodeId: string; slotName: string; connectionId?: string }
-  | { type: 'SET_CAPABILITY_LITERAL_INPUT'; nodeId: string; fieldName: string; value?: NumenValue }
+  | { type: 'SET_CAPABILITY_INPUT'; nodeId: string; fieldName: string; expression?: ValueExpr }
   | { type: 'SET_WAIT_DURATION'; nodeId: string; durationMs: number }
 
 export interface AutomationSourceCommandResult {
@@ -206,24 +206,24 @@ function setWaitDuration(source: AutomationSource, nodeId: string, durationMs: n
   return result.changed ? { ...source, flow: result.control } : source
 }
 
-function setCapabilityLiteralInput(
+function setCapabilityInput(
   source: AutomationSource,
   nodeId: string,
   fieldName: string,
-  value: NumenValue | undefined,
+  expression: ValueExpr | undefined,
 ): AutomationSource {
   if (!fieldName) throw new TypeError('Capability input field name is required.')
   const result = editControl(source.flow, nodeId, control => {
     if (control.type !== 'capability') return control
     const current = control.input[fieldName]
-    if (value === undefined) {
+    if (expression === undefined) {
       if (!(fieldName in control.input)) return control
       const input = { ...control.input }
       delete input[fieldName]
       return { ...control, input }
     }
-    if (current?.type === 'literal' && JSON.stringify(current.value) === JSON.stringify(value)) return control
-    return { ...control, input: { ...control.input, [fieldName]: { type: 'literal', value } } }
+    if (JSON.stringify(current) === JSON.stringify(expression)) return control
+    return { ...control, input: { ...control.input, [fieldName]: expression } }
   })
   return result.changed ? { ...source, flow: result.control } : source
 }
@@ -262,8 +262,8 @@ export function applyAutomationSourceCommand(
     case 'SET_CAPABILITY_CONNECTION': return {
       source: setCapabilityConnection(source, command.nodeId, command.slotName, command.connectionId),
     }
-    case 'SET_CAPABILITY_LITERAL_INPUT': return {
-      source: setCapabilityLiteralInput(source, command.nodeId, command.fieldName, command.value),
+    case 'SET_CAPABILITY_INPUT': return {
+      source: setCapabilityInput(source, command.nodeId, command.fieldName, command.expression),
     }
     case 'SET_WAIT_DURATION': return { source: setWaitDuration(source, command.nodeId, command.durationMs) }
   }

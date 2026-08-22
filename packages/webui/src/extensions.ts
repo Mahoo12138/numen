@@ -1,4 +1,9 @@
 import { Service, type Context } from 'cordis'
+import type {
+  SchemaRendererDefinition,
+  SchemaRendererMode,
+  SchemaRendererRequest,
+} from './schema-ui.js'
 
 export interface FrontendExtensionRef {
   id: string
@@ -30,7 +35,7 @@ declare module 'cordis' {
   }
 
   interface Events {
-    'numen/webui-extension-change'(kind: 'page' | 'slot' | 'contribution', id: string): void
+    'numen/webui-extension-change'(kind: 'page' | 'slot' | 'contribution' | 'renderer', id: string): void
   }
 }
 
@@ -85,6 +90,23 @@ function validateContribution(contribution: FrontendSlotContribution): void {
   }
 }
 
+function schemaRendererTarget(definition: SchemaRendererDefinition): string {
+  const hasRole = typeof definition.role === 'string' && !!definition.role
+  const hasType = typeof definition.type === 'string' && !!definition.type
+  if (hasRole === hasType) throw new TypeError('schema renderer requires exactly one role or type target')
+  const value = hasRole ? definition.role! : definition.type!
+  if (!extensionIdPattern.test(value)) throw new TypeError(`invalid schema renderer target: ${value}`)
+  return `${hasRole ? 'role' : 'type'}:${value}`
+}
+
+function validateSchemaRenderer(definition: SchemaRendererDefinition): string {
+  validateRef(definition, 'schema renderer')
+  if (definition.editor === undefined && definition.viewer === undefined && definition.compact === undefined) {
+    throw new TypeError('schema renderer requires an editor, viewer, or compact implementation')
+  }
+  return schemaRendererTarget(definition)
+}
+
 function baseCompare(
   left: FrontendSlotContribution,
   right: FrontendSlotContribution,
@@ -132,6 +154,8 @@ interface ExtensionState {
   pagePaths: Map<string, string>
   slots: Map<string, FrontendSlot>
   contributions: Map<string, Map<string, FrontendSlotContribution>>
+  schemaRenderers: Map<string, SchemaRendererDefinition>
+  schemaRendererTargets: Map<string, string>
 }
 
 function createState(): ExtensionState {
@@ -140,6 +164,8 @@ function createState(): ExtensionState {
     pagePaths: new Map(),
     slots: new Map(),
     contributions: new Map(),
+    schemaRenderers: new Map(),
+    schemaRendererTargets: new Map(),
   }
 }
 
@@ -151,6 +177,8 @@ function cloneState(state: ExtensionState): ExtensionState {
     contributions: new Map(
       [...state.contributions].map(([slot, entries]) => [slot, new Map(entries)]),
     ),
+    schemaRenderers: new Map(state.schemaRenderers),
+    schemaRendererTargets: new Map(state.schemaRendererTargets),
   }
 }
 
@@ -210,6 +238,22 @@ export class FrontendExtensionStage {
         if (!entries.size) this.state.contributions.delete(slotKey)
       }
     }, `webui.stage.contribute(${JSON.stringify(`${slotKey}/${contribution.id}`)})`)
+  }
+
+  defineSchemaRenderer<Renderer>(owner: Context, definition: SchemaRendererDefinition<Renderer>): () => void {
+    const target = validateSchemaRenderer(definition)
+    const key = extensionKey(definition)
+    if (this.state.schemaRenderers.has(key)) throw new Error(`schema renderer already registered: ${key}`)
+    const existingTarget = this.state.schemaRendererTargets.get(target)
+    if (existingTarget) throw new Error(`schema renderer target already registered: ${target} (${existingTarget})`)
+    return owner.effect(() => {
+      this.state.schemaRenderers.set(key, definition as SchemaRendererDefinition)
+      this.state.schemaRendererTargets.set(target, key)
+      return () => {
+        if (this.state.schemaRenderers.get(key) === definition) this.state.schemaRenderers.delete(key)
+        if (this.state.schemaRendererTargets.get(target) === key) this.state.schemaRendererTargets.delete(target)
+      }
+    }, `webui.stage.schemaRenderer(${JSON.stringify(key)})`)
   }
 
   materialize(): ExtensionState {
@@ -289,6 +333,45 @@ export class BrowserExtensionRegistry extends Service {
     }, `webui.contribute(${JSON.stringify(`${slotKey}/${contribution.id}`)})`)
   }
 
+  defineSchemaRenderer<Renderer>(owner: Context, definition: SchemaRendererDefinition<Renderer>): () => void {
+    const target = validateSchemaRenderer(definition)
+    const key = extensionKey(definition)
+    if (this.direct.schemaRenderers.has(key) || this.active?.state.schemaRenderers.has(key)) {
+      throw new Error(`schema renderer already registered: ${key}`)
+    }
+    const existingTarget = this.direct.schemaRendererTargets.get(target)
+      ?? this.active?.state.schemaRendererTargets.get(target)
+    if (existingTarget) throw new Error(`schema renderer target already registered: ${target} (${existingTarget})`)
+    return owner.effect(() => {
+      this.direct.schemaRenderers.set(key, definition as SchemaRendererDefinition)
+      this.direct.schemaRendererTargets.set(target, key)
+      this.ctx.emit('numen/webui-extension-change', 'renderer', key)
+      return () => {
+        if (this.direct.schemaRenderers.get(key) === definition) this.direct.schemaRenderers.delete(key)
+        if (this.direct.schemaRendererTargets.get(target) === key) this.direct.schemaRendererTargets.delete(target)
+        this.ctx.emit('numen/webui-extension-change', 'renderer', key)
+      }
+    }, `webui.schemaRenderer(${JSON.stringify(key)})`)
+  }
+
+  resolveSchemaRenderer<Renderer = unknown>(
+    request: SchemaRendererRequest,
+    mode: SchemaRendererMode,
+  ): Renderer | undefined {
+    const targets = [
+      ...(request.role ? [`role:${request.role}`] : []),
+      `type:${request.type}`,
+    ]
+    for (const target of targets) {
+      const key = this.direct.schemaRendererTargets.get(target)
+        ?? this.active?.state.schemaRendererTargets.get(target)
+      if (!key) continue
+      const definition = this.direct.schemaRenderers.get(key) ?? this.active?.state.schemaRenderers.get(key)
+      const renderer = definition?.[mode]
+      if (renderer !== undefined) return renderer as Renderer
+    }
+  }
+
   listPages(): FrontendPage[] {
     return [...this.direct.pages.values(), ...(this.active?.state.pages.values() ?? [])].sort((left, right) => (
       left.path.localeCompare(right.path) || extensionKey(left).localeCompare(extensionKey(right))
@@ -354,6 +437,12 @@ export class BrowserExtensionRegistry extends Service {
     for (const key of next.slots.keys()) {
       if (this.direct.slots.has(key)) throw new Error(`frontend slot already registered: ${key}`)
     }
+    for (const [key, renderer] of next.schemaRenderers) {
+      if (this.direct.schemaRenderers.has(key)) throw new Error(`schema renderer already registered: ${key}`)
+      const target = schemaRendererTarget(renderer)
+      const existingTarget = this.direct.schemaRendererTargets.get(target)
+      if (existingTarget) throw new Error(`schema renderer target already registered: ${target} (${existingTarget})`)
+    }
     const slotKeys = new Set([
       ...this.direct.contributions.keys(),
       ...next.contributions.keys(),
@@ -386,6 +475,12 @@ export class BrowserExtensionRegistry extends Service {
       .flatMap(([slot, entries]) => [...entries.keys()].map(id => `${slot}/${id}`))
     for (const key of new Set([...contributionKeys(previous), ...contributionKeys(next)])) {
       this.ctx.emit('numen/webui-extension-change', 'contribution', key)
+    }
+    for (const key of new Set([
+      ...previous?.schemaRenderers.keys() ?? [],
+      ...next?.schemaRenderers.keys() ?? [],
+    ])) {
+      this.ctx.emit('numen/webui-extension-change', 'renderer', key)
     }
   }
 }

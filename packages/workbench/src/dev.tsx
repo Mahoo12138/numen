@@ -9,13 +9,15 @@ const rootElement = root
 
 async function startContext(): Promise<{ context: Context; stop(): Promise<void> }> {
   if (import.meta.env.DEV) {
-    const [{ Context }, { BrowserExtensionRegistry }, { BrowserRouterService }] = await Promise.all([
+    const [{ Context }, { BrowserExtensionRegistry }, { BrowserRouterService }, { SchemaUIRegistry }] = await Promise.all([
       import('cordis'),
       import('@numen/webui/extensions'),
       import('@numen/webui/router'),
+      import('@numen/webui/schema-ui'),
     ])
     const context = new Context()
     await context.plugin(BrowserExtensionRegistry)
+    await context.plugin(SchemaUIRegistry)
     await context.plugin(BrowserRouterService)
     return { context, stop: () => context.fiber.dispose() }
   }
@@ -26,14 +28,15 @@ async function main(): Promise<void> {
   const runtime = await startContext()
   const { context } = runtime
   if (import.meta.env.DEV) {
-    const { coreWorkbenchPages } = await import('./pages.js')
-    await context.plugin(coreWorkbenchPages)
+    const { coreWorkbenchFrontend } = await import('./entry.js')
+    await context.plugin(coreWorkbenchFrontend)
   }
   globalThis.addEventListener('beforeunload', () => void runtime.stop(), { once: true })
   createRoot(rootElement).render(
     <StrictMode>
       <WorkbenchShell
         router={context.webuiRouter}
+        schemaUI={context.schemaUI}
         {...(import.meta.env.DEV ? {} : { consoleClient: context.consoleClient })}
       />
     </StrictMode>,

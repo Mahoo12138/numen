@@ -121,7 +121,7 @@ describe('local Automation Draft document', () => {
     })
   })
 
-  it('edits literal Capability inputs and named Connection bindings as Source commands', () => {
+  it('edits Capability expressions and named Connection bindings as Source commands', () => {
     const capabilitySource: AutomationSource = {
       triggers: [],
       flow: {
@@ -133,10 +133,10 @@ describe('local Automation Draft document', () => {
       },
     }
     const withInput = applyAutomationSourceCommand(capabilitySource, {
-      type: 'SET_CAPABILITY_LITERAL_INPUT',
+      type: 'SET_CAPABILITY_INPUT',
       nodeId: 'weather',
       fieldName: 'city',
-      value: 'Hangzhou',
+      expression: { type: 'literal', value: 'Hangzhou' },
     }).source
     const withConnection = applyAutomationSourceCommand(withInput, {
       type: 'SET_CAPABILITY_CONNECTION',
@@ -152,13 +152,30 @@ describe('local Automation Draft document', () => {
     })
     expect(JSON.stringify(withConnection)).not.toContain('legacy-connection')
 
-    const cleared = applyAutomationSourceCommand(withConnection, {
+    const withReference = applyAutomationSourceCommand(withConnection, {
+      type: 'SET_CAPABILITY_INPUT',
+      nodeId: 'weather',
+      fieldName: 'city',
+      expression: { type: 'ref', path: 'trigger.city' },
+    }).source
+    const withTemplate = applyAutomationSourceCommand(withReference, {
+      type: 'SET_CAPABILITY_INPUT',
+      nodeId: 'weather',
+      fieldName: 'city',
+      expression: { type: 'template', parts: ['Weather in ', { ref: 'trigger.city' }] },
+    }).source
+    expect(withTemplate.flow).toMatchObject({
+      type: 'capability',
+      input: { city: { type: 'template', parts: ['Weather in ', { ref: 'trigger.city' }] } },
+    })
+
+    const cleared = applyAutomationSourceCommand(withTemplate, {
       type: 'SET_CAPABILITY_CONNECTION',
       nodeId: 'weather',
       slotName: 'account',
     }).source
     const withoutInput = applyAutomationSourceCommand(cleared, {
-      type: 'SET_CAPABILITY_LITERAL_INPUT',
+      type: 'SET_CAPABILITY_INPUT',
       nodeId: 'weather',
       fieldName: 'city',
     }).source

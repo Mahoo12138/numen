@@ -6,6 +6,7 @@ import {
   BrowserEntryLoader,
   BrowserEntryLoaderError,
   BrowserExtensionRegistry,
+  SchemaUIRegistry,
   type BrowserConsoleEnvironment,
   type BrowserEntryModuleImporter,
 } from '../src/index.js'
@@ -51,6 +52,7 @@ describe('BrowserEntryLoader', () => {
     }
     const root = new Context()
     await root.plugin(BrowserExtensionRegistry)
+    await root.plugin(SchemaUIRegistry)
     await root.plugin(BrowserConsoleClient, { environment: browserEnvironment(() => manifest) })
     const slot = { id: 'plugin:toolbar', version: 1 }
     const importer = vi.fn<BrowserEntryModuleImporter>(async (url) => {
@@ -79,6 +81,44 @@ describe('BrowserEntryLoader', () => {
     await root.fiber.dispose()
   })
 
+  it('stages Schema renderers with the same atomic Entry generation', async () => {
+    const manifest: ConsoleEntryManifest = {
+      revision: 1,
+      entries: [
+        { id: 'plugin:renderer', url: '/assets/1/renderer.js' },
+        { id: 'plugin:observer', url: '/assets/1/observer.js' },
+      ],
+      unavailable: [],
+    }
+    const root = new Context()
+    await root.plugin(BrowserExtensionRegistry)
+    await root.plugin(SchemaUIRegistry)
+    await root.plugin(BrowserConsoleClient, { environment: browserEnvironment(() => manifest) })
+    const renderer = { name: 'RepositoryEditor' }
+    const importer = vi.fn<BrowserEntryModuleImporter>(async (url) => {
+      if (url.endsWith('/renderer.js')) {
+        const plugin = (ctx: Context) => {
+          ctx.schemaUI.defineRenderer(ctx, {
+            id: 'plugin:repository-renderer',
+            version: 1,
+            role: '@github/repository',
+            editor: renderer,
+          })
+        }
+        plugin.inject = ['schemaUI']
+        return { default: plugin }
+      }
+      expect(root.schemaUI.resolveRenderer({ role: '@github/repository', type: 'string' }, 'editor')).toBeUndefined()
+      return { default: pagePlugin('plugin:observer', '/observer') }
+    })
+
+    await root.plugin(BrowserEntryLoader, { moduleImporter: importer })
+
+    expect(root.schemaUI.resolveRenderer({ role: '@github/repository', type: 'string' }, 'editor')).toBe(renderer)
+    expect(root.schemaUI.getSnapshot()).toBe(1)
+    await root.fiber.dispose()
+  })
+
   it('retires the old fibers only after a successful replacement', async () => {
     let manifest: ConsoleEntryManifest = {
       revision: 1,
@@ -93,6 +133,7 @@ describe('BrowserEntryLoader', () => {
     }))
     const root = new Context()
     await root.plugin(BrowserExtensionRegistry)
+    await root.plugin(SchemaUIRegistry)
     await root.plugin(BrowserConsoleClient, { environment: browserEnvironment(() => manifest) })
     await root.plugin(BrowserEntryLoader, { moduleImporter: importer })
 
@@ -127,6 +168,7 @@ describe('BrowserEntryLoader', () => {
     })
     const root = new Context()
     await root.plugin(BrowserExtensionRegistry)
+    await root.plugin(SchemaUIRegistry)
     await root.plugin(BrowserConsoleClient, { environment: browserEnvironment(() => manifest) })
     await root.plugin(BrowserEntryLoader, { moduleImporter: importer })
 
@@ -165,6 +207,7 @@ describe('BrowserEntryLoader', () => {
     }))
     const root = new Context()
     await root.plugin(BrowserExtensionRegistry)
+    await root.plugin(SchemaUIRegistry)
     root.webuiExtensions.page(root, {
       id: 'core:home', version: 1, path: '/core', title: 'Core', component: null,
     })
@@ -194,6 +237,7 @@ describe('BrowserEntryLoader', () => {
     }
     const root = new Context()
     await root.plugin(BrowserExtensionRegistry)
+    await root.plugin(SchemaUIRegistry)
     await root.plugin(BrowserConsoleClient, { environment: browserEnvironment(() => manifest) })
 
     await expect(root.plugin(BrowserEntryLoader)).rejects.toMatchObject<Partial<BrowserEntryLoaderError>>({
@@ -212,6 +256,7 @@ describe('BrowserEntryLoader', () => {
     const importer = vi.fn<BrowserEntryModuleImporter>()
     const root = new Context()
     await root.plugin(BrowserExtensionRegistry)
+    await root.plugin(SchemaUIRegistry)
     await root.plugin(BrowserConsoleClient, { environment: browserEnvironment(() => manifest) })
 
     await expect(root.plugin(BrowserEntryLoader, { moduleImporter: importer }))

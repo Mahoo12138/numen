@@ -1,5 +1,6 @@
 import type { ConsoleProcedureRef } from '@numen/console'
 import type { FrontendPage } from '@numen/webui/extensions'
+import type { SchemaUIResolver } from '@numen/webui/schema-ui'
 import type { ComponentType } from 'react'
 
 export interface WorkbenchConsoleClient {
@@ -15,6 +16,7 @@ export interface WorkbenchConsoleClient {
 
 export interface WorkbenchPageProps {
   consoleClient?: WorkbenchConsoleClient
+  schemaUI?: SchemaUIResolver
 }
 
 export type WorkbenchPageComponent = ComponentType<WorkbenchPageProps>
@@ -22,6 +24,7 @@ export type WorkbenchPageComponent = ComponentType<WorkbenchPageProps>
 export interface WorkbenchPageChromeProps {
   page: WorkbenchPageDefinition
   consoleClient?: WorkbenchConsoleClient
+  schemaUI?: SchemaUIResolver
   inspectorOpen: boolean
   onInspectorOpenChange(open: boolean): void
 }
