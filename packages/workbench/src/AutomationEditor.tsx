@@ -11,7 +11,13 @@ import {
   ZoomIn,
   ZoomOut,
 } from 'lucide-react'
-import type { WorkbenchAutomationDetail, WorkbenchAutomationIndexItem } from './contracts.js'
+import { AutomationQuickPicker } from './AutomationQuickPicker.js'
+import type {
+  WorkbenchAutomationDetail,
+  WorkbenchAutomationIndexItem,
+  WorkbenchAutomationInsertCatalog,
+  WorkbenchAutomationInsertItem,
+} from './contracts.js'
 import { automations, automationSteps } from './model.js'
 import type { AutomationStep } from './model.js'
 import type { ConsoleQueryState } from './useConsoleQuery.js'
@@ -24,6 +30,7 @@ export interface AutomationEditorProps {
   activeStepId: string
   activeTab: string
   detailState?: ConsoleQueryState<WorkbenchAutomationDetail | null>
+  insertCatalogState?: ConsoleQueryState<WorkbenchAutomationInsertCatalog>
   steps?: AutomationStep[]
   authoring?: {
     canEdit: boolean
@@ -39,7 +46,8 @@ export interface AutomationEditorProps {
   onTabChange(tab: string): void
   onOpenInspector(): void
   onAutomationChange?(id: string): void
-  onAddWaitStep?(): void
+  onInsert?(item: WorkbenchAutomationInsertItem): void
+  onReloadInsertCatalog?(): void
   onUndo?(): void
   onRedo?(): void
   onPublish?(): void
@@ -63,13 +71,15 @@ export function AutomationEditor({
   activeStepId,
   activeTab,
   detailState,
+  insertCatalogState,
   steps: projectedSteps,
   authoring,
   onStepChange,
   onTabChange,
   onOpenInspector,
   onAutomationChange,
-  onAddWaitStep,
+  onInsert,
+  onReloadInsertCatalog,
   onUndo,
   onRedo,
   onPublish,
@@ -217,12 +227,12 @@ export function AutomationEditor({
                 )
               })}
               {!steps.length ? <p className="automation-flow-empty">This Draft has no triggers or flow steps yet.</p> : null}
-              <button
-                className="add-step-button"
+              <AutomationQuickPicker
                 disabled={authoring ? !authoring.canEdit : false}
-                onClick={onAddWaitStep}
-                type="button"
-              ><Plus size={15} /> {authoring ? 'Add wait step' : 'Add step'}</button>
+                {...(insertCatalogState ? { state: insertCatalogState } : {})}
+                {...(onInsert ? { onInsert } : {})}
+                {...(onReloadInsertCatalog ? { onReload: onReloadInsertCatalog } : {})}
+              />
             </div>
           </section>
         </>

@@ -46,6 +46,7 @@ describe('Numen runtime', () => {
         server: { host: '127.0.0.1', port: 0 },
         workbench: { root: workbenchRoot, entrySource: workbenchEntry },
         workbenchAutomationAuthoring: {},
+        workbenchAutomationCatalog: {},
         workbenchAutomations: {},
         workbenchConnections: {},
         workbenchHome: {},
@@ -65,6 +66,10 @@ describe('Numen runtime', () => {
     expect(application.context.console.list()).toEqual([
       expect.objectContaining({
         definition: expect.objectContaining({ id: 'numen:automation-detail', version: 1, kind: 'query' }),
+        providerAvailable: true,
+      }),
+      expect.objectContaining({
+        definition: expect.objectContaining({ id: 'numen:automation-insert-catalog', version: 1, kind: 'query' }),
         providerAvailable: true,
       }),
       expect.objectContaining({
@@ -114,6 +119,9 @@ describe('Numen runtime', () => {
     application.context.emit('numen/run-change', 'synthetic-run')
     application.context.emit('numen/automation-change', 'synthetic-automation')
     await vi.waitFor(() => expect(invalidations).toEqual([{ scopes: ['home', 'automations', 'runs'] }]))
+    invalidations.length = 0
+    application.context.emit('numen/capability-change', { id: 'synthetic:capability', version: 1 })
+    await vi.waitFor(() => expect(invalidations).toEqual([{ scopes: ['automations'] }]))
     expect(application.context.consoleEntries.list()).toEqual([{
       id: 'numen:workbench-core',
       prod: workbenchEntry,

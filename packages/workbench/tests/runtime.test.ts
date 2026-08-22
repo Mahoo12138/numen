@@ -15,6 +15,7 @@ import {
 } from '../src/runtime.js'
 import {
   workbenchAutomationDetailQueryRef,
+  workbenchAutomationInsertCatalogQueryRef,
   workbenchAutomationsIndexQueryRef,
   workbenchPublishAutomationDraftActionRef,
   workbenchSaveAutomationDraftActionRef,
@@ -55,6 +56,7 @@ describe('Workbench Runtime plugin', () => {
       prod: entrySource,
     }])
     expect(root.console.get(workbenchAutomationDetailQueryRef)).toMatchObject({ providerAvailable: false })
+    expect(root.console.get(workbenchAutomationInsertCatalogQueryRef)).toMatchObject({ providerAvailable: false })
     expect(root.console.get(workbenchAutomationsIndexQueryRef)).toMatchObject({ providerAvailable: false })
     expect(root.console.get(workbenchPublishAutomationDraftActionRef)).toMatchObject({ providerAvailable: false })
     expect(root.console.get(workbenchSaveAutomationDraftActionRef)).toMatchObject({ providerAvailable: false })
@@ -74,6 +76,7 @@ describe('Workbench Runtime plugin', () => {
     await fiber.dispose()
     expect(root.consoleEntries.list()).toEqual([])
     expect(root.console.get(workbenchAutomationDetailQueryRef)).toBeUndefined()
+    expect(root.console.get(workbenchAutomationInsertCatalogQueryRef)).toBeUndefined()
     expect(root.console.get(workbenchAutomationsIndexQueryRef)).toBeUndefined()
     expect(root.console.get(workbenchPublishAutomationDraftActionRef)).toBeUndefined()
     expect(root.console.get(workbenchSaveAutomationDraftActionRef)).toBeUndefined()

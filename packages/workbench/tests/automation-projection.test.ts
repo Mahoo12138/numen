@@ -62,4 +62,22 @@ describe('Automation Source projection', () => {
       flow: { type: 'block', id: 'root', steps: [] },
     })).toEqual([])
   })
+
+  it('uses registry presentation metadata without changing Source identity', () => {
+    const steps = projectAutomationSteps({
+      triggers: [],
+      flow: {
+        type: 'capability',
+        id: 'capability-1',
+        capability: { id: 'demo:weather', version: 1 },
+        input: {},
+      },
+    }, [], new Map([['demo:weather@1', 'Weather lookup']]))
+
+    expect(steps[0]).toMatchObject({
+      sourceId: 'capability-1',
+      label: 'Weather lookup',
+      summary: 'Capability · demo:weather@1',
+    })
+  })
 })

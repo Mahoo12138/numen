@@ -6,9 +6,11 @@ import { AutomationSidebar } from './AutomationSidebar.js'
 import { projectAutomationSteps } from './automation-projection.js'
 import {
   workbenchAutomationDetailQueryRef,
+  workbenchAutomationInsertCatalogQueryRef,
   workbenchAutomationsIndexQueryRef,
   type WorkbenchAutomationDetail,
   type WorkbenchAutomationDetailQueryInput,
+  type WorkbenchAutomationInsertCatalog,
   type WorkbenchAutomationsIndex,
 } from './contracts.js'
 import { Inspector, type InspectorFieldFocus } from './Inspector.js'
@@ -39,6 +41,12 @@ export function AutomationPageChrome({
   const [indexState, reloadIndex] = useConsoleQuery<Record<string, never>, WorkbenchAutomationsIndex>(
     consoleClient,
     workbenchAutomationsIndexQueryRef,
+    emptyQueryInput,
+    'automations',
+  )
+  const [insertCatalogState, reloadInsertCatalog] = useConsoleQuery<Record<string, never>, WorkbenchAutomationInsertCatalog>(
+    consoleClient,
+    workbenchAutomationInsertCatalogQueryRef,
     emptyQueryInput,
     'automations',
   )
@@ -89,17 +97,26 @@ export function AutomationPageChrome({
     if (detailState?.status !== 'READY' || !detailState.data || !effectiveDetail) return detailState
     return { status: 'READY', data: effectiveDetail }
   }, [detailState, effectiveDetail])
+  const capabilityTitles = useMemo(() => new Map(
+    insertCatalogState.status === 'READY'
+      ? insertCatalogState.data.items.flatMap(item => item.kind === 'capability'
+        ? [[`${item.capability.id}@${item.capability.version}`, item.title] as const]
+        : [])
+      : [],
+  ), [insertCatalogState])
   const steps = useMemo(() => (
-    effectiveDetail ? projectAutomationSteps(effectiveDetail.draft.source, authoring.problems) : []
-  ), [authoring.problems, effectiveDetail])
+    effectiveDetail ? projectAutomationSteps(effectiveDetail.draft.source, authoring.problems, capabilityTitles) : []
+  ), [authoring.problems, capabilityTitles, effectiveDetail])
+  const selectedStep = steps.find(step => step.sourceId === authoring.selectedNodeId)
   const activeStepId = consoleClient
-    ? (steps.some(step => step.id === requestedStepId) ? requestedStepId : steps[0]?.id ?? '')
+    ? selectedStep?.id ?? steps[0]?.id ?? ''
     : requestedStepId
   const workspace = useMemo<AutomationEditorProps>(() => ({
     ...(automationId ? { automationId } : {}),
     activeStepId,
     activeTab,
     ...(effectiveDetailState ? { detailState: effectiveDetailState } : {}),
+    ...(consoleClient ? { insertCatalogState } : {}),
     ...(consoleClient ? { steps } : {}),
     ...(consoleClient ? { automations: liveItems, onAutomationChange: setRequestedAutomationId } : {}),
     ...(consoleClient ? {
@@ -113,7 +130,8 @@ export function AutomationPageChrome({
         ...(authoring.saveError ? { saveError: authoring.saveError } : {}),
         ...(authoring.publishError ? { publishError: authoring.publishError } : {}),
       },
-      onAddWaitStep: authoring.addWaitStep,
+      onInsert: authoring.insert,
+      onReloadInsertCatalog: reloadInsertCatalog,
       onUndo: authoring.undo,
       onRedo: authoring.redo,
       onPublish: authoring.publish,
@@ -122,7 +140,9 @@ export function AutomationPageChrome({
     } : {}),
     onOpenInspector: () => onInspectorOpenChange(true),
     onStepChange: id => {
-      setRequestedStepId(id)
+      const step = steps.find(item => item.id === id)
+      if (consoleClient) authoring.selectNode(step?.sourceId)
+      else setRequestedStepId(id)
       setFieldFocus(undefined)
       onInspectorOpenChange(true)
     },
@@ -138,6 +158,7 @@ export function AutomationPageChrome({
     liveItems,
     onInspectorOpenChange,
     reloadDetail,
+    reloadInsertCatalog,
     steps,
   ])
   const selectProblem = useCallback((sourceRef: SourceRef) => {
@@ -145,14 +166,14 @@ export function AutomationPageChrome({
     if (!nodeId) return
     const step = steps.find(item => item.sourceId === nodeId)
     if (!step) return
-    setRequestedStepId(step.id)
+    authoring.selectNode(nodeId)
     setFieldFocus(previous => ({
       nodeId,
       ...(sourceRef.fieldPath ? { fieldPath: sourceRef.fieldPath } : {}),
       request: (previous?.request ?? 0) + 1,
     }))
     onInspectorOpenChange(true)
-  }, [onInspectorOpenChange, steps])
+  }, [authoring, onInspectorOpenChange, steps])
   const PageComponent = page.component
 
   return (

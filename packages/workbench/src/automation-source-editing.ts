@@ -1,8 +1,14 @@
 import type { AutomationSource, BlockSource, ControlSource } from '@numen/core'
+import type { WorkbenchAutomationInsertItem } from './contracts.js'
 
 export type AutomationSourceCommand =
-  | { type: 'ADD_WAIT' }
+  | { type: 'INSERT'; item: WorkbenchAutomationInsertItem }
   | { type: 'SET_WAIT_DURATION'; nodeId: string; durationMs: number }
+
+export interface AutomationSourceCommandResult {
+  source: AutomationSource
+  selectedNodeId?: string
+}
 
 function collectControlIds(source: AutomationSource): Set<string> {
   const ids = new Set(source.triggers.map(trigger => trigger.id))
@@ -34,20 +40,16 @@ function collectControlIds(source: AutomationSource): Set<string> {
 function availableId(ids: Set<string>, prefix: string): string {
   let suffix = 1
   while (ids.has(`${prefix}-${suffix}`)) suffix += 1
-  return `${prefix}-${suffix}`
+  const id = `${prefix}-${suffix}`
+  ids.add(id)
+  return id
 }
 
-function appendDefaultWait(source: AutomationSource): AutomationSource {
-  const ids = collectControlIds(source)
-  const wait = {
-    type: 'wait' as const,
-    id: availableId(ids, 'wait'),
-    durationMs: { type: 'literal' as const, value: 60_000 },
-  }
+function appendControl(source: AutomationSource, control: ControlSource, ids: Set<string>): AutomationSource {
   if (source.flow.type === 'block') {
     return {
       ...source,
-      flow: { ...source.flow, steps: [...source.flow.steps, wait] },
+      flow: { ...source.flow, steps: [...source.flow.steps, control] },
     }
   }
   return {
@@ -55,8 +57,70 @@ function appendDefaultWait(source: AutomationSource): AutomationSource {
     flow: {
       type: 'block',
       id: availableId(ids, 'flow'),
-      steps: [source.flow, wait],
+      steps: [source.flow, control],
     },
+  }
+}
+
+function createInsertControl(
+  item: WorkbenchAutomationInsertItem,
+  ids: Set<string>,
+): ControlSource {
+  if (item.kind === 'capability') {
+    return {
+      type: 'capability',
+      id: availableId(ids, 'capability'),
+      capability: item.capability,
+      input: {},
+    }
+  }
+  switch (item.control) {
+    case 'wait':
+      return {
+        type: 'wait',
+        id: availableId(ids, 'wait'),
+        durationMs: { type: 'literal', value: 60_000 },
+      }
+    case 'if': {
+      const id = availableId(ids, 'if')
+      return {
+        type: 'if',
+        id,
+        condition: { type: 'literal', value: true },
+        then: { type: 'block', id: availableId(ids, `${id}-then`), steps: [] },
+      }
+    }
+    case 'parallel':
+    case 'race': {
+      const id = availableId(ids, item.control)
+      return {
+        type: item.control,
+        id,
+        branches: [
+          { type: 'block', id: availableId(ids, `${id}-branch`), steps: [] },
+          { type: 'block', id: availableId(ids, `${id}-branch`), steps: [] },
+        ],
+      }
+    }
+    case 'foreach': {
+      const id = availableId(ids, 'foreach')
+      return {
+        type: 'foreach',
+        id,
+        items: { type: 'literal', value: [] },
+        body: { type: 'block', id: availableId(ids, `${id}-body`), steps: [] },
+        concurrency: 1,
+      }
+    }
+  }
+}
+
+function insertItem(source: AutomationSource, item: WorkbenchAutomationInsertItem): AutomationSourceCommandResult {
+  const ids = collectControlIds(source)
+  const control = createInsertControl(item, ids)
+  return {
+    source: appendControl(source, control, ids),
+    selectedNodeId: control.id,
   }
 }
 
@@ -139,10 +203,10 @@ function setWaitDuration(source: AutomationSource, nodeId: string, durationMs: n
 export function applyAutomationSourceCommand(
   source: AutomationSource,
   command: AutomationSourceCommand,
-): AutomationSource {
+): AutomationSourceCommandResult {
   switch (command.type) {
-    case 'ADD_WAIT': return appendDefaultWait(source)
-    case 'SET_WAIT_DURATION': return setWaitDuration(source, command.nodeId, command.durationMs)
+    case 'INSERT': return insertItem(source, command.item)
+    case 'SET_WAIT_DURATION': return { source: setWaitDuration(source, command.nodeId, command.durationMs) }
   }
 }
 
@@ -175,4 +239,11 @@ export function findAutomationControl(source: AutomationSource, nodeId: string):
   }
   visit(source.flow)
   return found
+}
+
+export function automationSourceHasNode(source: AutomationSource, nodeId: string | undefined): boolean {
+  return !!nodeId && (
+    source.triggers.some(trigger => trigger.id === nodeId)
+    || !!findAutomationControl(source, nodeId)
+  )
 }

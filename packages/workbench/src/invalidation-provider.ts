@@ -49,6 +49,7 @@ export function workbenchInvalidationProviderPlugin(ctx: Context): void {
         queueMicrotask(flush)
       }
       const disposeAutomation = ctx.on('numen/automation-change', () => invalidate('home', 'automations'))
+      const disposeCapability = ctx.on('numen/capability-change', () => invalidate('automations'))
       const disposeRun = ctx.on('numen/run-change', () => invalidate('home', 'runs'))
       const disposeConnection = ctx.on('numen/connection-change', () => invalidate('home', 'connections'))
       const disposeConnectionRuntime = ctx.on('numen/connection-runtime-change', () => invalidate('home', 'connections'))
@@ -61,6 +62,7 @@ export function workbenchInvalidationProviderPlugin(ctx: Context): void {
         disposed = true
         pending.clear()
         disposeAutomation()
+        disposeCapability()
         disposeRun()
         disposeConnection()
         disposeConnectionRuntime()
@@ -73,6 +75,7 @@ workbenchInvalidationProviderPlugin.inject = [
   'workbench',
   'console',
   'automations',
+  'capabilities',
   'scheduler',
   'connections',
 ]

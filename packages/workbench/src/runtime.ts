@@ -4,6 +4,7 @@ import {
   workbenchPublishAutomationDraftAction,
   workbenchSaveAutomationDraftAction,
 } from './automation-authoring-provider.js'
+import { workbenchAutomationInsertCatalogQuery } from './automation-catalog-provider.js'
 import { workbenchAutomationDetailQuery, workbenchAutomationsIndexQuery } from './automations-provider.js'
 import { workbenchConnectionsIndexQuery } from './connections-provider.js'
 import { workbenchHomeOverviewQuery } from './home-provider.js'
@@ -16,6 +17,10 @@ export {
   workbenchPublishAutomationDraftAction,
   workbenchSaveAutomationDraftAction,
 } from './automation-authoring-provider.js'
+export {
+  workbenchAutomationCatalogProviderPlugin,
+  workbenchAutomationInsertCatalogQuery,
+} from './automation-catalog-provider.js'
 export {
   workbenchAutomationDetailQuery,
   workbenchAutomationsIndexQuery,
@@ -44,6 +49,7 @@ export class WorkbenchRuntimeService extends Service {
   constructor(ctx: Context, config: WorkbenchRuntimeConfig = {}) {
     super(ctx, 'workbench')
     workbenchServerPlugin(ctx, config)
+    ctx.console.define(ctx, workbenchAutomationInsertCatalogQuery)
     ctx.console.define(ctx, workbenchPublishAutomationDraftAction)
     ctx.console.define(ctx, workbenchSaveAutomationDraftAction)
     ctx.console.define(ctx, workbenchAutomationDetailQuery)

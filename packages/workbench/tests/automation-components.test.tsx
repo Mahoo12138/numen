@@ -127,7 +127,7 @@ describe('live Automation workspace projections', () => {
     expect(markup).toContain('Published r1')
     expect(markup).toContain('Not active')
     expect(markup).toContain('>Publish<')
-    expect(markup).toContain('Add wait step')
+    expect(markup).toContain('Add step')
   })
 
   it('renders conflict recovery and publish diagnostics in Page-owned regions', () => {

@@ -1,5 +1,5 @@
 import type { ConsoleProcedureRef } from '@numen/console'
-import type { AutomationSource, NumenValue } from '@numen/core'
+import type { AutomationSource, CapabilityRef, NumenValue } from '@numen/core'
 
 export const workbenchHomeOverviewQueryRef = {
   id: 'numen:home-overview',
@@ -201,6 +201,34 @@ export interface WorkbenchAutomationDetail {
   automation: WorkbenchAutomationIdentity
   draft: WorkbenchAutomationDraft
   revisions: WorkbenchAutomationRevisionSummary[]
+}
+
+export const workbenchAutomationInsertCatalogQueryRef = {
+  id: 'numen:automation-insert-catalog',
+  version: 1,
+} as const satisfies ConsoleProcedureRef
+
+export type WorkbenchAutomationControlKind = 'wait' | 'if' | 'parallel' | 'race' | 'foreach'
+
+export type WorkbenchAutomationInsertItem =
+  | {
+    kind: 'control'
+    control: WorkbenchAutomationControlKind
+    title: string
+    description: string
+  }
+  | {
+    kind: 'capability'
+    capability: CapabilityRef
+    capabilityKind: 'query' | 'action'
+    title: string
+    description?: string
+    providerAvailable: boolean
+    connectionSlots: string[]
+  }
+
+export interface WorkbenchAutomationInsertCatalog {
+  items: WorkbenchAutomationInsertItem[]
 }
 
 export const workbenchSaveAutomationDraftActionRef = {

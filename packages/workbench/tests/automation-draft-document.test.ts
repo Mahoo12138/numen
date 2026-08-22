@@ -1,6 +1,10 @@
 import type { AutomationSource } from '@numen/core'
 import { describe, expect, it } from 'vitest'
-import type { WorkbenchAutomationDraft } from '../src/contracts.js'
+import type {
+  WorkbenchAutomationControlKind,
+  WorkbenchAutomationDraft,
+  WorkbenchAutomationInsertItem,
+} from '../src/contracts.js'
 import { applyAutomationSourceCommand } from '../src/automation-source-editing.js'
 import {
   reduceAutomationDraftDocument,
@@ -10,6 +14,16 @@ import {
 const source: AutomationSource = {
   triggers: [],
   flow: { type: 'block', id: 'root', steps: [] },
+}
+
+function controlItem(control: WorkbenchAutomationControlKind): WorkbenchAutomationInsertItem {
+  return { kind: 'control', control, title: control, description: `${control} control` }
+}
+
+const waitItem = controlItem('wait')
+
+function insert(nextSource: AutomationSource, item: WorkbenchAutomationInsertItem = waitItem): AutomationSource {
+  return applyAutomationSourceCommand(nextSource, { type: 'INSERT', item }).source
 }
 
 function draft(version: number, nextSource: AutomationSource = source): WorkbenchAutomationDraft {
@@ -24,6 +38,7 @@ function draft(version: number, nextSource: AutomationSource = source): Workbenc
 function unavailableState(): AutomationDraftDocumentState {
   return {
     selectedAutomationId: undefined,
+    selectedNodeId: undefined,
     document: undefined,
     savePhase: 'UNAVAILABLE',
     editRevision: 0,
@@ -47,16 +62,16 @@ function loadedState(): AutomationDraftDocumentState {
 
 describe('local Automation Draft document', () => {
   it('appends stable wait ids and preserves a non-block flow by wrapping it', () => {
-    const once = applyAutomationSourceCommand(source, { type: 'ADD_WAIT' })
-    const twice = applyAutomationSourceCommand(once, { type: 'ADD_WAIT' })
+    const once = insert(source)
+    const twice = insert(once)
 
     expect(once.flow).toMatchObject({ type: 'block', steps: [{ id: 'wait-1' }] })
     expect(twice.flow).toMatchObject({ type: 'block', steps: [{ id: 'wait-1' }, { id: 'wait-2' }] })
 
-    const wrapped = applyAutomationSourceCommand({
+    const wrapped = insert({
       triggers: [],
       flow: { type: 'wait', id: 'existing', durationMs: { type: 'literal', value: 1_000 } },
-    }, { type: 'ADD_WAIT' })
+    })
     expect(wrapped.flow).toMatchObject({
       type: 'block',
       id: 'flow-1',
@@ -64,13 +79,40 @@ describe('local Automation Draft document', () => {
     })
   })
 
+  it('inserts structured controls and capability references through the same command seam', () => {
+    let edited = source
+    for (const control of ['if', 'parallel', 'race', 'foreach'] as const) {
+      edited = insert(edited, controlItem(control))
+    }
+    edited = insert(edited, {
+      kind: 'capability',
+      capability: { id: 'test:weather', version: 2 },
+      capabilityKind: 'query',
+      title: 'Weather',
+      providerAvailable: false,
+      connectionSlots: ['account'],
+    })
+
+    expect(edited.flow).toMatchObject({
+      type: 'block',
+      steps: [
+        { type: 'if', id: 'if-1', then: { type: 'block', id: 'if-1-then-1', steps: [] } },
+        { type: 'parallel', id: 'parallel-1', branches: [{ id: 'parallel-1-branch-1' }, { id: 'parallel-1-branch-2' }] },
+        { type: 'race', id: 'race-1', branches: [{ id: 'race-1-branch-1' }, { id: 'race-1-branch-2' }] },
+        { type: 'foreach', id: 'foreach-1', body: { id: 'foreach-1-body-1' }, concurrency: 1 },
+        { type: 'capability', id: 'capability-1', capability: { id: 'test:weather', version: 2 }, input: {} },
+      ],
+    })
+  })
+
   it('keeps newer local edits when an earlier autosave completes', () => {
-    let state = reduceAutomationDraftDocument(loadedState(), { type: 'EDIT', command: { type: 'ADD_WAIT' } })
+    let state = reduceAutomationDraftDocument(loadedState(), { type: 'EDIT', command: { type: 'INSERT', item: waitItem } })
     state = reduceAutomationDraftDocument(state, { type: 'SAVE_REQUEST' })
-    state = reduceAutomationDraftDocument(state, { type: 'EDIT', command: { type: 'ADD_WAIT' } })
+    state = reduceAutomationDraftDocument(state, { type: 'EDIT', command: { type: 'INSERT', item: waitItem } })
+    expect(state.selectedNodeId).toBe('wait-2')
     state = reduceAutomationDraftDocument(state, {
       type: 'SAVE_SUCCESS',
-      result: { draft: draft(2, applyAutomationSourceCommand(source, { type: 'ADD_WAIT' })) },
+      result: { draft: draft(2, insert(source)) },
     })
 
     expect(state.savePhase).toBe('DIRTY')
@@ -87,7 +129,7 @@ describe('local Automation Draft document', () => {
   })
 
   it('protects a conflicted local document until the user explicitly reloads', () => {
-    let state = reduceAutomationDraftDocument(loadedState(), { type: 'EDIT', command: { type: 'ADD_WAIT' } })
+    let state = reduceAutomationDraftDocument(loadedState(), { type: 'EDIT', command: { type: 'INSERT', item: waitItem } })
     state = reduceAutomationDraftDocument(state, { type: 'SAVE_REQUEST' })
     state = reduceAutomationDraftDocument(state, {
       type: 'SAVE_FAILURE',
@@ -131,7 +173,7 @@ describe('local Automation Draft document', () => {
       type: 'SET_WAIT_DURATION',
       nodeId: 'nested-wait',
       durationMs: 12_500,
-    })
+    }).source
     expect(edited.flow).toMatchObject({
       type: 'if',
       then: {
@@ -147,12 +189,12 @@ describe('local Automation Draft document', () => {
       type: 'SET_WAIT_DURATION',
       nodeId: 'missing',
       durationMs: 1_000,
-    })).toBe(edited)
+    }).source).toBe(edited)
   })
 
   it('maintains bounded full-document undo and redo history across saved edits', () => {
     let state = loadedState()
-    state = reduceAutomationDraftDocument(state, { type: 'EDIT', command: { type: 'ADD_WAIT' } })
+    state = reduceAutomationDraftDocument(state, { type: 'EDIT', command: { type: 'INSERT', item: waitItem } })
     state = reduceAutomationDraftDocument(state, {
       type: 'EDIT',
       command: { type: 'SET_WAIT_DURATION', nodeId: 'wait-1', durationMs: 5_000 },
@@ -168,9 +210,11 @@ describe('local Automation Draft document', () => {
 
     state = reduceAutomationDraftDocument(state, { type: 'UNDO' })
     expect(state.document?.source.flow).toMatchObject({ steps: [] })
+    expect(state.selectedNodeId).toBeUndefined()
 
     state = reduceAutomationDraftDocument(state, { type: 'REDO' })
     expect(state.document?.source.flow).toMatchObject({ steps: [{ durationMs: { value: 60_000 } }] })
+    expect(state.selectedNodeId).toBe('wait-1')
 
     state = reduceAutomationDraftDocument(state, { type: 'SAVE_REQUEST' })
     state = reduceAutomationDraftDocument(state, {
@@ -183,7 +227,7 @@ describe('local Automation Draft document', () => {
   })
 
   it('caps history and preserves an undo made while autosave is in flight', () => {
-    let state = reduceAutomationDraftDocument(loadedState(), { type: 'EDIT', command: { type: 'ADD_WAIT' } })
+    let state = reduceAutomationDraftDocument(loadedState(), { type: 'EDIT', command: { type: 'INSERT', item: waitItem } })
     for (let durationMs = 1; durationMs <= 55; durationMs += 1) {
       state = reduceAutomationDraftDocument(state, {
         type: 'EDIT',
@@ -208,7 +252,7 @@ describe('local Automation Draft document', () => {
   })
 
   it('preserves history across same-version refresh and resets it for an external version', () => {
-    let state = reduceAutomationDraftDocument(loadedState(), { type: 'EDIT', command: { type: 'ADD_WAIT' } })
+    let state = reduceAutomationDraftDocument(loadedState(), { type: 'EDIT', command: { type: 'INSERT', item: waitItem } })
     state = reduceAutomationDraftDocument(state, { type: 'SAVE_REQUEST' })
     state = reduceAutomationDraftDocument(state, {
       type: 'SAVE_SUCCESS',

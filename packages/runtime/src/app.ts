@@ -21,6 +21,7 @@ import { SchedulerService } from '@numen/scheduler'
 import { TriggerService } from '@numen/triggers'
 import {
   workbenchAutomationAuthoringProviderPlugin,
+  workbenchAutomationCatalogProviderPlugin,
   workbenchAutomationsProviderPlugin,
   workbenchConnectionsProviderPlugin,
   workbenchHomeProviderPlugin,
@@ -63,6 +64,7 @@ const builtins = {
   server: Server,
   workbench: workbenchRuntimePlugin,
   workbenchAutomationAuthoring: workbenchAutomationAuthoringProviderPlugin,
+  workbenchAutomationCatalog: workbenchAutomationCatalogProviderPlugin,
   workbenchAutomations: workbenchAutomationsProviderPlugin,
   workbenchConnections: workbenchConnectionsProviderPlugin,
   workbenchHome: workbenchHomeProviderPlugin,

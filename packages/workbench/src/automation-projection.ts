@@ -42,7 +42,12 @@ function step(
   }
 }
 
-function projectControl(source: ControlSource, depth: number, output: AutomationStep[]): void {
+function projectControl(
+  source: ControlSource,
+  depth: number,
+  output: AutomationStep[],
+  capabilityTitles: ReadonlyMap<string, string>,
+): void {
   switch (source.type) {
     case 'block':
       output.push(step(
@@ -53,13 +58,13 @@ function projectControl(source: ControlSource, depth: number, output: Automation
         Boxes,
         depth,
       ))
-      for (const child of source.steps) projectControl(child, depth + 1, output)
+      for (const child of source.steps) projectControl(child, depth + 1, output, capabilityTitles)
       break
     case 'capability':
       output.push(step(
         source.id,
         'capability',
-        humanize(source.id, 'Capability'),
+        capabilityTitles.get(`${source.capability.id}@${source.capability.version}`) ?? humanize(source.id, 'Capability'),
         `Capability · ${source.capability.id}@${source.capability.version}${source.connection ? ` · ${source.connection}` : ''}`,
         Zap,
         depth,
@@ -77,16 +82,16 @@ function projectControl(source: ControlSource, depth: number, output: Automation
       break
     case 'if':
       output.push(step(source.id, 'if', humanize(source.id, 'Condition'), `If · ${describeExpression(source.condition)}`, GitBranch, depth))
-      projectControl(source.then, depth + 1, output)
-      if (source.else) projectControl(source.else, depth + 1, output)
+      projectControl(source.then, depth + 1, output, capabilityTitles)
+      if (source.else) projectControl(source.else, depth + 1, output, capabilityTitles)
       break
     case 'parallel':
       output.push(step(source.id, 'parallel', humanize(source.id, 'Parallel'), `${source.branches.length} parallel branches`, Network, depth))
-      for (const branch of source.branches) projectControl(branch, depth + 1, output)
+      for (const branch of source.branches) projectControl(branch, depth + 1, output, capabilityTitles)
       break
     case 'race':
       output.push(step(source.id, 'race', humanize(source.id, 'Race'), `${source.branches.length} first-success branches`, Play, depth))
-      for (const branch of source.branches) projectControl(branch, depth + 1, output)
+      for (const branch of source.branches) projectControl(branch, depth + 1, output, capabilityTitles)
       break
     case 'foreach':
       output.push(step(
@@ -97,13 +102,17 @@ function projectControl(source: ControlSource, depth: number, output: Automation
         Repeat2,
         depth,
       ))
-      projectControl(source.body, depth + 1, output)
+      projectControl(source.body, depth + 1, output, capabilityTitles)
       break
   }
 }
 
 /** A read-only Canvas projection. AutomationSource remains the sole authoring truth. */
-export function projectAutomationSteps(source: AutomationSource, diagnostics: CompileDiagnostic[] = []): AutomationStep[] {
+export function projectAutomationSteps(
+  source: AutomationSource,
+  diagnostics: CompileDiagnostic[] = [],
+  capabilityTitles: ReadonlyMap<string, string> = new Map(),
+): AutomationStep[] {
   const output = source.triggers.map<AutomationStep>(trigger => ({
     id: `trigger:${trigger.id}`,
     sourceId: trigger.id,
@@ -115,9 +124,9 @@ export function projectAutomationSteps(source: AutomationSource, diagnostics: Co
     depth: 0,
   }))
   if (source.flow.type === 'block') {
-    for (const child of source.flow.steps) projectControl(child, 0, output)
+    for (const child of source.flow.steps) projectControl(child, 0, output, capabilityTitles)
   } else {
-    projectControl(source.flow, 0, output)
+    projectControl(source.flow, 0, output, capabilityTitles)
   }
   if (!diagnostics.length) return output
   const problemCounts = new Map<string, number>()

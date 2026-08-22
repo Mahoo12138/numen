@@ -5,6 +5,7 @@ import {
   workbenchSaveAutomationDraftActionRef,
   type WorkbenchAutomationDetail,
   type WorkbenchAutomationDraft,
+  type WorkbenchAutomationInsertItem,
   type WorkbenchPublishAutomationDraftInput,
   type WorkbenchPublishAutomationDraftResult,
   type WorkbenchSaveAutomationDraftInput,
@@ -12,6 +13,7 @@ import {
 } from './contracts.js'
 import {
   applyAutomationSourceCommand,
+  automationSourceHasNode,
   type AutomationSourceCommand,
 } from './automation-source-editing.js'
 import type { WorkbenchConsoleClient } from './types.js'
@@ -50,10 +52,12 @@ interface PendingPublish {
 interface AutomationDraftSnapshot {
   source: AutomationSource
   presentation: Record<string, NumenValue>
+  selectedNodeId: string | undefined
 }
 
 export interface AutomationDraftDocumentState {
   selectedAutomationId: string | undefined
+  selectedNodeId: string | undefined
   document: AutomationDraftDocument | undefined
   savePhase: AutomationDraftSavePhase
   editRevision: number
@@ -71,6 +75,7 @@ export interface AutomationDraftDocumentState {
 export type AutomationDraftDocumentAction =
   | { type: 'SELECT'; automationId?: string }
   | { type: 'SERVER'; automationId: string; draft: WorkbenchAutomationDraft }
+  | { type: 'SELECT_NODE'; nodeId?: string }
   | { type: 'EDIT'; command: AutomationSourceCommand }
   | { type: 'UNDO' }
   | { type: 'REDO' }
@@ -85,6 +90,7 @@ export type AutomationDraftDocumentAction =
 
 const initialState: AutomationDraftDocumentState = {
   selectedAutomationId: undefined,
+  selectedNodeId: undefined,
   document: undefined,
   savePhase: 'UNAVAILABLE',
   editRevision: 0,
@@ -112,8 +118,11 @@ function toDocument(automationId: string, draft: WorkbenchAutomationDraft): Auto
 
 const historyLimit = 50
 
-function snapshot(document: AutomationDraftDocument): AutomationDraftSnapshot {
-  return { source: document.source, presentation: document.presentation }
+function snapshot(
+  document: AutomationDraftDocument,
+  selectedNodeId: string | undefined,
+): AutomationDraftSnapshot {
+  return { source: document.source, presentation: document.presentation, selectedNodeId }
 }
 
 function canChangeDocument(state: AutomationDraftDocumentState): boolean {
@@ -128,6 +137,7 @@ function changedState(
   document: AutomationDraftDocument,
   undoStack: AutomationDraftSnapshot[],
   redoStack: AutomationDraftSnapshot[],
+  selectedNodeId: string | undefined,
 ): AutomationDraftDocumentState {
   return {
     ...state,
@@ -136,6 +146,7 @@ function changedState(
     editRevision: state.editRevision + 1,
     undoStack,
     redoStack,
+    selectedNodeId,
     problems: [],
     publishError: undefined,
     saveError: undefined,
@@ -182,21 +193,30 @@ export function reduceAutomationDraftDocument(
         document: toDocument(action.automationId, action.draft),
         savePhase: 'CLEAN',
         editRevision: 0,
+        selectedNodeId: automationSourceHasNode(action.draft.source, state.selectedNodeId)
+          ? state.selectedNodeId
+          : undefined,
         undoStack: preserveHistory ? state.undoStack : [],
         redoStack: preserveHistory ? state.redoStack : [],
         publishError: undefined,
         conflict: undefined,
         saveError: undefined,
       }
+    case 'SELECT_NODE':
+      if (!state.document || !automationSourceHasNode(state.document.source, action.nodeId)) {
+        return action.nodeId === undefined ? { ...state, selectedNodeId: undefined } : state
+      }
+      return state.selectedNodeId === action.nodeId ? state : { ...state, selectedNodeId: action.nodeId }
     case 'EDIT': {
       if (!state.document || !canChangeDocument(state)) return state
-      const source = applyAutomationSourceCommand(state.document.source, action.command)
-      if (source === state.document.source) return state
+      const result = applyAutomationSourceCommand(state.document.source, action.command)
+      if (result.source === state.document.source) return state
       return changedState(
         state,
-        { ...state.document, source },
-        [...state.undoStack.slice(-(historyLimit - 1)), snapshot(state.document)],
+        { ...state.document, source: result.source },
+        [...state.undoStack.slice(-(historyLimit - 1)), snapshot(state.document, state.selectedNodeId)],
         [],
+        result.selectedNodeId ?? state.selectedNodeId,
       )
     }
     case 'UNDO': {
@@ -206,7 +226,8 @@ export function reduceAutomationDraftDocument(
         state,
         { ...state.document, source: previous.source, presentation: previous.presentation },
         state.undoStack.slice(0, -1),
-        [...state.redoStack.slice(-(historyLimit - 1)), snapshot(state.document)],
+        [...state.redoStack.slice(-(historyLimit - 1)), snapshot(state.document, state.selectedNodeId)],
+        automationSourceHasNode(previous.source, previous.selectedNodeId) ? previous.selectedNodeId : undefined,
       )
     }
     case 'REDO': {
@@ -215,8 +236,9 @@ export function reduceAutomationDraftDocument(
       return changedState(
         state,
         { ...state.document, source: next.source, presentation: next.presentation },
-        [...state.undoStack.slice(-(historyLimit - 1)), snapshot(state.document)],
+        [...state.undoStack.slice(-(historyLimit - 1)), snapshot(state.document, state.selectedNodeId)],
         state.redoStack.slice(0, -1),
+        automationSourceHasNode(next.source, next.selectedNodeId) ? next.selectedNodeId : undefined,
       )
     }
     case 'SAVE_REQUEST':
@@ -308,6 +330,7 @@ export function reduceAutomationDraftDocument(
 
 export interface AutomationDraftDocumentModel {
   document?: AutomationDraftDocument
+  selectedNodeId?: string
   savePhase: AutomationDraftSavePhase
   saveMessage: string
   conflict?: { expectedVersion: number; actualVersion: number }
@@ -319,7 +342,8 @@ export interface AutomationDraftDocumentModel {
   canPublish: boolean
   canUndo: boolean
   canRedo: boolean
-  addWaitStep(): void
+  insert(item: WorkbenchAutomationInsertItem): void
+  selectNode(nodeId?: string): void
   setWaitDuration(nodeId: string, durationMs: number): void
   undo(): void
   redo(): void
@@ -413,7 +437,12 @@ export function useAutomationDraftDocument({
     return () => controller.abort()
   }, [client, state.pendingPublish, state.publishPending])
 
-  const addWaitStep = useCallback(() => dispatch({ type: 'EDIT', command: { type: 'ADD_WAIT' } }), [])
+  const insert = useCallback((item: WorkbenchAutomationInsertItem) => {
+    dispatch({ type: 'EDIT', command: { type: 'INSERT', item } })
+  }, [])
+  const selectNode = useCallback((nodeId?: string) => {
+    dispatch({ type: 'SELECT_NODE', ...(nodeId ? { nodeId } : {}) })
+  }, [])
   const setWaitDuration = useCallback((nodeId: string, durationMs: number) => {
     dispatch({ type: 'EDIT', command: { type: 'SET_WAIT_DURATION', nodeId, durationMs } })
   }, [])
@@ -433,6 +462,7 @@ export function useAutomationDraftDocument({
 
   return useMemo(() => ({
     ...(state.document ? { document: state.document } : {}),
+    ...(state.selectedNodeId ? { selectedNodeId: state.selectedNodeId } : {}),
     savePhase: state.savePhase,
     saveMessage: saveMessage(state.savePhase),
     ...(state.conflict ? { conflict: state.conflict } : {}),
@@ -444,7 +474,8 @@ export function useAutomationDraftDocument({
     canPublish,
     canUndo: canEdit && !!state.undoStack.length,
     canRedo: canEdit && !!state.redoStack.length,
-    addWaitStep,
+    insert,
+    selectNode,
     setWaitDuration,
     undo,
     redo,
@@ -452,13 +483,14 @@ export function useAutomationDraftDocument({
     reload,
     retrySave,
   }), [
-    addWaitStep,
     canEdit,
     canPublish,
+    insert,
     publish,
     redo,
     reload,
     retrySave,
+    selectNode,
     setWaitDuration,
     state.conflict,
     state.document,
@@ -468,6 +500,7 @@ export function useAutomationDraftDocument({
     state.redoStack.length,
     state.saveError,
     state.savePhase,
+    state.selectedNodeId,
     state.undoStack.length,
     undo,
   ])

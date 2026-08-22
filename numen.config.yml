@@ -21,6 +21,7 @@ plugins:
     port: 5140
   workbench: {}
   workbenchAutomationAuthoring: {}
+  workbenchAutomationCatalog: {}
   workbenchAutomations: {}
   workbenchConnections: {}
   workbenchHome: {}
