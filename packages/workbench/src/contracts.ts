@@ -129,7 +129,7 @@ export const workbenchInvalidationSubscriptionRef = {
   version: 1,
 } as const satisfies ConsoleProcedureRef
 
-export type WorkbenchInvalidationScope = 'home' | 'automations' | 'runs' | 'connections'
+export type WorkbenchInvalidationScope = 'home' | 'automations' | 'automationCatalog' | 'runs' | 'connections'
 
 export interface WorkbenchInvalidationEvent {
   scopes: WorkbenchInvalidationScope[]
@@ -210,6 +210,44 @@ export const workbenchAutomationInsertCatalogQueryRef = {
 
 export type WorkbenchAutomationControlKind = 'wait' | 'if' | 'parallel' | 'race' | 'foreach'
 
+export type WorkbenchAutomationInputFieldType = 'string' | 'number' | 'boolean' | 'enum' | 'json'
+
+export interface WorkbenchAutomationInputOption {
+  label: string
+  value: NumenValue
+}
+
+export interface WorkbenchAutomationInputField {
+  name: string
+  label: string
+  type: WorkbenchAutomationInputFieldType
+  schemaType: string
+  required: boolean
+  description?: string
+  role?: string
+  defaultValue?: NumenValue
+  options?: WorkbenchAutomationInputOption[]
+  min?: number
+  max?: number
+  step?: number
+}
+
+export interface WorkbenchAutomationConnectionSlot {
+  name: string
+  required: boolean
+  accepts: string[]
+}
+
+export interface WorkbenchAutomationConnectionOption {
+  id: string
+  name: string
+  adapterId: string
+  adapterVersion: number
+  enabled: boolean
+  adapterAvailable: boolean
+  status: WorkbenchConnectionStatus
+}
+
 export type WorkbenchAutomationInsertItem =
   | {
     kind: 'control'
@@ -225,10 +263,14 @@ export type WorkbenchAutomationInsertItem =
     description?: string
     providerAvailable: boolean
     connectionSlots: string[]
+    connectionRequirements: WorkbenchAutomationConnectionSlot[]
+    inputFields: WorkbenchAutomationInputField[]
+    inputSchemaSupported: boolean
   }
 
 export interface WorkbenchAutomationInsertCatalog {
   items: WorkbenchAutomationInsertItem[]
+  connections: WorkbenchAutomationConnectionOption[]
 }
 
 export const workbenchSaveAutomationDraftActionRef = {

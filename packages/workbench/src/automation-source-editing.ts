@@ -1,8 +1,10 @@
-import type { AutomationSource, BlockSource, ControlSource } from '@numen/core'
+import type { AutomationSource, BlockSource, ControlSource, NumenValue } from '@numen/core'
 import type { WorkbenchAutomationInsertItem } from './contracts.js'
 
 export type AutomationSourceCommand =
   | { type: 'INSERT'; item: WorkbenchAutomationInsertItem }
+  | { type: 'SET_CAPABILITY_CONNECTION'; nodeId: string; slotName: string; connectionId?: string }
+  | { type: 'SET_CAPABILITY_LITERAL_INPUT'; nodeId: string; fieldName: string; value?: NumenValue }
   | { type: 'SET_WAIT_DURATION'; nodeId: string; durationMs: number }
 
 export interface AutomationSourceCommandResult {
@@ -67,11 +69,16 @@ function createInsertControl(
   ids: Set<string>,
 ): ControlSource {
   if (item.kind === 'capability') {
+    const input = Object.fromEntries((item.inputFields ?? []).flatMap(field => (
+      'defaultValue' in field
+        ? [[field.name, { type: 'literal' as const, value: field.defaultValue! }]]
+        : []
+    )))
     return {
       type: 'capability',
       id: availableId(ids, 'capability'),
       capability: item.capability,
-      input: {},
+      input,
     }
   }
   switch (item.control) {
@@ -199,6 +206,52 @@ function setWaitDuration(source: AutomationSource, nodeId: string, durationMs: n
   return result.changed ? { ...source, flow: result.control } : source
 }
 
+function setCapabilityLiteralInput(
+  source: AutomationSource,
+  nodeId: string,
+  fieldName: string,
+  value: NumenValue | undefined,
+): AutomationSource {
+  if (!fieldName) throw new TypeError('Capability input field name is required.')
+  const result = editControl(source.flow, nodeId, control => {
+    if (control.type !== 'capability') return control
+    const current = control.input[fieldName]
+    if (value === undefined) {
+      if (!(fieldName in control.input)) return control
+      const input = { ...control.input }
+      delete input[fieldName]
+      return { ...control, input }
+    }
+    if (current?.type === 'literal' && JSON.stringify(current.value) === JSON.stringify(value)) return control
+    return { ...control, input: { ...control.input, [fieldName]: { type: 'literal', value } } }
+  })
+  return result.changed ? { ...source, flow: result.control } : source
+}
+
+function setCapabilityConnection(
+  source: AutomationSource,
+  nodeId: string,
+  slotName: string,
+  connectionId: string | undefined,
+): AutomationSource {
+  if (!slotName) throw new TypeError('Capability connection slot name is required.')
+  if (connectionId !== undefined && !connectionId) throw new TypeError('Connection ID must be non-empty when provided.')
+  const result = editControl(source.flow, nodeId, control => {
+    if (control.type !== 'capability') return control
+    const connections = {
+      ...(control.connection ? { [slotName]: control.connection } : {}),
+      ...control.connections,
+    }
+    if (connectionId === undefined) delete connections[slotName]
+    else connections[slotName] = connectionId
+    const { connection: _legacy, connections: _current, ...rest } = control
+    if (!Object.keys(connections).length) return control.connection || control.connections ? rest : control
+    if (!control.connection && JSON.stringify(control.connections) === JSON.stringify(connections)) return control
+    return { ...rest, connections }
+  })
+  return result.changed ? { ...source, flow: result.control } : source
+}
+
 /** Applies one structured edit while preserving AutomationSource as the sole semantic truth. */
 export function applyAutomationSourceCommand(
   source: AutomationSource,
@@ -206,6 +259,12 @@ export function applyAutomationSourceCommand(
 ): AutomationSourceCommandResult {
   switch (command.type) {
     case 'INSERT': return insertItem(source, command.item)
+    case 'SET_CAPABILITY_CONNECTION': return {
+      source: setCapabilityConnection(source, command.nodeId, command.slotName, command.connectionId),
+    }
+    case 'SET_CAPABILITY_LITERAL_INPUT': return {
+      source: setCapabilityLiteralInput(source, command.nodeId, command.fieldName, command.value),
+    }
     case 'SET_WAIT_DURATION': return { source: setWaitDuration(source, command.nodeId, command.durationMs) }
   }
 }

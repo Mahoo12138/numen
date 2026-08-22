@@ -22,6 +22,14 @@ function describeExpression(expression: ValueExpr): string {
   }
 }
 
+function describeConnections(source: { connection?: string; connections?: Record<string, string> }): string {
+  if (!source.connections && source.connection) return ` · ${source.connection}`
+  const connections = source.connections ?? {}
+  const bindings = Object.entries(connections)
+  if (!bindings.length) return ''
+  return ` · ${bindings.map(([slot, connectionId]) => `${slot}: ${connectionId}`).join(', ')}`
+}
+
 function step(
   sourceId: string,
   kind: string,
@@ -65,7 +73,7 @@ function projectControl(
         source.id,
         'capability',
         capabilityTitles.get(`${source.capability.id}@${source.capability.version}`) ?? humanize(source.id, 'Capability'),
-        `Capability · ${source.capability.id}@${source.capability.version}${source.connection ? ` · ${source.connection}` : ''}`,
+        `Capability · ${source.capability.id}@${source.capability.version}${describeConnections(source)}`,
         Zap,
         depth,
       ))
@@ -118,7 +126,7 @@ export function projectAutomationSteps(
     sourceId: trigger.id,
     kind: 'trigger',
     label: humanize(trigger.id, 'Trigger'),
-    summary: `Trigger · ${trigger.capability.id}@${trigger.capability.version}${trigger.connection ? ` · ${trigger.connection}` : ''}`,
+    summary: `Trigger · ${trigger.capability.id}@${trigger.capability.version}${describeConnections(trigger)}`,
     icon: Radio,
     tone: 'neutral',
     depth: 0,

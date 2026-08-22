@@ -120,6 +120,69 @@ describe('automation compiler', () => {
     }
   })
 
+  it('validates named Connection slots and lowers stable bindings into IR and manifests', () => {
+    const connectedDefinition: CapabilityDefinition = {
+      ...actionDefinition,
+      id: 'test:connected-send',
+      connections: [
+        { name: 'account', required: true, accepts: ['mail:adapter'] },
+        { name: 'audit', required: false, accepts: ['audit:adapter@2'] },
+      ],
+    }
+    const connectedResolver = {
+      get(ref: { id: string; version: number }): CapabilityStatus | undefined {
+        return ref.id === connectedDefinition.id ? { definition: connectedDefinition, providerAvailable: true } : undefined
+      },
+    }
+    const connectionResolver = {
+      get(connectionId: string) {
+        if (connectionId === 'conn-mail') return { id: connectionId, adapter: { id: 'mail:adapter', version: 1 } }
+        if (connectionId === 'conn-audit') return { id: connectionId, adapter: { id: 'audit:adapter', version: 2 } }
+        if (connectionId === 'conn-wrong') return { id: connectionId, adapter: { id: 'chat:adapter', version: 1 } }
+      },
+    }
+    const connectedSource: AutomationSource = {
+      triggers: [],
+      flow: {
+        type: 'capability',
+        id: 'connected-send',
+        capability: { id: connectedDefinition.id, version: 1 },
+        connections: { account: 'conn-mail', audit: 'conn-audit' },
+        input: { message: { type: 'literal', value: 'Hello' } },
+      },
+    }
+
+    const result = compileAutomation(connectedSource, connectedResolver, connectionResolver)
+    expect(result.plan.instructions['connected-send']).toMatchObject({
+      op: 'invoke',
+      connections: { account: 'conn-mail', audit: 'conn-audit' },
+    })
+    expect(result.dependencyManifest.capabilities).toEqual([expect.objectContaining({
+      id: connectedDefinition.id,
+      connectionIds: { account: 'conn-mail', audit: 'conn-audit' },
+    })])
+    expect(result.contractSnapshot.capabilities[0]).toMatchObject({ connections: connectedDefinition.connections })
+
+    const missing = structuredClone(connectedSource)
+    if (missing.flow.type !== 'capability') throw new Error('invalid fixture')
+    delete missing.flow.connections?.account
+    expect(() => compileAutomation(missing, connectedResolver, connectionResolver)).toThrow(AutomationCompileError)
+
+    const incompatible = structuredClone(connectedSource)
+    if (incompatible.flow.type !== 'capability') throw new Error('invalid fixture')
+    incompatible.flow.connections!.account = 'conn-wrong'
+    try {
+      compileAutomation(incompatible, connectedResolver, connectionResolver)
+      throw new Error('expected compilation to fail')
+    } catch (error) {
+      expect(error).toBeInstanceOf(AutomationCompileError)
+      expect((error as AutomationCompileError).diagnostics).toContainEqual(expect.objectContaining({
+        code: 'CONNECTION_INCOMPATIBLE',
+        source: { nodeId: 'connected-send', fieldPath: 'connections.account' },
+      }))
+    }
+  })
+
   it('lowers Parallel branches into deterministic Fork, scope terminals, and Join', () => {
     const parallel: AutomationSource = {
       triggers: [],

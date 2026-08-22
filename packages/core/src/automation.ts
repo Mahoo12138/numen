@@ -12,7 +12,9 @@ export interface CapabilitySource {
   type: 'capability'
   id: string
   capability: CapabilityRef
+  /** @deprecated Read as the `default` slot for protocol-v1 persisted Sources. */
   connection?: string
+  connections?: Record<string, string>
   input: Record<string, ValueExpr>
   policy?: InvocationPolicy
 }
@@ -79,7 +81,9 @@ export type ControlSource =
 export interface TriggerSource {
   id: string
   capability: CapabilityRef
+  /** @deprecated Read as the `default` slot for protocol-v1 persisted Sources. */
   connection?: string
+  connections?: Record<string, string>
   config: Record<string, NumenValue>
 }
 
@@ -103,7 +107,9 @@ export type CoreInstruction =
     op: 'invoke'
     id: string
     capability: CapabilityRef
+    /** @deprecated Read as the `default` slot for protocol-v1 persisted plans. */
     connection?: string
+    connections?: Record<string, string>
     input: ValueExpr
     policy?: InvocationPolicy
     next?: string
@@ -164,7 +170,9 @@ export interface CompileDiagnostic {
 
 export interface CapabilityDependency extends CapabilityRef {
   kind: 'trigger' | 'query' | 'action'
+  /** @deprecated Read as the `default` slot for protocol-v1 persisted manifests. */
   connectionId?: string
+  connectionIds?: Record<string, string>
 }
 
 export interface DependencyManifest {
@@ -182,6 +190,11 @@ export interface ContractSnapshotCapability extends CapabilityRef {
     retrySafe: boolean
     defaultTimeoutMs?: number
   }
+  connections?: Array<{
+    name: string
+    required: boolean
+    accepts: string[]
+  }>
 }
 
 export interface ContractSnapshot {

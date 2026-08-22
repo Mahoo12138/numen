@@ -134,7 +134,7 @@ export class TriggerService extends Service {
           triggerId: trigger.id,
           capability: trigger.capability,
           config,
-          connectionIds: trigger.connection ? { default: trigger.connection } : {},
+          connectionIds: trigger.connections ?? (trigger.connection ? { default: trigger.connection } : {}),
         }
         const provider = this.ctx.capabilities.resolveTriggerProvider(trigger.capability)
         desired.set(subscriptionKey(automation.id, trigger.id), {

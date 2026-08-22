@@ -1,6 +1,5 @@
 import '@numen/connections'
 import type { ConsoleQueryDefinition } from '@numen/console'
-import type { Connection, ConnectionRuntimeState } from '@numen/connections'
 import type { Context } from 'cordis'
 import z from 'schemastery'
 import {
@@ -8,6 +7,7 @@ import {
   type WorkbenchConnectionStatus,
   type WorkbenchConnectionsIndex,
 } from './contracts.js'
+import { projectWorkbenchConnection } from './connection-projection.js'
 
 const connectionStatus = z.union([
   'DISABLED',
@@ -51,46 +51,13 @@ export const workbenchConnectionsIndexQuery: ConsoleQueryDefinition<Record<strin
   }),
 }
 
-function projectStatus(connection: Connection, runtime: ConnectionRuntimeState): WorkbenchConnectionStatus {
-  if (!connection.enabled) return 'DISABLED'
-  if (!connection.adapterAvailable) return 'UNAVAILABLE'
-  return runtime.status
-}
-
-function statusDetail(status: WorkbenchConnectionStatus): string {
-  switch (status) {
-    case 'DISABLED': return 'Disabled by configuration'
-    case 'UNAVAILABLE': return 'Adapter provider unavailable'
-    case 'STOPPED': return 'Runtime is stopped'
-    case 'STARTING': return 'Runtime is starting'
-    case 'READY': return 'Runtime is ready'
-    case 'ERROR': return 'Runtime failed to start'
-    case 'STOPPING': return 'Runtime is stopping'
-  }
-}
-
 export function workbenchConnectionsProviderPlugin(ctx: Context): void {
   ctx.console.provideQuery(ctx, workbenchConnectionsIndexQueryRef, {
     query(): WorkbenchConnectionsIndex {
       const items = ctx.connections.list().map(connection => {
         const runtime = ctx.connections.getRuntimeState(connection.id)
         const adapter = ctx.connections.getAdapter(connection.adapter)
-        const status = projectStatus(connection, runtime)
-        return {
-          id: connection.id,
-          name: connection.name,
-          adapterId: connection.adapter.id,
-          adapterVersion: connection.adapter.version,
-          adapterTitle: adapter?.title ?? connection.adapter.id,
-          enabled: connection.enabled,
-          adapterAvailable: connection.adapterAvailable,
-          credentialBound: !!connection.credentialId,
-          status,
-          statusDetail: statusDetail(status),
-          generation: connection.generation,
-          createdAt: connection.createdAt,
-          updatedAt: connection.updatedAt,
-        }
+        return projectWorkbenchConnection(connection, runtime, adapter?.title ?? connection.adapter.id)
       })
       return {
         summary: {

@@ -21,6 +21,15 @@ export interface CapabilityResolver {
   get(ref: CapabilityRef): CapabilityStatus | undefined
 }
 
+export interface ConnectionContract {
+  id: string
+  adapter: { id: string; version: number }
+}
+
+export interface ConnectionResolver {
+  get(connectionId: string): ConnectionContract | undefined
+}
+
 export interface CompileResult {
   plan: CorePlan
   dependencyManifest: DependencyManifest
@@ -69,7 +78,11 @@ function literalValue(expression: ValueExpr): NumenValue | undefined {
   }
 }
 
-export function compileAutomation(source: AutomationSource, capabilities: CapabilityResolver): CompileResult {
+export function compileAutomation(
+  source: AutomationSource,
+  capabilities: CapabilityResolver,
+  connections?: ConnectionResolver,
+): CompileResult {
   const diagnostics: CompileDiagnostic[] = []
   const instructions: Record<string, CoreInstruction> = {}
   const nodeIds = new Set<string>()
@@ -101,6 +114,53 @@ export function compileAutomation(source: AutomationSource, capabilities: Capabi
     nodeIds.add(id)
     return true
   }
+
+  const normalizeConnectionIds = (
+    nodeId: string,
+    legacyConnection: unknown,
+    value: unknown,
+  ): Record<string, string> => {
+    const result: Record<string, string> = {}
+    if (legacyConnection !== undefined) {
+      if (typeof legacyConnection === 'string' && legacyConnection) result.default = legacyConnection
+      else report({
+        severity: 'error',
+        code: 'CONNECTION_BINDING_INVALID',
+        message: 'Legacy connection binding must be a non-empty Connection ID.',
+        source: { nodeId, fieldPath: 'connection' },
+      })
+    }
+    if (value === undefined) return result
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      report({
+        severity: 'error',
+        code: 'CONNECTION_BINDINGS_INVALID',
+        message: 'Connection bindings must be an object keyed by slot name.',
+        source: { nodeId, fieldPath: 'connections' },
+      })
+      return result
+    }
+    for (const [slotName, connectionId] of Object.entries(value)) {
+      if (!slotName || typeof connectionId !== 'string' || !connectionId) {
+        report({
+          severity: 'error',
+          code: 'CONNECTION_BINDING_INVALID',
+          message: `Connection slot ${slotName || '(empty)'} requires a non-empty Connection ID.`,
+          source: { nodeId, fieldPath: `connections.${slotName}` },
+        })
+        continue
+      }
+      result[slotName] = connectionId
+    }
+    return result
+  }
+
+  const connectionBindingKey = (connectionIds: Record<string, string>): string => (
+    Object.entries(connectionIds)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([slot, connectionId]) => `${slot}=${connectionId}`)
+      .join(',')
+  )
 
   const validateExpression = (expression: ValueExpr, nodeId: string, fieldPath: string): void => {
     if (!expression || typeof expression !== 'object' || typeof expression.type !== 'string') {
@@ -162,7 +222,7 @@ export function compileAutomation(source: AutomationSource, capabilities: Capabi
     ref: CapabilityRef,
     nodeId: string,
     expectedKind: 'trigger' | 'step',
-    connectionId?: string,
+    connectionIds: Record<string, string>,
   ): CapabilityDefinition | undefined => {
     const status = capabilities.get(ref)
     if (!status) {
@@ -176,16 +236,62 @@ export function compileAutomation(source: AutomationSource, capabilities: Capabi
     if (expectedKind === 'step' && definition.kind === 'trigger') {
       report({ severity: 'error', code: 'CAPABILITY_KIND_MISMATCH', message: `${capabilityKey(ref)} cannot be invoked as a flow step.`, source: { nodeId, fieldPath: 'capability' } })
     }
-    if (definition.connections?.some(slot => slot.required) && !connectionId) {
-      report({ severity: 'error', code: 'CONNECTION_REQUIRED', message: `${capabilityKey(ref)} requires a connection.`, source: { nodeId, fieldPath: 'connection' } })
+    const slots = new Map((definition.connections ?? []).map(slot => [slot.name, slot]))
+    if (connectionIds.default && !slots.has('default') && slots.size === 1) {
+      const [onlySlot] = slots.keys()
+      connectionIds[onlySlot!] = connectionIds.default
+      delete connectionIds.default
+    }
+    for (const slotName of Object.keys(connectionIds)) {
+      if (!slots.has(slotName)) {
+        report({
+          severity: 'error',
+          code: 'CONNECTION_SLOT_UNKNOWN',
+          message: `${capabilityKey(ref)} does not declare connection slot: ${slotName}.`,
+          source: { nodeId, fieldPath: `connections.${slotName}` },
+        })
+      }
+    }
+    for (const slot of slots.values()) {
+      const connectionId = connectionIds[slot.name]
+      if (slot.required && !connectionId) {
+        report({
+          severity: 'error',
+          code: 'CONNECTION_REQUIRED',
+          message: `${capabilityKey(ref)} requires connection slot: ${slot.name}.`,
+          source: { nodeId, fieldPath: `connections.${slot.name}` },
+        })
+        continue
+      }
+      if (!connectionId || !connections) continue
+      const connection = connections.get(connectionId)
+      if (!connection) {
+        report({
+          severity: 'error',
+          code: 'CONNECTION_MISSING',
+          message: `Connection not found: ${connectionId}.`,
+          source: { nodeId, fieldPath: `connections.${slot.name}` },
+        })
+        continue
+      }
+      const adapterKey = `${connection.adapter.id}@${connection.adapter.version}`
+      if (slot.accepts.length && !slot.accepts.includes(connection.adapter.id) && !slot.accepts.includes(adapterKey)) {
+        report({
+          severity: 'error',
+          code: 'CONNECTION_INCOMPATIBLE',
+          message: `${connectionId} uses ${adapterKey}, which is incompatible with slot ${slot.name}.`,
+          source: { nodeId, fieldPath: `connections.${slot.name}` },
+        })
+      }
     }
 
-    const key = `${capabilityKey(ref)}:${connectionId ?? ''}`
+    const bindingsKey = connectionBindingKey(connectionIds)
+    const key = `${capabilityKey(ref)}:${bindingsKey}`
     dependencies.set(key, {
       id: ref.id,
       version: ref.version,
       kind: definition.kind,
-      ...(connectionId ? { connectionId } : {}),
+      ...(bindingsKey ? { connectionIds: { ...connectionIds } } : {}),
     })
     snapshots.set(capabilityKey(ref), {
       id: definition.id,
@@ -195,6 +301,13 @@ export function compileAutomation(source: AutomationSource, capabilities: Capabi
       inputSchema: schemaSnapshot(definition.input),
       outputSchema: schemaSnapshot(definition.output),
       semantics: { ...definition.semantics },
+      ...(definition.connections ? {
+        connections: definition.connections.map(slot => ({
+          name: slot.name,
+          required: slot.required,
+          accepts: [...slot.accepts],
+        })),
+      } : {}),
     })
     return definition
   }
@@ -260,6 +373,7 @@ export function compileAutomation(source: AutomationSource, capabilities: Capabi
         return cursor
       }
       case 'capability': {
+        const connectionIds = normalizeConnectionIds(control.id, control.connection, control.connections)
         const input = control.input && typeof control.input === 'object' && !Array.isArray(control.input)
           ? control.input
           : {}
@@ -273,7 +387,7 @@ export function compileAutomation(source: AutomationSource, capabilities: Capabi
           report({ severity: 'error', code: 'CAPABILITY_REF_INVALID', message: 'Capability reference requires id and integer version.', source: { nodeId: control.id, fieldPath: 'capability' } })
           return control.id
         }
-        const definition = resolveCapability(control.capability, control.id, 'step', control.connection)
+        const definition = resolveCapability(control.capability, control.id, 'step', connectionIds)
         if (definition) validateCapabilityInput(definition, input, control.id)
         const policy = control.policy
         if (policy !== undefined && (!policy || typeof policy !== 'object' || Array.isArray(policy))) {
@@ -297,7 +411,7 @@ export function compileAutomation(source: AutomationSource, capabilities: Capabi
           op: 'invoke',
           id: control.id,
           capability: control.capability,
-          ...(control.connection ? { connection: control.connection } : {}),
+          ...(Object.keys(connectionIds).length ? { connections: connectionIds } : {}),
           input: { type: 'object', entries: input },
           ...(policy ? { policy } : {}),
           next,
@@ -453,7 +567,8 @@ export function compileAutomation(source: AutomationSource, capabilities: Capabi
       continue
     }
     if (!registerNode(trigger.id, 'triggers')) continue
-    const definition = resolveCapability(trigger.capability, trigger.id, 'trigger', trigger.connection)
+    const connectionIds = normalizeConnectionIds(trigger.id, trigger.connection, trigger.connections)
+    const definition = resolveCapability(trigger.capability, trigger.id, 'trigger', connectionIds)
     if (!trigger.config || typeof trigger.config !== 'object' || Array.isArray(trigger.config) || !isNumenValue(trigger.config)) {
       report({ severity: 'error', code: 'TRIGGER_CONFIG_INVALID', message: 'Trigger config must be a JSON-like Numen value.', source: { nodeId: trigger.id, fieldPath: 'config' } })
     } else if (definition) {
@@ -484,9 +599,10 @@ export function compileAutomation(source: AutomationSource, capabilities: Capabi
   return {
     plan: { irVersion: 1, entry, instructions },
     dependencyManifest: {
-      capabilities: [...dependencies.values()].sort((a, b) => {
-        return `${capabilityKey(a)}:${a.connectionId ?? ''}`.localeCompare(`${capabilityKey(b)}:${b.connectionId ?? ''}`)
-      }),
+      capabilities: [...dependencies.values()].sort((a, b) => (
+        `${capabilityKey(a)}:${connectionBindingKey(a.connectionIds ?? (a.connectionId ? { default: a.connectionId } : {}))}`
+          .localeCompare(`${capabilityKey(b)}:${connectionBindingKey(b.connectionIds ?? (b.connectionId ? { default: b.connectionId } : {}))}`)
+      )),
     },
     contractSnapshot: {
       capabilities: [...snapshots.values()].sort((a, b) => capabilityKey(a).localeCompare(capabilityKey(b))),

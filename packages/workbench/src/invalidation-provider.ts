@@ -10,7 +10,7 @@ import {
   type WorkbenchInvalidationScope,
 } from './contracts.js'
 
-const scopeOrder: WorkbenchInvalidationScope[] = ['home', 'automations', 'runs', 'connections']
+const scopeOrder: WorkbenchInvalidationScope[] = ['home', 'automations', 'automationCatalog', 'runs', 'connections']
 const invalidationScope = z.union(scopeOrder).required()
 
 export const workbenchInvalidationSubscription: ConsoleSubscriptionDefinition<
@@ -49,10 +49,10 @@ export function workbenchInvalidationProviderPlugin(ctx: Context): void {
         queueMicrotask(flush)
       }
       const disposeAutomation = ctx.on('numen/automation-change', () => invalidate('home', 'automations'))
-      const disposeCapability = ctx.on('numen/capability-change', () => invalidate('automations'))
+      const disposeCapability = ctx.on('numen/capability-change', () => invalidate('automationCatalog'))
       const disposeRun = ctx.on('numen/run-change', () => invalidate('home', 'runs'))
-      const disposeConnection = ctx.on('numen/connection-change', () => invalidate('home', 'connections'))
-      const disposeConnectionRuntime = ctx.on('numen/connection-runtime-change', () => invalidate('home', 'connections'))
+      const disposeConnection = ctx.on('numen/connection-change', () => invalidate('home', 'automationCatalog', 'connections'))
+      const disposeConnectionRuntime = ctx.on('numen/connection-runtime-change', () => invalidate('home', 'automationCatalog', 'connections'))
 
       // This initial event is a reconnect barrier. The browser ignores it during first setup,
       // then treats it as an invalidation whenever the WebSocket subscription is restored.

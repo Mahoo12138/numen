@@ -797,7 +797,7 @@ export class SchedulerService extends Service {
     try {
       const output = await this.invokeWithGuards(() => provider.invoke({
           input: resolvedInput,
-          connectionIds: instruction.connection ? { default: instruction.connection } : {},
+          connectionIds: instruction.connections ?? (instruction.connection ? { default: instruction.connection } : {}),
           signal: controller.signal,
           idempotencyKey: attemptId,
         }), controller, timeoutMs)

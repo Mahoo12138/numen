@@ -8,7 +8,7 @@ import {
 import '@numen/database'
 import { Service, type Context } from 'cordis'
 import { createHash, randomUUID } from 'node:crypto'
-import { compileAutomation } from './compiler.js'
+import { compileAutomation, type ConnectionResolver } from './compiler.js'
 
 export class AutomationNotFoundError extends Error {
   override name = 'AutomationNotFoundError'
@@ -253,7 +253,11 @@ export class AutomationService extends Service {
       throw new DraftConflictError(expectedDraftVersion, draft.version)
     }
 
-    const compiled = compileAutomation(draft.source, this.ctx.capabilities)
+    const compiled = compileAutomation(
+      draft.source,
+      this.ctx.capabilities,
+      this.ctx.get('connections') as ConnectionResolver | undefined,
+    )
     const protocolVersion = 1
     const semanticSnapshot = {
       protocolVersion,

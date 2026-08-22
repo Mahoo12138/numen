@@ -46,7 +46,7 @@ const triggerDefinition: CapabilityDefinition = {
 async function createContext(
   databasePath: string,
   definition = actionDefinition(),
-  invoke?: (input: NumenValue, signal: AbortSignal) => Promise<NumenValue>,
+  invoke?: (input: NumenValue, signal: AbortSignal, connectionIds: Record<string, string>) => Promise<NumenValue>,
 ): Promise<Context> {
   const root = new Context()
   await root.plugin(DatabaseService, { path: databasePath })
@@ -55,8 +55,8 @@ async function createContext(
   root.capabilities.define(root, triggerDefinition)
   if (invoke) {
     root.capabilities.provide(root, definition, {
-      async invoke({ input, signal }) {
-        return invoke(input, signal)
+      async invoke({ input, signal, connectionIds }) {
+        return invoke(input, signal, connectionIds)
       },
     })
   }
@@ -135,6 +135,37 @@ describe('SchedulerService', () => {
     await Promise.resolve()
     expect(root.scheduler.getRunStatusCounts()).toMatchObject({ QUEUED: 0, COMPLETED: 3 })
     expect(changes.length).toBeGreaterThan(acceptedChangeCount)
+    await root.fiber.dispose()
+  })
+
+  it('passes named Connection bindings from compiled IR to the Capability Provider', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'numen-scheduler-'))
+    directories.push(directory)
+    const connected = {
+      ...actionDefinition(),
+      connections: [{ name: 'account', required: true, accepts: [] }],
+    }
+    let observed: Record<string, string> | undefined
+    const root = await createContext(join(directory, 'numen.db'), connected, async (input, _signal, connectionIds) => {
+      observed = connectionIds
+      return input
+    })
+    const automationId = publish(root, {
+      triggers: [],
+      flow: {
+        type: 'capability',
+        id: 'record',
+        capability: { id: connected.id, version: connected.version },
+        connections: { account: 'conn-account' },
+        input: { value: { type: 'literal', value: 'bound' } },
+      },
+    })
+
+    const run = root.scheduler.startManual(automationId)
+    await root.scheduler.dispatchUntilIdle()
+
+    expect(root.scheduler.getRun(run.id)?.status).toBe('COMPLETED')
+    expect(observed).toEqual({ account: 'conn-account' })
     await root.fiber.dispose()
   })
 

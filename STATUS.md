@@ -117,6 +117,9 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Registry-driven Automation insert catalog projecting core controls and live query/action Capability metadata
 - [x] Searchable responsive Quick Picker with generic Capability/If/Parallel/Race/ForEach/Wait insertion commands
 - [x] Source-backed editor selection restored consistently across insert, undo, redo, autosave, and refresh
+- [x] Schema-driven Capability Inspector with scalar, enum, boolean, and JSON literal editors plus schema defaults
+- [x] Named Capability/Trigger Connection bindings across Source, compiler, manifest, contract snapshot, Scheduler, and Trigger runtime
+- [x] Secret-safe compatible Connection choices with live catalog invalidation and legacy single-binding migration
 
 ## Milestone 3 — Completed
 
@@ -161,10 +164,11 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Automation editor local Draft projection, autosave/publish lifecycle, conflict protection, and Problems/Status regions
 - [x] Wait Inspector structured editing and 50-snapshot local undo/redo lifecycle
 - [x] Registry-driven Automation Quick Picker and structured/capability insertion lifecycle
+- [x] Schema-driven Capability inputs and named Connection binding authoring lifecycle
 
 ## Next
 
-1. Add schema-driven Capability Inspector fields and Connection binding selection
+1. Add a frontend Schema Renderer Registry and non-literal Value modes (Literal / Template / Reference)
 2. Connection enable/disable Actions with optimistic generation checks
 3. Run detail Query with timeline and execution diagnostics
 
@@ -179,13 +183,15 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - **Structured Source command seam — pass:** Inspector and Canvas controls issue small typed commands rather than traversing or mutating Source themselves. One pure command module preserves nested structured-control shape and stable IDs, while the Draft module owns a bounded history of complete Source/presentation snapshots, coordinates undo/redo with in-flight autosave, preserves history across same-version refresh, and resets it on external versions. Diagnostics remain server-authored and are projected by source reference into all three editor views.
 - **Automation insert catalog seam — pass:** Workbench owns one stable, typed insert-catalog Query contract; an optional Provider Adapter projects only presentation-safe metadata from the Capability Registry, while core structured controls enter through the same catalog interface. The Quick Picker never reads Registry internals, schemas, or Provider implementations, so a future plugin-owned Control Registry can replace the static core catalog without changing the editor UI.
 - **Quick Picker command seam — pass:** the Palette is an ephemeral searchable picker rather than permanent library state, and every selection resolves to one generic Source command. Capability nodes preserve stable `{id, version}` references even when their Provider is unavailable, structured controls receive collision-free nested IDs, and invalid/incomplete shapes remain saveable Drafts for authoritative Publish validation. Capability titles are a read-only catalog projection; Source remains semantic truth.
+- **Schema authoring seam — pass:** the Workbench Provider serializes Capability input contracts into presentation-safe field descriptors while preserving required/default/range/role metadata. The Inspector consumes that typed projection and issues Source commands only; it does not import Schemastery schemas, Capability Providers, or runtime registries. Runtime-dependent choices remain outside Schema, and unsupported shapes use an explicit JSON fallback rather than inventing a second value contract.
+- **Connection binding seam — pass:** Capability and Trigger Source now bind durable Connections by declared slot name, and the compiler carries the same map into Core IR and the dependency manifest while snapshotting slot requirements. Publish validates slot existence, required bindings, Connection existence, and Adapter compatibility when the Connection service is present; Scheduler and Trigger adapters receive the named map unchanged. The deprecated single `connection` field is normalized only at the compiler/editing boundary for persisted protocol-v1 compatibility.
 
 ## Verification Baseline
 
 ```text
 Typecheck: passing
 Build: passing
-Tests: 36 files, 139 tests passing
+Tests: 36 files, 143 tests passing
 CLI config validate: passing
 CLI doctor: passing
 SQLite schema migration: v10
@@ -207,7 +213,7 @@ pnpm dev
 - The current Scheduler executes the Core IR subset emitted by the compiler, including retry, timeout, cancellation, recovery, and structured concurrency.
 - Parallel, first-success Race, and bounded ForEach use durable Execution scopes with interruptible concurrent dispatch; Try/Finally control flow remains planned work.
 - Typed Console transports, browser sessions, Browser Cordis clients, frontend extension registries, atomic Entry generations, authenticated revision-fenced asset delivery, and Browser Entry reconciliation/rollback are operational. Generated bootstrap tokens and sessions rotate on restart; the CLI prints a fragment-only Workbench launch URL only with explicit `--print-launch-url` authorization.
-- The responsive Workbench shell, six core Page entries, stable browser Route/Page reconciliation, a secret-free production bootstrap, and authenticated core Entry loading are operational through the default Runtime. Home, Automations, the keyset-paginated Runs index, and the desired/runtime-separated Connections index display live data and refresh through coalesced typed invalidations without replacing server truth in the browser. Automation authoring now supports registry-driven Capability/control insertion, literal Wait editing, bounded undo/redo, debounced full-document autosave, explicit conflict recovery, immutable Revision publish, and source-linked diagnostics. A plugin-owned Control Registry, schema-driven Capability inputs, Connection bindings, non-literal Wait modes, compare/save-copy conflict options, and activation controls remain planned.
+- The responsive Workbench shell, six core Page entries, stable browser Route/Page reconciliation, a secret-free production bootstrap, and authenticated core Entry loading are operational through the default Runtime. Home, Automations, the keyset-paginated Runs index, and the desired/runtime-separated Connections index display live data and refresh through coalesced typed invalidations without replacing server truth in the browser. Automation authoring now supports registry-driven Capability/control insertion, schema-driven literal Capability inputs, named Connection bindings, literal Wait editing, bounded undo/redo, debounced full-document autosave, explicit conflict recovery, immutable Revision publish, and source-linked diagnostics. A plugin-owned Control Registry, frontend Schema Renderer Registry, non-literal Value modes, non-literal Wait modes, compare/save-copy conflict options, and activation controls remain planned.
 - Manual Runs and event Trigger subscriptions are supported. State Trigger transition detection, filtering, debounce, and throttle remain planned work.
 - Connection desired state, Adapter contracts, generation-fenced Runtime recreation, and Credential snapshots are operational; automatic reconnect policy remains planned work.
 - Credential payloads use authenticated encryption with environment-provided keys; key-ring migration and external vault providers remain planned work.

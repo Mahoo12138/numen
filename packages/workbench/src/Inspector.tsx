@@ -1,6 +1,8 @@
-import type { AutomationSource, CompileDiagnostic } from '@numen/core'
+import type { AutomationSource, CompileDiagnostic, NumenValue } from '@numen/core'
 import { ChevronDown, X } from 'lucide-react'
+import { CapabilityConnectionFields, CapabilityInputFields } from './CapabilityInspector.js'
 import { findAutomationControl } from './automation-source-editing.js'
+import type { WorkbenchAutomationInsertCatalog, WorkbenchAutomationInsertItem } from './contracts.js'
 import { automationSteps, type AutomationStep } from './model.js'
 
 const noDiagnostics: CompileDiagnostic[] = []
@@ -19,6 +21,9 @@ export interface InspectorProps {
   problems?: CompileDiagnostic[]
   canEdit?: boolean
   fieldFocus?: InspectorFieldFocus
+  catalog?: WorkbenchAutomationInsertCatalog
+  onCapabilityConnectionChange?(nodeId: string, slotName: string, connectionId?: string): void
+  onCapabilityLiteralInputChange?(nodeId: string, fieldName: string, value?: NumenValue): void
   onWaitDurationChange?(nodeId: string, durationMs: number): void
   onClose(): void
 }
@@ -103,6 +108,9 @@ export function Inspector({
   problems = noDiagnostics,
   canEdit = false,
   fieldFocus,
+  catalog,
+  onCapabilityConnectionChange,
+  onCapabilityLiteralInputChange,
   onWaitDurationChange,
   onClose,
 }: InspectorProps) {
@@ -122,6 +130,16 @@ export function Inspector({
     && typeof control.durationMs.value === 'number'
     ? control.durationMs.value
     : undefined
+  const capabilityDefinition = control?.type === 'capability'
+    ? catalog?.items.find((item): item is Extract<WorkbenchAutomationInsertItem, { kind: 'capability' }> => item.kind === 'capability'
+      && item.capability.id === control.capability.id
+      && item.capability.version === control.capability.version)
+    : undefined
+  const connectionBindings = control?.type === 'capability'
+    ? control.connections ?? (control.connection
+      ? { [capabilityDefinition?.connectionRequirements[0]?.name ?? 'default']: control.connection }
+      : {})
+    : {}
   return (
     <aside className="inspector" data-open={open} aria-label="Inspector">
       <header className="inspector-header">
@@ -170,6 +188,52 @@ export function Inspector({
             <div><dt>Kind</dt><dd>wait</dd></div>
           </dl>
         </InspectorGroup>
+      ) : control?.type === 'capability' && step.sourceId ? (
+        <>
+          {capabilityDefinition?.connectionRequirements.length ? (
+            <InspectorGroup title="Connection">
+              <CapabilityConnectionFields
+                bindings={connectionBindings}
+                canEdit={canEdit}
+                connections={catalog?.connections ?? []}
+                nodeId={step.sourceId}
+                {...(onCapabilityConnectionChange ? { onChange: onCapabilityConnectionChange } : {})}
+                problems={stepProblems}
+                slots={capabilityDefinition.connectionRequirements}
+              />
+            </InspectorGroup>
+          ) : null}
+          <InspectorGroup title="Input">
+            {capabilityDefinition ? (
+              <CapabilityInputFields
+                canEdit={canEdit}
+                control={control}
+                definition={capabilityDefinition}
+                nodeId={step.sourceId}
+                {...(onCapabilityLiteralInputChange ? { onChange: onCapabilityLiteralInputChange } : {})}
+                problems={stepProblems}
+              />
+            ) : (
+              <div className="inspector-schema-notice">
+                The Capability contract is unavailable. The Draft reference and existing inputs are preserved.
+              </div>
+            )}
+          </InspectorGroup>
+          <InspectorGroup title="Source">
+            <p className="inspector-summary">{step.summary}</p>
+            <dl className="inspector-source-fields">
+              <div><dt>Source ID</dt><dd>{step.sourceId}</dd></div>
+              <div><dt>Capability</dt><dd>{control.capability.id}@{control.capability.version}</dd></div>
+            </dl>
+          </InspectorGroup>
+          {stepProblems.length ? (
+            <InspectorGroup title="Diagnostics">
+              <div className="inspector-diagnostics">
+                {stepProblems.map(problem => <p key={`${problem.code}:${problem.source?.fieldPath ?? ''}`}>{problem.message}</p>)}
+              </div>
+            </InspectorGroup>
+          ) : null}
+        </>
       ) : (
         <InspectorGroup title="Configuration">
           <p className="inspector-summary">{step.summary}</p>

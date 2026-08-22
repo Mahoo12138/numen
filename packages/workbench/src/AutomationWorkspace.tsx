@@ -48,7 +48,7 @@ export function AutomationPageChrome({
     consoleClient,
     workbenchAutomationInsertCatalogQueryRef,
     emptyQueryInput,
-    'automations',
+    'automationCatalog',
   )
   const liveItems = indexState.status === 'READY' ? indexState.data.items : []
   const automationId = consoleClient
@@ -188,12 +188,15 @@ export function AutomationPageChrome({
       <Inspector
         activeStepId={activeStepId}
         canEdit={authoring.canEdit}
+        {...(insertCatalogState.status === 'READY' ? { catalog: insertCatalogState.data } : {})}
         {...(fieldFocus ? { fieldFocus } : {})}
         open={inspectorOpen}
         problems={authoring.problems}
         {...(authoring.document ? { source: authoring.document.source } : {})}
         {...(consoleClient ? { steps } : {})}
         onClose={() => onInspectorOpenChange(false)}
+        onCapabilityConnectionChange={authoring.setCapabilityConnection}
+        onCapabilityLiteralInputChange={authoring.setCapabilityLiteralInput}
         onWaitDurationChange={authoring.setWaitDuration}
       />
       <AutomationPanel

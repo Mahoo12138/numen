@@ -91,6 +91,17 @@ describe('local Automation Draft document', () => {
       title: 'Weather',
       providerAvailable: false,
       connectionSlots: ['account'],
+      connectionRequirements: [{ name: 'account', required: true, accepts: ['test:weather'] }],
+      inputSchemaSupported: true,
+      inputFields: [{
+        name: 'units',
+        label: 'Units',
+        type: 'enum',
+        schemaType: 'union',
+        required: false,
+        defaultValue: 'metric',
+        options: [{ label: 'metric', value: 'metric' }, { label: 'imperial', value: 'imperial' }],
+      }],
     })
 
     expect(edited.flow).toMatchObject({
@@ -100,9 +111,59 @@ describe('local Automation Draft document', () => {
         { type: 'parallel', id: 'parallel-1', branches: [{ id: 'parallel-1-branch-1' }, { id: 'parallel-1-branch-2' }] },
         { type: 'race', id: 'race-1', branches: [{ id: 'race-1-branch-1' }, { id: 'race-1-branch-2' }] },
         { type: 'foreach', id: 'foreach-1', body: { id: 'foreach-1-body-1' }, concurrency: 1 },
-        { type: 'capability', id: 'capability-1', capability: { id: 'test:weather', version: 2 }, input: {} },
+        {
+          type: 'capability',
+          id: 'capability-1',
+          capability: { id: 'test:weather', version: 2 },
+          input: { units: { type: 'literal', value: 'metric' } },
+        },
       ],
     })
+  })
+
+  it('edits literal Capability inputs and named Connection bindings as Source commands', () => {
+    const capabilitySource: AutomationSource = {
+      triggers: [],
+      flow: {
+        type: 'capability',
+        id: 'weather',
+        capability: { id: 'test:weather', version: 1 },
+        connection: 'legacy-connection',
+        input: { city: { type: 'ref', path: 'trigger.city' } },
+      },
+    }
+    const withInput = applyAutomationSourceCommand(capabilitySource, {
+      type: 'SET_CAPABILITY_LITERAL_INPUT',
+      nodeId: 'weather',
+      fieldName: 'city',
+      value: 'Hangzhou',
+    }).source
+    const withConnection = applyAutomationSourceCommand(withInput, {
+      type: 'SET_CAPABILITY_CONNECTION',
+      nodeId: 'weather',
+      slotName: 'account',
+      connectionId: 'conn-weather',
+    }).source
+
+    expect(withConnection.flow).toMatchObject({
+      type: 'capability',
+      input: { city: { type: 'literal', value: 'Hangzhou' } },
+      connections: { account: 'conn-weather' },
+    })
+    expect(JSON.stringify(withConnection)).not.toContain('legacy-connection')
+
+    const cleared = applyAutomationSourceCommand(withConnection, {
+      type: 'SET_CAPABILITY_CONNECTION',
+      nodeId: 'weather',
+      slotName: 'account',
+    }).source
+    const withoutInput = applyAutomationSourceCommand(cleared, {
+      type: 'SET_CAPABILITY_LITERAL_INPUT',
+      nodeId: 'weather',
+      fieldName: 'city',
+    }).source
+    expect(cleared.flow).not.toHaveProperty('connections')
+    expect(withoutInput.flow).toMatchObject({ type: 'capability', input: {} })
   })
 
   it('keeps newer local edits when an earlier autosave completes', () => {

@@ -114,14 +114,14 @@ describe('Numen runtime', () => {
       },
       event => invalidations.push(event),
     )
-    expect(invalidations).toEqual([{ scopes: ['home', 'automations', 'runs', 'connections'] }])
+    expect(invalidations).toEqual([{ scopes: ['home', 'automations', 'automationCatalog', 'runs', 'connections'] }])
     invalidations.length = 0
     application.context.emit('numen/run-change', 'synthetic-run')
     application.context.emit('numen/automation-change', 'synthetic-automation')
     await vi.waitFor(() => expect(invalidations).toEqual([{ scopes: ['home', 'automations', 'runs'] }]))
     invalidations.length = 0
     application.context.emit('numen/capability-change', { id: 'synthetic:capability', version: 1 })
-    await vi.waitFor(() => expect(invalidations).toEqual([{ scopes: ['automations'] }]))
+    await vi.waitFor(() => expect(invalidations).toEqual([{ scopes: ['automationCatalog'] }]))
     expect(application.context.consoleEntries.list()).toEqual([{
       id: 'numen:workbench-core',
       prod: workbenchEntry,

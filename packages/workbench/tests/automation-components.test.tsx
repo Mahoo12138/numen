@@ -5,7 +5,11 @@ import { AutomationPanel, AutomationStatusBar } from '../src/AutomationPanel.js'
 import { Inspector } from '../src/Inspector.js'
 import { AutomationSidebar } from '../src/AutomationSidebar.js'
 import { projectAutomationSteps } from '../src/automation-projection.js'
-import type { WorkbenchAutomationDetail, WorkbenchAutomationsIndex } from '../src/contracts.js'
+import type {
+  WorkbenchAutomationDetail,
+  WorkbenchAutomationInsertCatalog,
+  WorkbenchAutomationsIndex,
+} from '../src/contracts.js'
 
 const detail: WorkbenchAutomationDetail = {
   automation: {
@@ -116,7 +120,7 @@ describe('live Automation workspace projections', () => {
         publishPending: false,
       }}
       detailState={{ status: 'READY', data: inactiveDetail }}
-      onAddWaitStep={vi.fn()}
+      onInsert={vi.fn()}
       onOpenInspector={vi.fn()}
       onPublish={vi.fn()}
       onStepChange={vi.fn()}
@@ -201,5 +205,89 @@ describe('live Automation workspace projections', () => {
     expect(inspectorMarkup).toContain('value="5"')
     expect(inspectorMarkup).toContain('aria-invalid="true"')
     expect(inspectorMarkup).toContain('Wait duration is invalid.')
+  })
+
+  it('renders schema-driven Capability inputs separately from named Connection bindings', () => {
+    const capabilitySource = {
+      triggers: [],
+      flow: {
+        type: 'capability' as const,
+        id: 'send-message',
+        capability: { id: 'test:send', version: 1 },
+        connections: { account: 'conn-ready' },
+        input: {
+          message: { type: 'literal' as const, value: 'Hello' },
+          attempts: { type: 'literal' as const, value: 2 },
+          urgent: { type: 'literal' as const, value: true },
+          channel: { type: 'literal' as const, value: 'email' },
+          payload: { type: 'literal' as const, value: { subject: 'Morning' } },
+        },
+      },
+    }
+    const catalog: WorkbenchAutomationInsertCatalog = {
+      items: [{
+        kind: 'capability',
+        capability: { id: 'test:send', version: 1 },
+        capabilityKind: 'action',
+        title: 'Send message',
+        providerAvailable: true,
+        connectionSlots: ['account'],
+        connectionRequirements: [{ name: 'account', required: true, accepts: ['mail:adapter'] }],
+        inputSchemaSupported: true,
+        inputFields: [
+          { name: 'message', label: 'Message', type: 'string', schemaType: 'string', required: true, role: 'numen/expression' },
+          { name: 'attempts', label: 'Attempts', type: 'number', schemaType: 'number', required: false, min: 1, max: 5 },
+          { name: 'urgent', label: 'Urgent', type: 'boolean', schemaType: 'boolean', required: false },
+          {
+            name: 'channel',
+            label: 'Channel',
+            type: 'enum',
+            schemaType: 'union',
+            required: true,
+            options: [{ label: 'email', value: 'email' }, { label: 'chat', value: 'chat' }],
+          },
+          { name: 'payload', label: 'Payload', type: 'json', schemaType: 'object', required: false },
+        ],
+      }],
+      connections: [{
+        id: 'conn-ready',
+        name: 'Ready account',
+        adapterId: 'mail:adapter',
+        adapterVersion: 1,
+        enabled: true,
+        adapterAvailable: true,
+        status: 'READY',
+      }],
+    }
+    const problems = [{
+      severity: 'error' as const,
+      code: 'INPUT_SCHEMA_INVALID',
+      message: 'Message is invalid.',
+      source: { nodeId: 'send-message', fieldPath: 'input.message' },
+    }]
+    const steps = projectAutomationSteps(capabilitySource, problems, new Map([['test:send@1', 'Send message']]))
+    const markup = renderToStaticMarkup(<Inspector
+      activeStepId={steps[0]!.id}
+      canEdit
+      catalog={catalog}
+      onCapabilityConnectionChange={vi.fn()}
+      onCapabilityLiteralInputChange={vi.fn()}
+      onClose={vi.fn()}
+      open
+      problems={problems}
+      source={capabilitySource}
+      steps={steps}
+    />)
+
+    expect(markup).toContain('>Connection<')
+    expect(markup).toContain('aria-label="account connection"')
+    expect(markup).toContain('Ready account')
+    expect(markup).toContain('aria-label="Message"')
+    expect(markup).toContain('value="Hello"')
+    expect(markup).toContain('aria-describedby="send-message-input-message-problem"')
+    expect(markup).toContain('aria-invalid="true"')
+    expect(markup).toContain('numen/expression')
+    expect(markup).toContain('aria-label="Payload JSON"')
+    expect(markup).toContain('Message is invalid.')
   })
 })

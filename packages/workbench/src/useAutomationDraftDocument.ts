@@ -344,6 +344,8 @@ export interface AutomationDraftDocumentModel {
   canRedo: boolean
   insert(item: WorkbenchAutomationInsertItem): void
   selectNode(nodeId?: string): void
+  setCapabilityConnection(nodeId: string, slotName: string, connectionId?: string): void
+  setCapabilityLiteralInput(nodeId: string, fieldName: string, value?: NumenValue): void
   setWaitDuration(nodeId: string, durationMs: number): void
   undo(): void
   redo(): void
@@ -443,6 +445,18 @@ export function useAutomationDraftDocument({
   const selectNode = useCallback((nodeId?: string) => {
     dispatch({ type: 'SELECT_NODE', ...(nodeId ? { nodeId } : {}) })
   }, [])
+  const setCapabilityConnection = useCallback((nodeId: string, slotName: string, connectionId?: string) => {
+    dispatch({
+      type: 'EDIT',
+      command: { type: 'SET_CAPABILITY_CONNECTION', nodeId, slotName, ...(connectionId ? { connectionId } : {}) },
+    })
+  }, [])
+  const setCapabilityLiteralInput = useCallback((nodeId: string, fieldName: string, value?: NumenValue) => {
+    dispatch({
+      type: 'EDIT',
+      command: { type: 'SET_CAPABILITY_LITERAL_INPUT', nodeId, fieldName, ...(value !== undefined ? { value } : {}) },
+    })
+  }, [])
   const setWaitDuration = useCallback((nodeId: string, durationMs: number) => {
     dispatch({ type: 'EDIT', command: { type: 'SET_WAIT_DURATION', nodeId, durationMs } })
   }, [])
@@ -476,6 +490,8 @@ export function useAutomationDraftDocument({
     canRedo: canEdit && !!state.redoStack.length,
     insert,
     selectNode,
+    setCapabilityConnection,
+    setCapabilityLiteralInput,
     setWaitDuration,
     undo,
     redo,
@@ -491,6 +507,8 @@ export function useAutomationDraftDocument({
     reload,
     retrySave,
     selectNode,
+    setCapabilityConnection,
+    setCapabilityLiteralInput,
     setWaitDuration,
     state.conflict,
     state.document,

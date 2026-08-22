@@ -29,12 +29,14 @@ const definition: CapabilityDefinition = {
   input: z.object({ channel: z.string().required() }),
   output: z.object({ value: z.string().required() }),
   semantics: { sideEffect: false, idempotent: true, retrySafe: true },
+  connections: [{ name: 'account', required: false, accepts: [] }],
 }
 
 const source: AutomationSource = {
   triggers: [{
     id: 'event',
     capability: { id: 'test:event', version: 1 },
+    connections: { account: 'conn-trigger' },
     config: { channel: 'updates' },
   }],
   flow: { type: 'block', id: 'flow', steps: [] },
@@ -80,6 +82,7 @@ describe('TriggerService', () => {
       activationGeneration: enabled.activationGeneration,
       triggerId: 'event',
       config: { channel: 'updates' },
+      connectionIds: { account: 'conn-trigger' },
     })
 
     const accepted = await activations[0]!.emit({ data: { value: 'first' }, eventId: 'event-1' })
