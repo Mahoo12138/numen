@@ -8,11 +8,11 @@ export interface ActivityRailProps {
 
 export function ActivityRail({ activeId, onChange }: ActivityRailProps) {
   return (
-    <nav className="activity-rail" aria-label="Primary navigation">
+    <nav class="activity-rail" aria-label="Primary navigation">
       {activities.map(({ id, label, icon: Icon }) => (
         <button
           aria-current={activeId === id ? 'page' : undefined}
-          className="activity-button"
+          class="activity-button"
           data-active={activeId === id}
           key={id}
           onClick={() => onChange(id)}

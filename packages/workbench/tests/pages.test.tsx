@@ -1,7 +1,7 @@
 import { BrowserExtensionRegistry, type BrowserRouteState } from '@numen/webui'
 import { Context } from 'cordis'
-import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
+import { renderToMarkup } from './render.js'
 import {
   corePageForActivity,
   coreWorkbenchPageDefinitions,
@@ -39,9 +39,9 @@ describe('core Workbench Pages', () => {
     await root.fiber.dispose()
   })
 
-  it('derives the active Activity and Page component from Router truth', () => {
+  it('derives the active Activity and Page component from Router truth', async () => {
     const page = corePageForActivity('home')
-    const markup = renderToStaticMarkup(<WorkbenchShell router={routerFor({
+    const markup = await renderToMarkup(<WorkbenchShell router={routerFor({
       status: 'READY', pathname: '/', search: '', parameters: {}, page,
     })} />)
 

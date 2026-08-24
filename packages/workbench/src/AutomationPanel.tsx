@@ -1,54 +1,57 @@
 import type { CompileDiagnostic, SourceRef } from '@numen/core'
-import { AlertTriangle, Save } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { AlertTriangle, Save } from '@lucide/vue'
+import { ref, watch } from 'vue'
 import type { AutomationDraftSavePhase } from './useAutomationDraftDocument.js'
+import { defineSetupComponent } from './vue-component.js'
 
 const panelTabs = ['Problems', 'Preview', 'Logs'] as const
 
-export function AutomationPanel({ problems, preview = false, onProblemSelect }: {
+interface AutomationPanelProps {
   problems: CompileDiagnostic[]
   preview?: boolean
   onProblemSelect(source: SourceRef): void
-}) {
-  const [open, setOpen] = useState(false)
-  const [activeTab, setActiveTab] = useState('Problems')
-  const problemCount = preview ? 1 : problems.length
+}
 
-  useEffect(() => {
-    if (problems.length) {
-      setActiveTab('Problems')
-      setOpen(true)
+export const AutomationPanel = defineSetupComponent<AutomationPanelProps>('AutomationPanel', ['problems', 'preview', 'onProblemSelect'], props => {
+  const open = ref(false)
+  const activeTab = ref('Problems')
+
+  watch(() => props.problems.length, (length) => {
+    if (length) {
+      activeTab.value = 'Problems'
+      open.value = true
     }
-  }, [problems.length])
+  })
 
-  return (
-    <section className="bottom-panel" data-open={open} aria-label="Bottom panel">
-      <div className="panel-tablist" role="tablist">
+  return () => {
+    const problemCount = props.preview ? 1 : props.problems.length
+    return <section class="bottom-panel" data-open={open.value} aria-label="Bottom panel">
+      <div class="panel-tablist" role="tablist">
         {panelTabs.map(tab => (
           <button
-            aria-selected={activeTab === tab}
-            data-active={activeTab === tab}
+            aria-selected={activeTab.value === tab}
+            data-active={activeTab.value === tab}
             key={tab}
-            onClick={() => { setActiveTab(tab); setOpen(true) }}
+            onClick={() => { activeTab.value = tab; open.value = true }}
             role="tab"
             type="button"
-          >{tab}{tab === 'Problems' ? <span className="problem-count">{problemCount}</span> : null}</button>
+          >{tab}{tab === 'Problems' ? <span class="problem-count">{problemCount}</span> : null}</button>
         ))}
         <button
-          aria-label={open ? 'Collapse bottom panel' : 'Expand bottom panel'}
-          className="panel-toggle"
-          onClick={() => setOpen(value => !value)}
+          aria-label={open.value ? 'Collapse bottom panel' : 'Expand bottom panel'}
+          class="panel-toggle"
+          onClick={() => { open.value = !open.value }}
           type="button"
         >⌃</button>
       </div>
-      {open ? (
-        <div className="panel-content automation-panel-content">
-          {activeTab === 'Problems' ? (
-            problems.length ? problems.map((problem, index) => (
+      {open.value ? (
+        <div class="panel-content automation-panel-content">
+          {activeTab.value === 'Problems' ? (
+            props.problems.length ? props.problems.map((problem, index) => (
               <button
-                className="automation-problem"
+                class="automation-problem"
                 key={`${problem.code}:${problem.source?.nodeId ?? ''}:${problem.source?.fieldPath ?? ''}:${index}`}
-                onClick={() => problem.source && onProblemSelect(problem.source)}
+                onClick={() => problem.source && props.onProblemSelect(problem.source)}
                 type="button"
               >
                 <AlertTriangle aria-hidden="true" size={14} />
@@ -56,12 +59,12 @@ export function AutomationPanel({ problems, preview = false, onProblemSelect }: 
                 <code>{[problem.source?.nodeId, problem.source?.fieldPath].filter(Boolean).join(' · ') || 'Automation'}</code>
               </button>
             )) : <p>No publish problems for the current local Draft.</p>
-          ) : <p>{activeTab} output will appear here.</p>}
+          ) : <p>{activeTab.value} output will appear here.</p>}
         </div>
       ) : null}
     </section>
-  )
-}
+  }
+})
 
 export function AutomationStatusBar({ phase, message, problemCount, preview = false }: {
   phase: AutomationDraftSavePhase
@@ -71,9 +74,9 @@ export function AutomationStatusBar({ phase, message, problemCount, preview = fa
 }) {
   const needsAttention = phase === 'CONFLICT' || phase === 'ERROR'
   return (
-    <footer className="status-bar" data-save-phase={phase}>
-      <span className={problemCount || needsAttention ? 'problem-status' : 'ready-status'}>
-        <span className="status-check">{problemCount || needsAttention ? '!' : '✓'}</span>
+    <footer class="status-bar" data-save-phase={phase}>
+      <span class={problemCount || needsAttention ? 'problem-status' : 'ready-status'}>
+        <span class="status-check">{problemCount || needsAttention ? '!' : '✓'}</span>
         {problemCount
           ? `${problemCount} publish problem${problemCount === 1 ? '' : 's'}`
           : needsAttention ? 'Draft needs attention' : 'Ready'}

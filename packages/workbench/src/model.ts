@@ -1,4 +1,4 @@
-import type { LucideIcon } from 'lucide-react'
+import type { LucideIcon } from '@lucide/vue'
 import {
   Archive,
   Bot,
@@ -11,20 +11,20 @@ import {
   Plug,
   Send,
   Settings,
-} from 'lucide-react'
+} from '@lucide/vue'
 import { coreWorkbenchRoutes, type CoreWorkbenchActivityId } from './routes.js'
 
 export interface ActivityItem {
   id: CoreWorkbenchActivityId
   label: string
-  icon: LucideIcon
+  icon: WorkbenchIcon
   route: typeof coreWorkbenchRoutes[CoreWorkbenchActivityId]
 }
 
 export interface AutomationItem {
   id: string
   label: string
-  icon: LucideIcon
+  icon: WorkbenchIcon
 }
 
 export interface AutomationStep {
@@ -33,11 +33,13 @@ export interface AutomationStep {
   kind?: string
   label: string
   summary: string
-  icon: LucideIcon
+  icon: WorkbenchIcon
   tone: 'neutral' | 'accent'
   depth?: number
   problemCount?: number
 }
+
+export type WorkbenchIcon = LucideIcon
 
 export const activities: ActivityItem[] = [
   { id: 'home', label: 'Home', icon: Home, route: coreWorkbenchRoutes.home },

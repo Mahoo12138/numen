@@ -1,5 +1,5 @@
-import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
+import { renderToMarkup } from './render.js'
 import { AutomationEditor } from '../src/AutomationEditor.js'
 import { AutomationPanel, AutomationStatusBar } from '../src/AutomationPanel.js'
 import { Inspector } from '../src/Inspector.js'
@@ -69,8 +69,8 @@ const schemaUI: SchemaUIResolver = {
 }
 
 describe('live Automation workspace projections', () => {
-  it('renders the live Sidebar summary without static preview records', () => {
-    const markup = renderToStaticMarkup(<AutomationSidebar
+  it('renders the live Sidebar summary without static preview records', async () => {
+    const markup = await renderToMarkup(<AutomationSidebar
       activeId={detail.automation.id}
       onChange={vi.fn()}
       state={{ status: 'READY', data: index }}
@@ -81,9 +81,25 @@ describe('live Automation workspace projections', () => {
     expect(markup).not.toContain('Morning Brief')
   })
 
-  it('renders Draft and immutable Revision data from the typed detail projection', () => {
+  it('renders an empty Automation state after the live index resolves', async () => {
+    const markup = await renderToMarkup(<AutomationEditor
+      activeTab="Editor"
+      activeStepId=""
+      automations={[]}
+      detailState={{ status: 'READY', data: null }}
+      onOpenInspector={vi.fn()}
+      onStepChange={vi.fn()}
+      onTabChange={vi.fn()}
+      steps={[]}
+    />)
+
+    expect(markup).toContain('No automations yet')
+    expect(markup).not.toContain('Loading automation')
+  })
+
+  it('renders Draft and immutable Revision data from the typed detail projection', async () => {
     const steps = projectAutomationSteps(detail.draft.source)
-    const editor = (activeTab: string) => renderToStaticMarkup(<AutomationEditor
+    const editor = (activeTab: string) => renderToMarkup(<AutomationEditor
       activeTab={activeTab}
       activeStepId={steps[0]!.id}
       automationId={detail.automation.id}
@@ -96,16 +112,16 @@ describe('live Automation workspace projections', () => {
       steps={steps}
     />)
 
-    const editorMarkup = editor('Editor')
+    const editorMarkup = await editor('Editor')
     expect(editorMarkup).toContain('Live Automation')
     expect(editorMarkup).toContain('Draft v3')
     expect(editorMarkup).toContain('Published r1')
     expect(editorMarkup).toContain('Pause')
     expect(editorMarkup).toContain('aria-label="Select automation"')
-    expect(editor('Revisions')).toContain('abc123')
+    expect(await editor('Revisions')).toContain('abc123')
   })
 
-  it('renders authoring actions and separates published from active state', () => {
+  it('renders authoring actions and separates published from active state', async () => {
     const inactiveDetail: WorkbenchAutomationDetail = {
       ...detail,
       automation: {
@@ -119,7 +135,7 @@ describe('live Automation workspace projections', () => {
       revisions: detail.revisions.map(revision => ({ ...revision, active: false })),
     }
     const steps = projectAutomationSteps(inactiveDetail.draft.source)
-    const markup = renderToStaticMarkup(<AutomationEditor
+    const markup = await renderToMarkup(<AutomationEditor
       activeTab="Editor"
       activeStepId={steps[0]!.id}
       automationId={inactiveDetail.automation.id}
@@ -145,8 +161,8 @@ describe('live Automation workspace projections', () => {
     expect(markup).toContain('Add step')
   })
 
-  it('renders conflict recovery and publish diagnostics in Page-owned regions', () => {
-    const editorMarkup = renderToStaticMarkup(<AutomationEditor
+  it('renders conflict recovery and publish diagnostics in Page-owned regions', async () => {
+    const editorMarkup = await renderToMarkup(<AutomationEditor
       activeTab="Editor"
       activeStepId=""
       automationId={detail.automation.id}
@@ -165,7 +181,7 @@ describe('live Automation workspace projections', () => {
       onTabChange={vi.fn()}
       steps={[]}
     />)
-    const panelMarkup = renderToStaticMarkup(<AutomationPanel
+    const panelMarkup = await renderToMarkup(<AutomationPanel
       onProblemSelect={vi.fn()}
       problems={[{
         severity: 'error',
@@ -174,7 +190,7 @@ describe('live Automation workspace projections', () => {
         source: { nodeId: 'wait-1', fieldPath: 'durationMs' },
       }]}
     />)
-    const statusMarkup = renderToStaticMarkup(<AutomationStatusBar
+    const statusMarkup = await renderToMarkup(<AutomationStatusBar
       message="Draft conflict"
       phase="CONFLICT"
       problemCount={1}
@@ -187,14 +203,14 @@ describe('live Automation workspace projections', () => {
     expect(statusMarkup).toContain('Draft conflict')
   })
 
-  it('projects editable Wait fields and source diagnostics into the Inspector', () => {
+  it('projects editable Wait fields and source diagnostics into the Inspector', async () => {
     const steps = projectAutomationSteps(detail.draft.source, [{
       severity: 'error',
       code: 'WAIT_SOURCE_INVALID',
       message: 'Wait duration is invalid.',
       source: { nodeId: 'pause' },
     }])
-    const inspectorMarkup = renderToStaticMarkup(<Inspector
+    const inspectorMarkup = await renderToMarkup(<Inspector
       activeStepId={steps[0]!.id}
       canEdit
       fieldFocus={{ nodeId: 'pause', fieldPath: 'durationMs', request: 1 }}
@@ -218,7 +234,7 @@ describe('live Automation workspace projections', () => {
     expect(inspectorMarkup).toContain('Wait duration is invalid.')
   })
 
-  it('renders schema-driven Capability inputs separately from named Connection bindings', () => {
+  it('renders schema-driven Capability inputs separately from named Connection bindings', async () => {
     const capabilitySource = {
       triggers: [],
       flow: {
@@ -277,7 +293,7 @@ describe('live Automation workspace projections', () => {
       source: { nodeId: 'send-message', fieldPath: 'input.message' },
     }]
     const steps = projectAutomationSteps(capabilitySource, problems, new Map([['test:send@1', 'Send message']]))
-    const markup = renderToStaticMarkup(<Inspector
+    const markup = await renderToMarkup(<Inspector
       activeStepId={steps[0]!.id}
       canEdit
       catalog={catalog}

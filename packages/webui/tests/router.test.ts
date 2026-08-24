@@ -93,6 +93,26 @@ describe('BrowserRouterService', () => {
     await root.fiber.dispose()
   })
 
+  it('keeps logical Page paths behind a deployment base path', async () => {
+    const root = new Context()
+    await root.plugin(BrowserExtensionRegistry)
+    root.webuiExtensions.page(root, page('core:automations', '/automations'))
+    const environment = new FakeRouterEnvironment('http://numen.local/workbench/automations')
+    await root.plugin(BrowserRouterService, { environment, basePath: '/workbench/' })
+
+    expect(root.webuiRouter.getState()).toMatchObject({
+      status: 'READY',
+      pathname: '/automations',
+      page: { id: 'core:automations' },
+    })
+    expect(root.webuiRouter.href({ id: 'core:automations', version: 1 })).toBe('/workbench/automations')
+    root.webuiExtensions.page(root, page('core:home', '/'))
+    root.webuiRouter.navigate({ id: 'core:home', version: 1 })
+    expect(environment.location.href).toBe('http://numen.local/workbench/')
+    expect(root.webuiRouter.getState()).toMatchObject({ status: 'READY', pathname: '/' })
+    await root.fiber.dispose()
+  })
+
   it('reconciles popstate and Page Effect lifecycle changes', async () => {
     const root = new Context()
     await root.plugin(BrowserExtensionRegistry)

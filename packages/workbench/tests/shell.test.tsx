@@ -1,20 +1,20 @@
-import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { corePageForActivity, coreWorkbenchPageDefinitions, WorkbenchShell } from '../src/index.js'
 import type { WorkbenchPageChromeProps } from '../src/types.js'
+import { renderToMarkup } from './render.js'
 
 function PluginMain() {
-  return <main className="main-workbench">Plugin-owned main</main>
+  return <main class="main-workbench">Plugin-owned main</main>
 }
 
 function PluginChrome({ page }: WorkbenchPageChromeProps) {
   const PageComponent = page.component
-  return <><aside className="primary-sidebar">Plugin-owned sidebar</aside><PageComponent /></>
+  return <><aside class="primary-sidebar">Plugin-owned sidebar</aside><PageComponent /></>
 }
 
 describe('WorkbenchShell', () => {
-  it('renders the documented Workbench regions and primary navigation', () => {
-    const markup = renderToStaticMarkup(<WorkbenchShell standalonePages={coreWorkbenchPageDefinitions} />)
+  it('renders the documented Workbench regions and primary navigation', async () => {
+    const markup = await renderToMarkup(<WorkbenchShell standalonePages={coreWorkbenchPageDefinitions} />)
 
     expect(markup).toContain('Numen Workbench')
     expect(markup).toContain('aria-label="Command center"')
@@ -28,8 +28,8 @@ describe('WorkbenchShell', () => {
     expect(markup).toContain('Saved')
   })
 
-  it('renders the selected Automation editor and inspector state', () => {
-    const markup = renderToStaticMarkup(<WorkbenchShell standalonePages={coreWorkbenchPageDefinitions} />)
+  it('renders the selected Automation editor and inspector state', async () => {
+    const markup = await renderToMarkup(<WorkbenchShell standalonePages={coreWorkbenchPageDefinitions} />)
 
     for (const label of ['Morning Brief', 'Inbox Triage', 'Weekly Archive']) {
       expect(markup).toContain(label)
@@ -45,9 +45,9 @@ describe('WorkbenchShell', () => {
     expect(markup).toContain('Continue to next step')
   })
 
-  it('delegates activity-specific workspace chrome to the Page definition', () => {
+  it('delegates activity-specific workspace chrome to the Page definition', async () => {
     const automationPage = corePageForActivity('automations')
-    const markup = renderToStaticMarkup(<WorkbenchShell standalonePages={[{
+    const markup = await renderToMarkup(<WorkbenchShell standalonePages={[{
       ...automationPage,
       component: PluginMain,
       chrome: { component: PluginChrome },
@@ -58,9 +58,9 @@ describe('WorkbenchShell', () => {
     expect(markup).not.toContain('aria-label="Inspector"')
   })
 
-  it('lets a Page extension own panel and status regions without duplicate shell chrome', () => {
+  it('lets a Page extension own panel and status regions without duplicate shell chrome', async () => {
     const automationPage = corePageForActivity('automations')
-    const markup = renderToStaticMarkup(<WorkbenchShell standalonePages={[{
+    const markup = await renderToMarkup(<WorkbenchShell standalonePages={[{
       ...automationPage,
       component: PluginMain,
       chrome: { component: PluginChrome, ownsPanel: true, ownsStatus: true },

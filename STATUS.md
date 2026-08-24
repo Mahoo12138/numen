@@ -1,6 +1,6 @@
 # Numen Development Status
 
-> Last updated: 2026-08-22
+> Last updated: 2026-08-24
 >
 > Architecture baseline: V1 Draft in [`docs/`](docs/README.md)
 
@@ -69,13 +69,14 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Backend Console Entry registry with direct Effect ownership
 - [x] Validated generation staging, stale fencing, atomic swap, and old-scope retirement
 - [x] Authenticated Entry manifest with ETag and path-free browser URLs
-- [x] Revision-fenced immutable asset delivery with MIME and same-origin headers
+- [x] Revision- and process-generation-fenced immutable asset delivery with MIME and same-origin headers
 - [x] Lexical traversal and realpath/symlink escape protection for frontend assets
 - [x] Browser Entry manifest client with authenticated same-origin module loading
 - [x] Generation-scoped frontend staging with complete snapshot validation
 - [x] Atomic frontend snapshot activation, stale fencing, and failed-generation rollback
 - [x] Entry snapshot reconciliation before WebSocket subscription restoration
-- [x] Default React Workbench package with Activity Rail, Sidebar, Main, Inspector, Panel, and Status regions
+- [x] Default Vue 3 Workbench package with Activity Rail, Sidebar, Main, Inspector, Panel, and Status regions
+- [x] Vue Composition API migration for Router snapshots, Console Queries, Draft authoring, Pages, Chrome, and Schema Renderers
 - [x] Automation detail shell with interactive tabs, step selection, grouped Inspector, and bottom panel
 - [x] Responsive desktop/tablet/mobile Workbench profiles with Inspector drawer behavior
 - [x] Browser-verified Workbench visual baseline at 1440×960 and 390×844
@@ -84,7 +85,7 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Dynamic Page path validation with ambiguous route-shape collision prevention
 - [x] Core Home / Automations / Runs / Connections / Plugins / System Page entries
 - [x] Workbench Activity navigation bound to stable Router IDs and browser History
-- [x] React external-store route snapshots with Page Effect and Back/Forward reconciliation
+- [x] Vue reactive route snapshots with Page Effect and Back/Forward reconciliation
 - [x] Direct WebUI subpath imports for bounded Workbench bootstrap bundles
 - [x] Secret-free Workbench SPA bootstrap document with strict CSP and no-store delivery
 - [x] Confined Workbench asset delivery with immutable hashed caching and security headers
@@ -96,7 +97,7 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Explicit CLI Workbench launch URL with fragment-only bootstrap credentials
 - [x] Typed Home Overview Query with default Automation/Scheduler/Connection Provider
 - [x] Abort-safe reusable browser Console Query hook with loading, empty, and retry states
-- [x] Shared React runtime identity across the public shell and authenticated core Entry
+- [x] Shared Vue runtime identity across the public shell and authenticated core Entry
 - [x] Typed Runs Index Query with status totals and aggregate Execution/Attempt counts
 - [x] Deterministic keyset pagination with opaque validated browser cursors
 - [x] Live responsive Runs page with loading, retry, empty, table, and pagination states
@@ -178,6 +179,8 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 
 ## Design Review
 
+- **Vue migration boundary — pass:** the Workbench rendering layer now uses Vue 3 components and Composition API state while the stable Page, Chrome, Schema Renderer, Console Query/Action, and Cordis Effect contracts remain unchanged. Stateful components are defined through one typed setup helper, so framework mechanics do not leak into domain projections or backend Providers.
+- **Frontend asset generation seam — pass:** immutable authenticated Entry URLs and Manifest ETags now include a process generation in addition to the registry revision. Runtime restarts cannot return `304` for a previous process's Manifest or mix an old Entry with the current Vue host, while stale-generation assets remain explicitly fenced.
 - **Page Chrome boundary — pass:** the generic Workbench Shell owns global routing and chrome only; each Page definition may supply its own Sidebar/Main/Inspector composition. Automation-specific selection state and components remain inside the Automation Page plugin and retain frontend Entry/Fiber lifecycle ownership.
 - **Automation read boundary — pass:** the Automation service computes Sidebar summaries with one aggregate query, while the optional Workbench Provider projects typed Automation, mutable Draft Source, and immutable Revision metadata. Published counts follow Revision existence independently from activation, and the boundary does not introduce client-owned node/edge state or move Automation truth into the generic shell.
 - **Automation projection boundary — pass:** Canvas steps and Inspector selection are pure, read-only projections of the current Draft `AutomationSource`; Revision metadata is rendered separately as immutable history. Desktop Sidebar and mobile selector remain Page-owned views over the same typed index, with no parallel client truth or Automation coupling in the generic Shell.
@@ -197,7 +200,7 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 ```text
 Typecheck: passing
 Build: passing
-Tests: 38 files, 148 tests passing
+Tests: 38 files, 151 tests passing
 CLI config validate: passing
 CLI doctor: passing
 SQLite schema migration: v10

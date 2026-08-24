@@ -1,5 +1,5 @@
 import type { SourceRef } from '@numen/core'
-import { createContext, useCallback, useContext, useMemo, useState } from 'react'
+import { computed, h, inject, provide, ref, type ComputedRef, type InjectionKey } from 'vue'
 import { AutomationEditor, type AutomationEditorProps } from './AutomationEditor.js'
 import { AutomationPanel, AutomationStatusBar } from './AutomationPanel.js'
 import { AutomationSidebar } from './AutomationSidebar.js'
@@ -17,74 +17,70 @@ import { Inspector, type InspectorFieldFocus } from './Inspector.js'
 import type { WorkbenchPageChromeProps } from './types.js'
 import { useAutomationDraftDocument } from './useAutomationDraftDocument.js'
 import { useConsoleQuery, type ConsoleQueryState } from './useConsoleQuery.js'
+import { defineSetupComponent } from './vue-component.js'
 
 const emptyQueryInput: Record<string, never> = {}
 
-const AutomationWorkspaceContext = createContext<AutomationEditorProps | undefined>(undefined)
+const automationWorkspaceKey: InjectionKey<ComputedRef<AutomationEditorProps>> = Symbol('automation-workspace')
 
-export function useAutomationWorkspace(): AutomationEditorProps {
-  const workspace = useContext(AutomationWorkspaceContext)
+export function useAutomationWorkspace(): ComputedRef<AutomationEditorProps> {
+  const workspace = inject(automationWorkspaceKey)
   if (!workspace) throw new Error('Automation Page must render inside AutomationPageChrome')
   return workspace
 }
 
-export function AutomationPageChrome({
-  page,
-  consoleClient,
-  schemaUI,
-  inspectorOpen,
-  onInspectorOpenChange,
-}: WorkbenchPageChromeProps) {
-  const [requestedAutomationId, setRequestedAutomationId] = useState('morning-brief')
-  const [activeTab, setActiveTab] = useState('Editor')
-  const [requestedStepId, setRequestedStepId] = useState('notification')
-  const [fieldFocus, setFieldFocus] = useState<InspectorFieldFocus>()
+export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProps>('AutomationPageChrome', ['page', 'consoleClient', 'schemaUI', 'inspectorOpen', 'onInspectorOpenChange'], props => {
+  const requestedAutomationId = ref('morning-brief')
+  const activeTab = ref('Editor')
+  const requestedStepId = ref('notification')
+  const fieldFocus = ref<InspectorFieldFocus>()
   const [indexState, reloadIndex] = useConsoleQuery<Record<string, never>, WorkbenchAutomationsIndex>(
-    consoleClient,
+    () => props.consoleClient,
     workbenchAutomationsIndexQueryRef,
     emptyQueryInput,
     'automations',
   )
   const [insertCatalogState, reloadInsertCatalog] = useConsoleQuery<Record<string, never>, WorkbenchAutomationInsertCatalog>(
-    consoleClient,
+    () => props.consoleClient,
     workbenchAutomationInsertCatalogQueryRef,
     emptyQueryInput,
     'automationCatalog',
   )
-  const liveItems = indexState.status === 'READY' ? indexState.data.items : []
-  const automationId = consoleClient
-    ? (liveItems.some(item => item.id === requestedAutomationId) ? requestedAutomationId : liveItems[0]?.id)
-    : requestedAutomationId
-  const detailInput = useMemo<WorkbenchAutomationDetailQueryInput>(() => ({
-    automationId: automationId ?? '',
-  }), [automationId])
+  const liveItems = computed(() => indexState.status === 'READY' ? indexState.data.items : [])
+  const automationId = computed(() => props.consoleClient
+    ? (liveItems.value.some(item => item.id === requestedAutomationId.value) ? requestedAutomationId.value : liveItems.value[0]?.id)
+    : requestedAutomationId.value)
+  const detailInput = computed<WorkbenchAutomationDetailQueryInput>(() => ({
+    automationId: automationId.value ?? '',
+  }))
   const [queriedDetailState, reloadDetail] = useConsoleQuery<WorkbenchAutomationDetailQueryInput, WorkbenchAutomationDetail | null>(
-    consoleClient && automationId ? consoleClient : undefined,
+    () => props.consoleClient && automationId.value ? props.consoleClient : undefined,
     workbenchAutomationDetailQueryRef,
     detailInput,
     'automations',
   )
-  const detailState = useMemo<ConsoleQueryState<WorkbenchAutomationDetail | null> | undefined>(() => {
-    if (!consoleClient) return undefined
-    if (automationId) return queriedDetailState.status === 'DISABLED' ? { status: 'LOADING' } : queriedDetailState
+  const detailState = computed<ConsoleQueryState<WorkbenchAutomationDetail | null> | undefined>(() => {
+    if (!props.consoleClient) return undefined
+    if (automationId.value) return queriedDetailState.status === 'DISABLED' ? { status: 'LOADING' } : queriedDetailState
     if (indexState.status === 'ERROR') return indexState
     if (indexState.status === 'READY') return { status: 'READY', data: null }
     return { status: 'LOADING' }
-  }, [automationId, consoleClient, indexState, queriedDetailState])
-  const detail = detailState?.status === 'READY' && detailState.data?.automation.id === automationId
-    ? detailState.data ?? undefined
-    : undefined
+  })
+  const detail = computed(() => detailState.value?.status === 'READY' && detailState.value.data?.automation.id === automationId.value
+    ? detailState.value.data ?? undefined
+    : undefined)
   const authoring = useAutomationDraftDocument({
-    ...(consoleClient ? { client: consoleClient } : {}),
-    ...(automationId ? { automationId } : {}),
-    ...(detail ? { detail } : {}),
+    client: () => props.consoleClient,
+    automationId,
+    detail,
     reloadDetail,
   })
-  const effectiveDetail = useMemo<WorkbenchAutomationDetail | undefined>(() => {
-    if (!detail || authoring.document?.automationId !== detail.automation.id) return detail
+  const effectiveDetail = computed<WorkbenchAutomationDetail | undefined>(() => {
+    const currentDetail = detail.value
+    if (!currentDetail || authoring.document?.automationId !== currentDetail.automation.id) return currentDetail
     const document = authoring.document
     return {
-      ...detail,
+      ...currentDetail,
       draft: {
         source: document.source,
         presentation: document.presentation,
@@ -93,34 +89,39 @@ export function AutomationPageChrome({
         ...(document.baseRevisionId ? { baseRevisionId: document.baseRevisionId } : {}),
       },
     }
-  }, [authoring.document, detail])
-  const effectiveDetailState = useMemo<ConsoleQueryState<WorkbenchAutomationDetail | null> | undefined>(() => {
-    if (detailState?.status !== 'READY' || !detailState.data || !effectiveDetail) return detailState
-    return { status: 'READY', data: effectiveDetail }
-  }, [detailState, effectiveDetail])
-  const capabilityTitles = useMemo(() => new Map(
+  })
+  const effectiveDetailState = computed<ConsoleQueryState<WorkbenchAutomationDetail | null> | undefined>(() => {
+    if (detailState.value?.status !== 'READY' || !detailState.value.data || !effectiveDetail.value) return detailState.value
+    return { status: 'READY', data: effectiveDetail.value }
+  })
+  const capabilityTitles = computed(() => new Map(
     insertCatalogState.status === 'READY'
       ? insertCatalogState.data.items.flatMap(item => item.kind === 'capability'
         ? [[`${item.capability.id}@${item.capability.version}`, item.title] as const]
         : [])
       : [],
-  ), [insertCatalogState])
-  const steps = useMemo(() => (
-    effectiveDetail ? projectAutomationSteps(effectiveDetail.draft.source, authoring.problems, capabilityTitles) : []
-  ), [authoring.problems, capabilityTitles, effectiveDetail])
-  const selectedStep = steps.find(step => step.sourceId === authoring.selectedNodeId)
-  const activeStepId = consoleClient
-    ? selectedStep?.id ?? steps[0]?.id ?? ''
-    : requestedStepId
-  const workspace = useMemo<AutomationEditorProps>(() => ({
-    ...(automationId ? { automationId } : {}),
-    activeStepId,
-    activeTab,
-    ...(effectiveDetailState ? { detailState: effectiveDetailState } : {}),
-    ...(consoleClient ? { insertCatalogState } : {}),
-    ...(consoleClient ? { steps } : {}),
-    ...(consoleClient ? { automations: liveItems, onAutomationChange: setRequestedAutomationId } : {}),
-    ...(consoleClient ? {
+  ))
+  const steps = computed(() => (
+    effectiveDetail.value ? projectAutomationSteps(effectiveDetail.value.draft.source, authoring.problems, capabilityTitles.value) : []
+  ))
+  const activeStepId = computed(() => {
+    const selectedStep = steps.value.find(step => step.sourceId === authoring.selectedNodeId)
+    return props.consoleClient
+      ? selectedStep?.id ?? steps.value[0]?.id ?? ''
+      : requestedStepId.value
+  })
+  const workspace = computed<AutomationEditorProps>(() => ({
+    ...(automationId.value ? { automationId: automationId.value } : {}),
+    activeStepId: activeStepId.value,
+    activeTab: activeTab.value,
+    ...(effectiveDetailState.value ? { detailState: effectiveDetailState.value } : {}),
+    ...(props.consoleClient ? { insertCatalogState } : {}),
+    ...(props.consoleClient ? { steps: steps.value } : {}),
+    ...(props.consoleClient ? {
+      automations: liveItems.value,
+      onAutomationChange: (id: string) => { requestedAutomationId.value = id },
+    } : {}),
+    ...(props.consoleClient ? {
       authoring: {
         canEdit: authoring.canEdit,
         canPublish: authoring.canPublish,
@@ -139,83 +140,74 @@ export function AutomationPageChrome({
       onReloadDraft: authoring.reload,
       onRetrySave: authoring.retrySave,
     } : {}),
-    onOpenInspector: () => onInspectorOpenChange(true),
+    onOpenInspector: () => props.onInspectorOpenChange(true),
     onStepChange: id => {
-      const step = steps.find(item => item.id === id)
-      if (consoleClient) authoring.selectNode(step?.sourceId)
-      else setRequestedStepId(id)
-      setFieldFocus(undefined)
-      onInspectorOpenChange(true)
+      const step = steps.value.find(item => item.id === id)
+      if (props.consoleClient) authoring.selectNode(step?.sourceId)
+      else requestedStepId.value = id
+      fieldFocus.value = undefined
+      props.onInspectorOpenChange(true)
     },
-    onTabChange: setActiveTab,
+    onTabChange: tab => { activeTab.value = tab },
     onReload: reloadDetail,
-  }), [
-    activeStepId,
-    activeTab,
-    automationId,
-    authoring,
-    consoleClient,
-    effectiveDetailState,
-    liveItems,
-    onInspectorOpenChange,
-    reloadDetail,
-    reloadInsertCatalog,
-    steps,
-  ])
-  const selectProblem = useCallback((sourceRef: SourceRef) => {
+  }))
+  provide(automationWorkspaceKey, workspace)
+
+  const selectProblem = (sourceRef: SourceRef) => {
     const nodeId = sourceRef.nodeId
     if (!nodeId) return
-    const step = steps.find(item => item.sourceId === nodeId)
+    const step = steps.value.find(item => item.sourceId === nodeId)
     if (!step) return
     authoring.selectNode(nodeId)
-    setFieldFocus(previous => ({
+    fieldFocus.value = {
       nodeId,
       ...(sourceRef.fieldPath ? { fieldPath: sourceRef.fieldPath } : {}),
-      request: (previous?.request ?? 0) + 1,
-    }))
-    onInspectorOpenChange(true)
-  }, [authoring, onInspectorOpenChange, steps])
-  const PageComponent = page.component
+      request: (fieldFocus.value?.request ?? 0) + 1,
+    }
+    props.onInspectorOpenChange(true)
+  }
 
-  return (
-    <AutomationWorkspaceContext.Provider value={workspace}>
+  return () => {
+    const PageComponent = props.page.component
+    return <>
       <AutomationSidebar
-        {...(automationId ? { activeId: automationId } : {})}
-        onChange={setRequestedAutomationId}
+        {...(automationId.value ? { activeId: automationId.value } : {})}
+        onChange={id => { requestedAutomationId.value = id }}
         onReload={reloadIndex}
         state={indexState}
       />
-      <PageComponent {...(consoleClient ? { consoleClient } : {})} {...(schemaUI ? { schemaUI } : {})} />
+      {h(PageComponent, { ...(props.consoleClient ? { consoleClient: props.consoleClient } : {}), ...(props.schemaUI ? { schemaUI: props.schemaUI } : {}) })}
       <Inspector
-        activeStepId={activeStepId}
+        activeStepId={activeStepId.value}
         canEdit={authoring.canEdit}
         {...(insertCatalogState.status === 'READY' ? { catalog: insertCatalogState.data } : {})}
-        {...(fieldFocus ? { fieldFocus } : {})}
-        open={inspectorOpen}
+        {...(fieldFocus.value ? { fieldFocus: fieldFocus.value } : {})}
+        open={props.inspectorOpen}
         problems={authoring.problems}
         {...(authoring.document ? { source: authoring.document.source } : {})}
-        {...(consoleClient ? { steps } : {})}
-        onClose={() => onInspectorOpenChange(false)}
+        {...(props.consoleClient ? { steps: steps.value } : {})}
+        onClose={() => props.onInspectorOpenChange(false)}
         onCapabilityConnectionChange={authoring.setCapabilityConnection}
         onCapabilityInputChange={authoring.setCapabilityInput}
         onWaitDurationChange={authoring.setWaitDuration}
-        {...(schemaUI ? { schemaUI } : {})}
+        {...(props.schemaUI ? { schemaUI: props.schemaUI } : {})}
       />
       <AutomationPanel
         problems={authoring.problems}
-        preview={!consoleClient}
+        preview={!props.consoleClient}
         onProblemSelect={selectProblem}
       />
       <AutomationStatusBar
         message={authoring.saveMessage}
         phase={authoring.savePhase}
         problemCount={authoring.problems.length}
-        preview={!consoleClient}
+        preview={!props.consoleClient}
       />
-    </AutomationWorkspaceContext.Provider>
-  )
-}
+    </>
+  }
+})
 
-export function AutomationWorkspacePage() {
-  return <AutomationEditor {...useAutomationWorkspace()} />
-}
+export const AutomationWorkspacePage = defineSetupComponent<import('./types.js').WorkbenchPageProps>('AutomationWorkspacePage', [], () => {
+  const workspace = useAutomationWorkspace()
+  return () => <AutomationEditor {...workspace.value} />
+})

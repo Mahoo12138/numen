@@ -1,5 +1,5 @@
 import type { ConsoleProcedureRef } from '@numen/console'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { shallowReactive, toValue, watchEffect, type MaybeRefOrGetter } from 'vue'
 import {
   workbenchInvalidationSubscriptionRef,
   type WorkbenchInvalidationEvent,
@@ -14,20 +14,27 @@ export type ConsoleQueryState<Output> =
   | { status: 'ERROR'; message: string }
 
 export function useConsoleQuery<Input, Output>(
-  client: WorkbenchConsoleClient | undefined,
+  client: MaybeRefOrGetter<WorkbenchConsoleClient | undefined>,
   ref: ConsoleProcedureRef,
-  input: Input,
+  input: MaybeRefOrGetter<Input>,
   invalidationScope?: WorkbenchInvalidationScope,
 ): [ConsoleQueryState<Output>, () => void] {
-  const [state, setState] = useState<ConsoleQueryState<Output>>(
-    client ? { status: 'LOADING' } : { status: 'DISABLED' },
+  const state = shallowReactive<ConsoleQueryState<Output>>(
+    toValue(client) ? { status: 'LOADING' } : { status: 'DISABLED' },
   )
-  const reloadRef = useRef<() => void>(() => {})
-  const reload = useCallback(() => reloadRef.current(), [])
+  let reloadCurrent: () => void = () => {}
+  const reload = () => reloadCurrent()
+  const setState = (next: ConsoleQueryState<Output>) => {
+    delete (state as Partial<{ data: Output }>).data
+    delete (state as Partial<{ message: string }>).message
+    Object.assign(state, next)
+  }
 
-  useEffect(() => {
-    if (!client) {
-      reloadRef.current = () => {}
+  watchEffect((onCleanup) => {
+    const resolvedClient = toValue(client)
+    const resolvedInput = toValue(input)
+    if (!resolvedClient) {
+      reloadCurrent = () => {}
       setState({ status: 'DISABLED' })
       return
     }
@@ -41,7 +48,7 @@ export function useConsoleQuery<Input, Output>(
       const controller = new AbortController()
       queryController = controller
       if (foreground) setState({ status: 'LOADING' })
-      void client.query<Input, Output>(ref, input, controller.signal).then(
+      void resolvedClient.query<Input, Output>(ref, resolvedInput, controller.signal).then(
         data => {
           if (!controller.signal.aborted && !lifecycle.signal.aborted) setState({ status: 'READY', data })
         },
@@ -54,12 +61,12 @@ export function useConsoleQuery<Input, Output>(
         },
       )
     }
-    reloadRef.current = () => execute(true)
+    reloadCurrent = () => execute(true)
 
     void (async () => {
       if (invalidationScope) {
         try {
-          unsubscribe = await client.subscribe<Record<string, never>, WorkbenchInvalidationEvent>(
+          unsubscribe = await resolvedClient.subscribe<Record<string, never>, WorkbenchInvalidationEvent>(
             workbenchInvalidationSubscriptionRef,
             {},
             {
@@ -78,13 +85,13 @@ export function useConsoleQuery<Input, Output>(
       execute(true)
     })()
 
-    return () => {
-      reloadRef.current = () => {}
+    onCleanup(() => {
+      reloadCurrent = () => {}
       lifecycle.abort()
       queryController?.abort()
       unsubscribe?.()
-    }
-  }, [client, input, invalidationScope, ref.id, ref.version])
+    })
+  })
 
   return [state, reload]
 }

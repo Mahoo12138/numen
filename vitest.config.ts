@@ -1,9 +1,11 @@
 import { fileURLToPath } from 'node:url'
+import vueJsx from '@vitejs/plugin-vue-jsx'
 import { defineConfig } from 'vitest/config'
 
 const fromRoot = (path: string) => fileURLToPath(new URL(path, import.meta.url))
 
 export default defineConfig({
+  plugins: [vueJsx()],
   resolve: {
     alias: {
       '@numen/config': fromRoot('./packages/config/src/index.ts'),

@@ -1,7 +1,7 @@
 import type { FrontendPage } from '@numen/webui/extensions'
 import type { Context } from 'cordis'
-import { Activity, Boxes, Cable, Home, Network, Play, Settings } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { Activity, Boxes, Cable, Home, Network, Play, Settings } from '@lucide/vue'
+import { computed, reactive } from 'vue'
 import { AutomationPageChrome, AutomationWorkspacePage } from './AutomationWorkspace.js'
 import {
   workbenchConnectionsIndexQueryRef,
@@ -16,6 +16,7 @@ import {
 import { coreWorkbenchRoutes, type CoreWorkbenchActivityId } from './routes.js'
 import type { WorkbenchPageDefinition, WorkbenchPageProps } from './types.js'
 import { useConsoleQuery, type ConsoleQueryState } from './useConsoleQuery.js'
+import { defineSetupComponent } from './vue-component.js'
 
 export type { WorkbenchPageComponent, WorkbenchPageDefinition, WorkbenchPageProps } from './types.js'
 
@@ -31,20 +32,20 @@ function statusLabel(status: string): string {
   return status.charAt(0) + status.slice(1).toLowerCase()
 }
 
-function HomePage({ consoleClient }: WorkbenchPageProps) {
+const HomePage = defineSetupComponent<WorkbenchPageProps>('HomePage', ['consoleClient', 'schemaUI'], props => {
   const [overview, reload] = useConsoleQuery<Record<string, never>, WorkbenchHomeOverview>(
-    consoleClient,
+    () => props.consoleClient,
     workbenchHomeOverviewQueryRef,
     emptyQueryInput,
     'home',
   )
-  return (
-    <main className="main-workbench core-page">
-      <header className="core-page-header"><Home size={22} /><div><h1>Home</h1><p>Your personal automation workspace.</p></div></header>
+  return () => (
+    <main class="main-workbench core-page">
+      <header class="core-page-header"><Home size={22} /><div><h1>Home</h1><p>Your personal automation workspace.</p></div></header>
       <HomeOverview state={overview} onReload={reload} />
     </main>
   )
-}
+})
 
 function HomeOverview({ state, onReload }: {
   state: ConsoleQueryState<WorkbenchHomeOverview>
@@ -61,8 +62,8 @@ function HomeOverview({ state, onReload }: {
   }
   const { data } = state
   return (
-    <div className="home-overview">
-      <section aria-label="Runtime summary" className="home-metrics">
+    <div class="home-overview">
+      <section aria-label="Runtime summary" class="home-metrics">
         <HomeMetric label="Automations" value={data.automations.total} detail={`${data.automations.enabled} enabled`} />
         <HomeMetric label="Recent runs" value={data.runs.recent.length} detail={`${data.runs.active} active · ${data.runs.queued} queued`} />
         <HomeMetric
@@ -72,10 +73,10 @@ function HomeOverview({ state, onReload }: {
           tone={data.connections.errors || data.connections.unavailable ? 'warning' : 'default'}
         />
       </section>
-      <section className="core-page-section home-section">
+      <section class="core-page-section home-section">
         <h2>Recent automations</h2>
         {data.automations.recent.length ? (
-          <div className="core-page-list">
+          <div class="core-page-list">
             {data.automations.recent.map(automation => (
               <div key={automation.id}>
                 <Network size={17} />
@@ -83,12 +84,12 @@ function HomeOverview({ state, onReload }: {
               </div>
             ))}
           </div>
-        ) : <p className="home-empty">No automations yet. Create one to begin shaping your workspace.</p>}
+        ) : <p class="home-empty">No automations yet. Create one to begin shaping your workspace.</p>}
       </section>
-      <section className="core-page-section home-section">
+      <section class="core-page-section home-section">
         <h2>Recent runs</h2>
         {data.runs.recent.length ? (
-          <div className="core-page-list">
+          <div class="core-page-list">
             {data.runs.recent.map(run => (
               <div key={run.id}>
                 <Activity size={17} />
@@ -96,7 +97,7 @@ function HomeOverview({ state, onReload }: {
               </div>
             ))}
           </div>
-        ) : <p className="home-empty">No runs have been accepted yet.</p>}
+        ) : <p class="home-empty">No runs have been accepted yet.</p>}
       </section>
     </div>
   )
@@ -108,7 +109,7 @@ function HomeMetric({ label, value, detail, tone = 'default' }: {
   detail: string
   tone?: 'default' | 'warning'
 }) {
-  return <div className="home-metric" data-tone={tone}><span>{label}</span><strong>{value}</strong><small>{detail}</small></div>
+  return <div class="home-metric" data-tone={tone}><span>{label}</span><strong>{value}</strong><small>{detail}</small></div>
 }
 
 function QueryStatePanel({ title, message, busy = false, tone = 'default', action, onAction }: {
@@ -120,10 +121,10 @@ function QueryStatePanel({ title, message, busy = false, tone = 'default', actio
   onAction?(): void
 }) {
   return (
-    <section aria-busy={busy} className="core-page-section home-state" data-tone={tone} role={tone === 'error' ? 'alert' : 'status'}>
+    <section aria-busy={busy} class="core-page-section home-state" data-tone={tone} role={tone === 'error' ? 'alert' : 'status'}>
       <strong>{title}</strong>
       <p>{message}</p>
-      {action ? <button className="secondary-button home-retry" onClick={onAction} type="button">{action}</button> : null}
+      {action ? <button class="secondary-button home-retry" {...(onAction ? { onClick: onAction } : {})} type="button">{action}</button> : null}
     </section>
   )
 }
@@ -133,38 +134,32 @@ interface RunsPosition {
   history: Array<WorkbenchRunsCursor | null>
 }
 
-function RunsPage({ consoleClient }: WorkbenchPageProps) {
-  const [position, setPosition] = useState<RunsPosition>({ history: [] })
-  const input = useMemo<WorkbenchRunsQueryInput>(() => ({
+const RunsPage = defineSetupComponent<WorkbenchPageProps>('RunsPage', ['consoleClient', 'schemaUI'], props => {
+  const position = reactive<RunsPosition>({ history: [] })
+  const input = computed<WorkbenchRunsQueryInput>(() => ({
     limit: 20,
     ...(position.cursor ? { cursor: position.cursor } : {}),
-  }), [position.cursor])
+  }))
   const [index, reload] = useConsoleQuery<WorkbenchRunsQueryInput, WorkbenchRunsIndex>(
-    consoleClient,
+    () => props.consoleClient,
     workbenchRunsIndexQueryRef,
     input,
     'runs',
   )
-  const next = index.status === 'READY' ? index.data.nextCursor : undefined
   const goNext = () => {
+    const next = index.status === 'READY' ? index.data.nextCursor : undefined
     if (!next) return
-    setPosition(current => ({
-      cursor: next,
-      history: [...current.history, current.cursor ?? null],
-    }))
+    position.history.push(position.cursor ?? null)
+    position.cursor = next
   }
   const goPrevious = () => {
-    setPosition(current => {
-      const previous = current.history.at(-1)
-      return {
-        ...(previous ? { cursor: previous } : {}),
-        history: current.history.slice(0, -1),
-      }
-    })
+    const previous = position.history.pop()
+    if (previous) position.cursor = previous
+    else delete position.cursor
   }
-  return (
-    <main className="main-workbench core-page">
-      <header className="core-page-header"><Play size={22} /><div><h1>Runs</h1><p>Inspect durable automation executions and their outcomes.</p></div></header>
+  return () => (
+    <main class="main-workbench core-page">
+      <header class="core-page-header"><Play size={22} /><div><h1>Runs</h1><p>Inspect durable automation executions and their outcomes.</p></div></header>
       <RunsIndex
         onNext={goNext}
         onPrevious={goPrevious}
@@ -174,7 +169,7 @@ function RunsPage({ consoleClient }: WorkbenchPageProps) {
       />
     </main>
   )
-}
+})
 
 function RunsIndex({ state, canGoPrevious, onNext, onPrevious, onReload }: {
   state: ConsoleQueryState<WorkbenchRunsIndex>
@@ -194,17 +189,17 @@ function RunsIndex({ state, canGoPrevious, onNext, onPrevious, onReload }: {
   }
   const { summary, items, nextCursor } = state.data
   return (
-    <div className="runs-index">
-      <section aria-label="Run summary" className="home-metrics runs-metrics">
+    <div class="runs-index">
+      <section aria-label="Run summary" class="home-metrics runs-metrics">
         <HomeMetric label="Total" value={summary.total} detail={`${summary.completed} completed`} />
         <HomeMetric label="Active" value={summary.active} detail={`${summary.queued} queued`} />
         <HomeMetric label="Failed" value={summary.failed} detail={`${summary.cancelled} cancelled`} tone={summary.failed ? 'warning' : 'default'} />
       </section>
-      <section className="core-page-section runs-section">
-        <div className="runs-section-heading"><h2>Durable Runs</h2><span>Newest first · up to 20 per page</span></div>
+      <section class="core-page-section runs-section">
+        <div class="runs-section-heading"><h2>Durable Runs</h2><span>Newest first · up to 20 per page</span></div>
         {items.length ? (
-          <div className="runs-table-wrap">
-            <table className="runs-table">
+          <div class="runs-table-wrap">
+            <table class="runs-table">
               <thead><tr><th>Automation</th><th>Status</th><th>Started</th><th>Duration</th><th>Work</th></tr></thead>
               <tbody>
                 {items.map(run => (
@@ -219,8 +214,8 @@ function RunsIndex({ state, canGoPrevious, onNext, onPrevious, onReload }: {
               </tbody>
             </table>
           </div>
-        ) : <p className="home-empty">No runs have been accepted yet.</p>}
-        <nav aria-label="Run pages" className="runs-pagination">
+        ) : <p class="home-empty">No runs have been accepted yet.</p>}
+        <nav aria-label="Run pages" class="runs-pagination">
           <button disabled={!canGoPrevious} onClick={onPrevious} type="button">Previous</button>
           <button disabled={!nextCursor} onClick={onNext} type="button">Next</button>
         </nav>
@@ -243,20 +238,20 @@ function formatCount(count: number, singular: string): string {
   return `${count} ${singular}${count === 1 ? '' : 's'}`
 }
 
-function ConnectionsPage({ consoleClient }: WorkbenchPageProps) {
+const ConnectionsPage = defineSetupComponent<WorkbenchPageProps>('ConnectionsPage', ['consoleClient', 'schemaUI'], props => {
   const [index, reload] = useConsoleQuery<Record<string, never>, WorkbenchConnectionsIndex>(
-    consoleClient,
+    () => props.consoleClient,
     workbenchConnectionsIndexQueryRef,
     emptyQueryInput,
     'connections',
   )
-  return (
-    <main className="main-workbench core-page">
-      <header className="core-page-header"><Cable size={22} /><div><h1>Connections</h1><p>Manage the systems and accounts available to automations.</p></div></header>
+  return () => (
+    <main class="main-workbench core-page">
+      <header class="core-page-header"><Cable size={22} /><div><h1>Connections</h1><p>Manage the systems and accounts available to automations.</p></div></header>
       <ConnectionsIndex state={index} onReload={reload} />
     </main>
   )
-}
+})
 
 function ConnectionsIndex({ state, onReload }: {
   state: ConsoleQueryState<WorkbenchConnectionsIndex>
@@ -273,8 +268,8 @@ function ConnectionsIndex({ state, onReload }: {
   }
   const { summary, items } = state.data
   return (
-    <div className="connections-index">
-      <section aria-label="Connection summary" className="home-metrics connections-metrics">
+    <div class="connections-index">
+      <section aria-label="Connection summary" class="home-metrics connections-metrics">
         <HomeMetric label="Total" value={summary.total} detail={`${summary.enabled} enabled`} />
         <HomeMetric label="Runtime ready" value={summary.ready} detail={`${summary.total - summary.enabled} disabled`} />
         <HomeMetric
@@ -284,11 +279,11 @@ function ConnectionsIndex({ state, onReload }: {
           tone={summary.unavailable || summary.errors ? 'warning' : 'default'}
         />
       </section>
-      <section className="core-page-section connections-section">
-        <div className="runs-section-heading"><h2>Configured Connections</h2><span>Desired and live state are shown separately</span></div>
+      <section class="core-page-section connections-section">
+        <div class="runs-section-heading"><h2>Configured Connections</h2><span>Desired and live state are shown separately</span></div>
         {items.length ? (
-          <div className="runs-table-wrap">
-            <table className="runs-table connections-table">
+          <div class="runs-table-wrap">
+            <table class="runs-table connections-table">
               <thead><tr><th>Connection</th><th>Status</th><th>Adapter</th><th>Desired</th><th>Updated</th></tr></thead>
               <tbody>
                 {items.map(connection => (
@@ -296,7 +291,7 @@ function ConnectionsIndex({ state, onReload }: {
                     <td><strong>{connection.name}</strong><small>{connection.credentialBound ? 'Credential bound' : 'No credential'}</small></td>
                     <td>
                       <em data-connection-status={connection.status}>{statusLabel(connection.status)}</em>
-                      <small className="connection-status-detail">{connection.statusDetail}</small>
+                      <small class="connection-status-detail">{connection.statusDetail}</small>
                     </td>
                     <td><strong>{connection.adapterTitle}</strong><small>{connection.adapterId}@{connection.adapterVersion}</small></td>
                     <td>{connection.enabled ? 'Enabled' : 'Disabled'}</td>
@@ -306,7 +301,7 @@ function ConnectionsIndex({ state, onReload }: {
               </tbody>
             </table>
           </div>
-        ) : <p className="home-empty">No Connections are configured yet.</p>}
+        ) : <p class="home-empty">No Connections are configured yet.</p>}
       </section>
     </div>
   )
@@ -326,9 +321,9 @@ function CoreIndexPage({ icon: Icon, title, description }: {
   description: string
 }) {
   return (
-    <main className="main-workbench core-page">
-      <header className="core-page-header"><Icon size={22} /><div><h1>{title}</h1><p>{description}</p></div></header>
-      <section className="core-page-section core-page-empty">
+    <main class="main-workbench core-page">
+      <header class="core-page-header"><Icon size={22} /><div><h1>{title}</h1><p>{description}</p></div></header>
+      <section class="core-page-section core-page-empty">
         <span>{title}</span>
         <p>Current runtime data will appear here through its typed Console Query.</p>
       </section>

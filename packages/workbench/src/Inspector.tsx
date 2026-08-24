@@ -1,6 +1,7 @@
 import type { AutomationSource, CompileDiagnostic, ValueExpr } from '@numen/core'
 import type { SchemaUIResolver } from '@numen/webui/schema-ui'
-import { ChevronDown, X } from 'lucide-react'
+import { ChevronDown, X } from '@lucide/vue'
+import type { SetupContext } from 'vue'
 import { CapabilityConnectionFields, CapabilityInputFields } from './CapabilityInspector.js'
 import { findAutomationControl } from './automation-source-editing.js'
 import type { WorkbenchAutomationInsertCatalog, WorkbenchAutomationInsertItem } from './contracts.js'
@@ -30,17 +31,16 @@ export interface InspectorProps {
   onClose(): void
 }
 
-function InspectorGroup({ title, children, open = true }: {
+function InspectorGroup({ title, open = true }: {
   title: string
-  children: React.ReactNode
   open?: boolean
-}) {
+}, context: SetupContext) {
   return (
-    <section className="inspector-group">
-      <button className="inspector-group-heading" type="button">
+    <section class="inspector-group">
+      <button class="inspector-group-heading" type="button">
         <span>{title}</span><ChevronDown size={15} data-open={open} />
       </button>
-      {open ? <div className="inspector-group-content">{children}</div> : null}
+      {open ? <div class="inspector-group-content">{context.slots.default?.()}</div> : null}
     </section>
   )
 }
@@ -65,29 +65,29 @@ function WaitConfiguration({
   const seconds = durationMs === undefined ? '' : String(durationMs / 1_000)
   return (
     <>
-      <label className="inspector-edit-field" data-invalid={!!problem}>
+      <label class="inspector-edit-field" data-invalid={!!problem}>
         Duration
-        <span className="input-with-unit">
+        <span class="input-with-unit">
           <input
             aria-describedby={problem ? `${nodeId}-duration-problem` : undefined}
             aria-invalid={!!problem}
             aria-label="Wait duration in seconds"
-            autoFocus={focusRequest !== undefined}
-            defaultValue={seconds}
+            autofocus={focusRequest !== undefined}
+            value={seconds}
             disabled={!canEdit}
             key={`${nodeId}:${durationMs ?? 'empty'}:${focusRequest ?? 'idle'}`}
             min="0"
             onBlur={event => {
-              const nextSeconds = Number(event.currentTarget.value)
+              const nextSeconds = Number((event.target as HTMLInputElement).value)
               const nextDurationMs = Math.round(nextSeconds * 1_000)
-              if (!event.currentTarget.value || !Number.isFinite(nextSeconds) || nextSeconds < 0) {
-                event.currentTarget.value = seconds
+              if (!(event.target as HTMLInputElement).value || !Number.isFinite(nextSeconds) || nextSeconds < 0) {
+                (event.target as HTMLInputElement).value = seconds
                 return
               }
               if (nextDurationMs !== durationMs) onChange?.(nodeId, nextDurationMs)
             }}
-            onKeyDown={event => {
-              if (event.key === 'Enter') event.currentTarget.blur()
+            onKeydown={event => {
+              if (event.key === 'Enter') (event.target as HTMLElement).blur()
             }}
             placeholder={replacesUntil ? 'until expression' : 'seconds'}
             step="0.001"
@@ -96,8 +96,8 @@ function WaitConfiguration({
           <span>s</span>
         </span>
       </label>
-      {replacesUntil ? <p className="inspector-field-help">Setting a duration replaces the current until expression.</p> : null}
-      {problem ? <p className="inspector-field-error" id={`${nodeId}-duration-problem`}>{problem.message}</p> : null}
+      {replacesUntil ? <p class="inspector-field-help">Setting a duration replaces the current until expression.</p> : null}
+      {problem ? <p class="inspector-field-error" id={`${nodeId}-duration-problem`}>{problem.message}</p> : null}
     </>
   )
 }
@@ -144,31 +144,31 @@ export function Inspector({
       : {})
     : {}
   return (
-    <aside className="inspector" data-open={open} aria-label="Inspector">
-      <header className="inspector-header">
+    <aside class="inspector" data-open={open} aria-label="Inspector">
+      <header class="inspector-header">
         <div><span>{step ? `STEP ${projectedSteps.indexOf(step) + 1}` : 'NO SELECTION'}</span><h2>{step?.label ?? 'Inspector'}</h2></div>
-        <button aria-label="Close inspector" className="icon-button inspector-close" onClick={onClose} type="button"><X size={17} /></button>
+        <button aria-label="Close inspector" class="icon-button inspector-close" onClick={onClose} type="button"><X size={17} /></button>
       </header>
       {!step ? (
-        <div className="inspector-empty">Select a projected Source step to inspect its configuration.</div>
+        <div class="inspector-empty">Select a projected Source step to inspect its configuration.</div>
       ) : isNotification ? (
         <>
           <InspectorGroup title="Connection">
-            <label>Provider<select defaultValue="Slack"><option>Slack</option></select></label>
-            <label>Connection<select defaultValue="Slack (Workspace)"><option>Slack (Workspace)</option></select></label>
-            <button className="secondary-button" type="button">Test connection</button>
+            <label>Provider<select value="Slack"><option>Slack</option></select></label>
+            <label>Connection<select value="Slack (Workspace)"><option>Slack (Workspace)</option></select></label>
+            <button class="secondary-button" type="button">Test connection</button>
           </InspectorGroup>
           <InspectorGroup title="Message">
-            <label>Channel<select defaultValue="#morning-brief"><option>#morning-brief</option></select></label>
-            <label>Message template<textarea defaultValue={'{{ summary }}'} /></label>
-            <button className="secondary-button compact" type="button">Insert variable <ChevronDown size={14} /></button>
+            <label>Channel<select value="#morning-brief"><option>#morning-brief</option></select></label>
+            <label>Message template<textarea value={'{{ summary }}'} /></label>
+            <button class="secondary-button compact" type="button">Insert variable <ChevronDown size={14} /></button>
           </InspectorGroup>
           <InspectorGroup title="Execution policy">
-            <label>On failure<select defaultValue="Continue to next step"><option>Continue to next step</option></select></label>
-            <label>Retry<select defaultValue="3 attempts"><option>3 attempts</option></select></label>
-            <label>Timeout<span className="input-with-unit"><input defaultValue="30" /><span>s</span></span></label>
-            <label className="checkbox-row">
-              <input defaultChecked type="checkbox" />
+            <label>On failure<select value="Continue to next step"><option>Continue to next step</option></select></label>
+            <label>Retry<select value="3 attempts"><option>3 attempts</option></select></label>
+            <label>Timeout<span class="input-with-unit"><input value="30" /><span>s</span></span></label>
+            <label class="checkbox-row">
+              <input checked type="checkbox" />
               <span>Run step only if previous steps succeeded</span>
             </label>
           </InspectorGroup>
@@ -186,7 +186,7 @@ export function Inspector({
             problem={durationProblem}
             replacesUntil={!!control.until}
           />
-          <dl className="inspector-source-fields">
+          <dl class="inspector-source-fields">
             <div><dt>Source ID</dt><dd>{step.sourceId}</dd></div>
             <div><dt>Kind</dt><dd>wait</dd></div>
           </dl>
@@ -218,21 +218,21 @@ export function Inspector({
                 {...(schemaUI ? { schemaUI } : {})}
               />
             ) : (
-              <div className="inspector-schema-notice">
+              <div class="inspector-schema-notice">
                 The Capability contract is unavailable. The Draft reference and existing inputs are preserved.
               </div>
             )}
           </InspectorGroup>
           <InspectorGroup title="Source">
-            <p className="inspector-summary">{step.summary}</p>
-            <dl className="inspector-source-fields">
+            <p class="inspector-summary">{step.summary}</p>
+            <dl class="inspector-source-fields">
               <div><dt>Source ID</dt><dd>{step.sourceId}</dd></div>
               <div><dt>Capability</dt><dd>{control.capability.id}@{control.capability.version}</dd></div>
             </dl>
           </InspectorGroup>
           {stepProblems.length ? (
             <InspectorGroup title="Diagnostics">
-              <div className="inspector-diagnostics">
+              <div class="inspector-diagnostics">
                 {stepProblems.map(problem => <p key={`${problem.code}:${problem.source?.fieldPath ?? ''}`}>{problem.message}</p>)}
               </div>
             </InspectorGroup>
@@ -240,13 +240,13 @@ export function Inspector({
         </>
       ) : (
         <InspectorGroup title="Configuration">
-          <p className="inspector-summary">{step.summary}</p>
-          <dl className="inspector-source-fields">
+          <p class="inspector-summary">{step.summary}</p>
+          <dl class="inspector-source-fields">
             <div><dt>Source ID</dt><dd>{step.sourceId ?? step.id}</dd></div>
             <div><dt>Kind</dt><dd>{step.kind ?? 'step'}</dd></div>
           </dl>
           {stepProblems.length ? (
-            <div className="inspector-diagnostics">
+            <div class="inspector-diagnostics">
               {stepProblems.map(problem => <p key={`${problem.code}:${problem.source?.fieldPath ?? ''}`}>{problem.message}</p>)}
             </div>
           ) : null}

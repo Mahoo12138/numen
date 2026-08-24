@@ -15,9 +15,9 @@ describe('Workbench Schema UI adapters', () => {
     const fiber = await root.plugin(coreWorkbenchFrontend)
 
     for (const type of ['string', 'number', 'boolean', 'enum', 'json']) {
-      expect(root.schemaUI.resolveRenderer({ type }, 'editor')).toBeTypeOf('function')
+      expect(root.schemaUI.resolveRenderer({ type }, 'editor')).toBeTruthy()
     }
-    expect(root.schemaUI.resolveRenderer({ role: 'numen/expression', type: 'string' }, 'editor')).toBeTypeOf('function')
+    expect(root.schemaUI.resolveRenderer({ role: 'numen/expression', type: 'string' }, 'editor')).toBeTruthy()
 
     await fiber.dispose()
     expect(root.schemaUI.resolveRenderer({ type: 'string' }, 'editor')).toBeUndefined()

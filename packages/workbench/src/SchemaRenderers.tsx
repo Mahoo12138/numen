@@ -1,9 +1,9 @@
 import { isNumenValue, type NumenValue } from '@numen/core'
 import type { SchemaRendererDefinition } from '@numen/webui/schema-ui'
 import type { Context } from 'cordis'
-import type { ComponentType } from 'react'
-import { useEffect, useState } from 'react'
+import { ref, watch, type Component } from 'vue'
 import type { WorkbenchAutomationInputField } from './contracts.js'
+import { defineSetupComponent } from './vue-component.js'
 
 export interface SchemaLiteralRendererProps {
   canEdit: boolean
@@ -16,7 +16,7 @@ export interface SchemaLiteralRendererProps {
   onCommit(value?: NumenValue): void
 }
 
-export type SchemaLiteralRenderer = ComponentType<SchemaLiteralRendererProps>
+export type SchemaLiteralRenderer = Component<SchemaLiteralRendererProps>
 
 function inputAccessibility(props: SchemaLiteralRendererProps) {
   return {
@@ -30,15 +30,15 @@ function StringLiteralEditor(props: SchemaLiteralRendererProps) {
   const value = typeof props.value === 'string' ? props.value : ''
   return <input
     {...inputAccessibility(props)}
-    defaultValue={value}
+    value={value}
     disabled={!props.canEdit}
     key={`${props.controlId}:${props.field.name}:${value}`}
     onBlur={event => {
-      const next = event.currentTarget.value
+      const next = (event.target as HTMLInputElement).value
       if (!next && !props.field.required) props.onCommit()
       else if (next !== value) props.onCommit(next)
     }}
-    onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur() }}
+    onKeydown={event => { if (event.key === 'Enter') (event.target as HTMLElement).blur() }}
     placeholder={props.field.required ? 'Required' : 'Optional'}
     type="text"
   />
@@ -48,26 +48,26 @@ function NumberLiteralEditor(props: SchemaLiteralRendererProps) {
   const value = typeof props.value === 'number' ? props.value : undefined
   return <input
     {...inputAccessibility(props)}
-    defaultValue={value ?? ''}
+    value={value ?? ''}
     disabled={!props.canEdit}
     key={`${props.controlId}:${props.field.name}:${value ?? 'unset'}`}
     {...(props.field.min !== undefined ? { min: props.field.min } : {})}
     {...(props.field.max !== undefined ? { max: props.field.max } : {})}
     {...(props.field.step !== undefined ? { step: props.field.step } : {})}
     onBlur={event => {
-      if (!event.currentTarget.value) {
+      if (!(event.target as HTMLInputElement).value) {
         if (!props.field.required) props.onCommit()
-        else event.currentTarget.value = value === undefined ? '' : String(value)
+        else (event.target as HTMLInputElement).value = value === undefined ? '' : String(value)
         return
       }
-      const next = Number(event.currentTarget.value)
+      const next = Number((event.target as HTMLInputElement).value)
       if (!Number.isFinite(next)) {
-        event.currentTarget.value = value === undefined ? '' : String(value)
+        (event.target as HTMLInputElement).value = value === undefined ? '' : String(value)
         return
       }
       if (next !== value) props.onCommit(next)
     }}
-    onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur() }}
+    onKeydown={event => { if (event.key === 'Enter') (event.target as HTMLElement).blur() }}
     placeholder={props.field.required ? 'Required number' : 'Optional number'}
     type="number"
   />
@@ -79,8 +79,8 @@ function BooleanLiteralEditor(props: SchemaLiteralRendererProps) {
     {...inputAccessibility(props)}
     disabled={!props.canEdit}
     onChange={event => {
-      if (!event.currentTarget.value) props.onCommit()
-      else props.onCommit(event.currentTarget.value === 'true')
+      if (!(event.target as HTMLInputElement).value) props.onCommit()
+      else props.onCommit((event.target as HTMLInputElement).value === 'true')
     }}
     value={value}
   >
@@ -99,8 +99,8 @@ function EnumLiteralEditor(props: SchemaLiteralRendererProps) {
     {...inputAccessibility(props)}
     disabled={!props.canEdit}
     onChange={event => {
-      if (!event.currentTarget.value) props.onCommit()
-      else props.onCommit(options[Number(event.currentTarget.value)]!.value)
+      if (!(event.target as HTMLInputElement).value) props.onCommit()
+      else props.onCommit(options[Number((event.target as HTMLInputElement).value)]!.value)
     }}
     value={selectedIndex < 0 ? '' : String(selectedIndex)}
   >
@@ -111,41 +111,43 @@ function EnumLiteralEditor(props: SchemaLiteralRendererProps) {
   </select>
 }
 
-function JsonLiteralEditor(props: SchemaLiteralRendererProps) {
-  const value = props.value === undefined ? '' : JSON.stringify(props.value, null, 2)
-  const [localError, setLocalError] = useState<string>()
+const JsonLiteralEditor = defineSetupComponent<SchemaLiteralRendererProps>('JsonLiteralEditor', ['canEdit', 'controlId', 'describedBy', 'field', 'inputId', 'invalid', 'value', 'onCommit'], props => {
+  const localError = ref<string>()
   const localProblemId = `${props.controlId}-input-${props.field.name}-json-problem`
-  useEffect(() => setLocalError(undefined), [value])
-  return <>
+  watch(() => props.value, () => { localError.value = undefined })
+  return () => {
+    const value = props.value === undefined ? '' : JSON.stringify(props.value, null, 2)
+    return <>
     <textarea
-      aria-describedby={[props.describedBy, localError ? localProblemId : undefined].filter(Boolean).join(' ') || undefined}
-      aria-invalid={props.invalid || !!localError}
-      defaultValue={value}
+      aria-describedby={[props.describedBy, localError.value ? localProblemId : undefined].filter(Boolean).join(' ') || undefined}
+      aria-invalid={props.invalid || !!localError.value}
+      value={value}
       disabled={!props.canEdit}
       id={props.inputId}
       key={`${props.controlId}:${props.field.name}:${value}`}
       onBlur={event => {
-        const text = event.currentTarget.value.trim()
+        const text = (event.target as HTMLInputElement).value.trim()
         if (!text && !props.field.required) {
-          setLocalError(undefined)
+          localError.value = undefined
           props.onCommit()
           return
         }
         try {
           const next: unknown = JSON.parse(text)
           if (!isNumenValue(next)) throw new TypeError('Value must be JSON-compatible Numen data.')
-          setLocalError(undefined)
+          localError.value = undefined
           if (JSON.stringify(next) !== JSON.stringify(props.value)) props.onCommit(next)
         } catch (error) {
-          setLocalError(error instanceof Error ? error.message : 'Enter valid JSON.')
+          localError.value = error instanceof Error ? error.message : 'Enter valid JSON.'
         }
       }}
       placeholder={props.field.required ? 'Required JSON value' : 'Optional JSON value'}
       rows={4}
     />
-    {localError ? <p className="inspector-field-error" id={localProblemId} role="alert">{localError}</p> : null}
+    {localError.value ? <p class="inspector-field-error" id={localProblemId} role="alert">{localError.value}</p> : null}
   </>
-}
+  }
+})
 
 export const coreSchemaLiteralRenderers: ReadonlyArray<SchemaRendererDefinition<SchemaLiteralRenderer>> = [
   { id: 'numen:schema-string', version: 1, type: 'string', editor: StringLiteralEditor },

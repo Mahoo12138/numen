@@ -1,5 +1,6 @@
 import type { Request, Response } from '@cordisjs/plugin-server'
 import type { Context } from 'cordis'
+import { randomUUID } from 'node:crypto'
 import { readFile, realpath, stat } from 'node:fs/promises'
 import { dirname, extname, isAbsolute, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -104,8 +105,14 @@ function encodePath(path: string): string {
   return path.split(sep).map(segment => encodeURIComponent(segment)).join('/')
 }
 
-function manifestUrl(assetPath: string, entryId: string, revision: number, entryPath: string): string {
-  return `${assetPath}/${encodeEntryId(entryId)}/${revision}/${encodePath(entryPath)}`
+function manifestUrl(
+  assetPath: string,
+  assetGeneration: string,
+  entryId: string,
+  revision: number,
+  entryPath: string,
+): string {
+  return `${assetPath}/${assetGeneration}/${encodeEntryId(entryId)}/${revision}/${encodePath(entryPath)}`
 }
 
 async function authenticate(ctx: Context, request: Request, response: Response): Promise<boolean> {
@@ -143,12 +150,13 @@ export function consoleAssetPlugin(ctx: Context, config: ConsoleAssetConfig = {}
   if (mode !== 'dev' && mode !== 'prod') throw new TypeError(`invalid Console asset mode: ${String(mode)}`)
   const manifestPath = trimPath(config.manifestPath ?? '/api/console/entries', 'manifestPath')
   const assetPath = trimPath(config.assetPath ?? '/api/console/assets', 'assetPath')
-  const assetPattern = new RegExp(`^${escapeRegExp(assetPath)}/([^/]+)/([1-9]\\d*)/(.+)$`)
+  const assetGeneration = randomUUID()
+  const assetPattern = new RegExp(`^${escapeRegExp(assetPath)}/([^/]+)/([^/]+)/([1-9]\\d*)/(.+)$`)
 
   ctx.server.get(manifestPath, async (request, response) => {
     if (!await authenticate(ctx, request, response)) return
     const revision = ctx.consoleEntries.getRevision()
-    const etag = `W/"entries-${mode}-${revision}"`
+    const etag = `W/"entries-${mode}-${assetGeneration}-${revision}"`
     response.headers.set('cache-control', 'private, no-cache')
     response.headers.set('etag', etag)
     if (request.headers.get('if-none-match') === etag) {
@@ -163,7 +171,7 @@ export function consoleAssetPlugin(ctx: Context, config: ConsoleAssetConfig = {}
         const resolved = resolveSource(source.source, source.baseUrl)
         document.entries.push({
           id: entry.id,
-          url: manifestUrl(assetPath, entry.id, revision, resolved.entryPath),
+          url: manifestUrl(assetPath, assetGeneration, entry.id, revision, resolved.entryPath),
           ...(entry.scopeId ? { scopeId: entry.scopeId } : {}),
           ...(entry.generation === undefined ? {} : { generation: entry.generation }),
         })
@@ -176,8 +184,14 @@ export function consoleAssetPlugin(ctx: Context, config: ConsoleAssetConfig = {}
 
   ctx.server.get(assetPattern, async (request, response) => {
     if (!await authenticate(ctx, request, response)) return
-    const entryId = decodeEntryId(request.params[1] ?? '')
-    const revision = Number(request.params[2])
+    const generation = request.params[1]
+    const entryId = decodeEntryId(request.params[2] ?? '')
+    const revision = Number(request.params[3])
+    if (generation !== assetGeneration) {
+      response.status = 410
+      response.json({ error: { code: 'ENTRY_GENERATION_STALE', message: 'Console asset generation is stale' } })
+      return
+    }
     if (!entryId || !Number.isSafeInteger(revision)) {
       response.status = 404
       return
@@ -194,7 +208,7 @@ export function consoleAssetPlugin(ctx: Context, config: ConsoleAssetConfig = {}
     }
     let requestedPath: string
     try {
-      requestedPath = decodeURIComponent(request.params[3] ?? '')
+      requestedPath = decodeURIComponent(request.params[4] ?? '')
     } catch {
       response.status = 404
       return

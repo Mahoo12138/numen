@@ -1,5 +1,10 @@
 import type { AutomationSource, CompileDiagnostic, NumenValue, ValueExpr } from '@numen/core'
-import { useCallback, useEffect, useMemo, useReducer } from 'react'
+import {
+  shallowRef,
+  toValue,
+  watch,
+  type MaybeRefOrGetter,
+} from 'vue'
 import {
   workbenchPublishAutomationDraftActionRef,
   workbenchSaveAutomationDraftActionRef,
@@ -329,14 +334,14 @@ export function reduceAutomationDraftDocument(
 }
 
 export interface AutomationDraftDocumentModel {
-  document?: AutomationDraftDocument
-  selectedNodeId?: string
+  document?: AutomationDraftDocument | undefined
+  selectedNodeId?: string | undefined
   savePhase: AutomationDraftSavePhase
   saveMessage: string
-  conflict?: { expectedVersion: number; actualVersion: number }
-  saveError?: string
+  conflict?: { expectedVersion: number; actualVersion: number } | undefined
+  saveError?: string | undefined
   publishPending: boolean
-  publishError?: string
+  publishError?: string | undefined
   problems: CompileDiagnostic[]
   canEdit: boolean
   canPublish: boolean
@@ -373,35 +378,39 @@ export function useAutomationDraftDocument({
   reloadDetail,
   autosaveDelayMs = 600,
 }: {
-  client?: WorkbenchConsoleClient
-  automationId?: string
-  detail?: WorkbenchAutomationDetail
+  client?: MaybeRefOrGetter<WorkbenchConsoleClient | undefined>
+  automationId?: MaybeRefOrGetter<string | undefined>
+  detail?: MaybeRefOrGetter<WorkbenchAutomationDetail | undefined>
   reloadDetail(): void
   autosaveDelayMs?: number
 }): AutomationDraftDocumentModel {
-  const [state, dispatch] = useReducer(reduceAutomationDraftDocument, initialState)
+  const state = shallowRef(initialState)
+  const dispatch = (action: AutomationDraftDocumentAction) => {
+    state.value = reduceAutomationDraftDocument(state.value, action)
+  }
 
-  useEffect(() => {
-    dispatch({ type: 'SELECT', ...(automationId ? { automationId } : {}) })
-  }, [automationId])
+  watch(
+    () => toValue(automationId),
+    id => dispatch({ type: 'SELECT', ...(id ? { automationId: id } : {}) }),
+    { immediate: true },
+  )
 
-  useEffect(() => {
-    if (automationId && detail?.automation.id === automationId) {
-      dispatch({ type: 'SERVER', automationId, draft: detail.draft })
+  watch([() => toValue(automationId), () => toValue(detail)], ([id, nextDetail]) => {
+    if (id && nextDetail?.automation.id === id) {
+      dispatch({ type: 'SERVER', automationId: id, draft: nextDetail.draft })
     }
-  }, [automationId, detail])
+  }, { immediate: true })
 
-  useEffect(() => {
-    if (state.savePhase !== 'DIRTY') return
+  watch([() => state.value.savePhase, () => state.value.editRevision], ([phase], _previous, onCleanup) => {
+    if (phase !== 'DIRTY') return
     const timer = globalThis.setTimeout(() => dispatch({ type: 'SAVE_REQUEST' }), autosaveDelayMs)
-    return () => globalThis.clearTimeout(timer)
-  }, [autosaveDelayMs, state.editRevision, state.savePhase])
+    onCleanup(() => globalThis.clearTimeout(timer))
+  })
 
-  useEffect(() => {
-    if (!client || state.savePhase !== 'SAVING' || !state.pendingSave) return
+  watch([() => toValue(client), () => state.value.savePhase, () => state.value.pendingSave], ([resolvedClient, phase, pending], _previous, onCleanup) => {
+    if (!resolvedClient || phase !== 'SAVING' || !pending) return
     const controller = new AbortController()
-    const pending = state.pendingSave
-    void client.action<WorkbenchSaveAutomationDraftInput, WorkbenchSaveAutomationDraftResult>(
+    void resolvedClient.action<WorkbenchSaveAutomationDraftInput, WorkbenchSaveAutomationDraftResult>(
       workbenchSaveAutomationDraftActionRef,
       {
         automationId: pending.automationId,
@@ -416,14 +425,13 @@ export function useAutomationDraftDocument({
         if (!controller.signal.aborted) dispatch({ type: 'SAVE_FAILURE', error })
       },
     )
-    return () => controller.abort()
-  }, [client, state.pendingSave, state.savePhase])
+    onCleanup(() => controller.abort())
+  })
 
-  useEffect(() => {
-    if (!client || !state.publishPending || !state.pendingPublish) return
+  watch([() => toValue(client), () => state.value.publishPending, () => state.value.pendingPublish], ([resolvedClient, publishPending, pending], _previous, onCleanup) => {
+    if (!resolvedClient || !publishPending || !pending) return
     const controller = new AbortController()
-    const pending = state.pendingPublish
-    void client.action<WorkbenchPublishAutomationDraftInput, WorkbenchPublishAutomationDraftResult>(
+    void resolvedClient.action<WorkbenchPublishAutomationDraftInput, WorkbenchPublishAutomationDraftResult>(
       workbenchPublishAutomationDraftActionRef,
       {
         automationId: pending.automationId,
@@ -436,58 +444,72 @@ export function useAutomationDraftDocument({
         if (!controller.signal.aborted) dispatch({ type: 'PUBLISH_FAILURE', error })
       },
     )
-    return () => controller.abort()
-  }, [client, state.pendingPublish, state.publishPending])
+    onCleanup(() => controller.abort())
+  })
 
-  const insert = useCallback((item: WorkbenchAutomationInsertItem) => {
+  const insert = (item: WorkbenchAutomationInsertItem) => {
     dispatch({ type: 'EDIT', command: { type: 'INSERT', item } })
-  }, [])
-  const selectNode = useCallback((nodeId?: string) => {
+  }
+  const selectNode = (nodeId?: string) => {
     dispatch({ type: 'SELECT_NODE', ...(nodeId ? { nodeId } : {}) })
-  }, [])
-  const setCapabilityConnection = useCallback((nodeId: string, slotName: string, connectionId?: string) => {
+  }
+  const setCapabilityConnection = (nodeId: string, slotName: string, connectionId?: string) => {
     dispatch({
       type: 'EDIT',
       command: { type: 'SET_CAPABILITY_CONNECTION', nodeId, slotName, ...(connectionId ? { connectionId } : {}) },
     })
-  }, [])
-  const setCapabilityInput = useCallback((nodeId: string, fieldName: string, expression?: ValueExpr) => {
+  }
+  const setCapabilityInput = (nodeId: string, fieldName: string, expression?: ValueExpr) => {
     dispatch({
       type: 'EDIT',
       command: { type: 'SET_CAPABILITY_INPUT', nodeId, fieldName, ...(expression ? { expression } : {}) },
     })
-  }, [])
-  const setWaitDuration = useCallback((nodeId: string, durationMs: number) => {
+  }
+  const setWaitDuration = (nodeId: string, durationMs: number) => {
     dispatch({ type: 'EDIT', command: { type: 'SET_WAIT_DURATION', nodeId, durationMs } })
-  }, [])
-  const undo = useCallback(() => dispatch({ type: 'UNDO' }), [])
-  const redo = useCallback(() => dispatch({ type: 'REDO' }), [])
-  const publish = useCallback(() => dispatch({ type: 'PUBLISH_REQUEST' }), [])
-  const reload = useCallback(() => {
+  }
+  const undo = () => dispatch({ type: 'UNDO' })
+  const redo = () => dispatch({ type: 'REDO' })
+  const publish = () => dispatch({ type: 'PUBLISH_REQUEST' })
+  const reload = () => {
     dispatch({ type: 'RELOAD' })
     reloadDetail()
-  }, [reloadDetail])
-  const retrySave = useCallback(() => dispatch({ type: 'RETRY_SAVE' }), [])
-  const canEdit = !!state.document
-    && state.savePhase !== 'CONFLICT'
-    && state.savePhase !== 'RELOADING'
-    && !state.publishPending
-  const canPublish = !!state.document && state.savePhase === 'CLEAN' && !state.publishPending
+  }
+  const retrySave = () => dispatch({ type: 'RETRY_SAVE' })
 
-  return useMemo(() => ({
-    ...(state.document ? { document: state.document } : {}),
-    ...(state.selectedNodeId ? { selectedNodeId: state.selectedNodeId } : {}),
-    savePhase: state.savePhase,
-    saveMessage: saveMessage(state.savePhase),
-    ...(state.conflict ? { conflict: state.conflict } : {}),
-    ...(state.saveError ? { saveError: state.saveError } : {}),
-    publishPending: state.publishPending,
-    ...(state.publishError ? { publishError: state.publishError } : {}),
-    problems: state.problems,
-    canEdit,
-    canPublish,
-    canUndo: canEdit && !!state.undoStack.length,
-    canRedo: canEdit && !!state.redoStack.length,
+  return {
+    get document() { return state.value.document },
+    get selectedNodeId() { return state.value.selectedNodeId },
+    get savePhase() { return state.value.savePhase },
+    get saveMessage() { return saveMessage(state.value.savePhase) },
+    get conflict() { return state.value.conflict },
+    get saveError() { return state.value.saveError },
+    get publishPending() { return state.value.publishPending },
+    get publishError() { return state.value.publishError },
+    get problems() { return state.value.problems },
+    get canEdit() {
+      return !!state.value.document
+        && state.value.savePhase !== 'CONFLICT'
+        && state.value.savePhase !== 'RELOADING'
+        && !state.value.publishPending
+    },
+    get canPublish() {
+      return !!state.value.document && state.value.savePhase === 'CLEAN' && !state.value.publishPending
+    },
+    get canUndo() {
+      return !!state.value.document
+        && state.value.savePhase !== 'CONFLICT'
+        && state.value.savePhase !== 'RELOADING'
+        && !state.value.publishPending
+        && !!state.value.undoStack.length
+    },
+    get canRedo() {
+      return !!state.value.document
+        && state.value.savePhase !== 'CONFLICT'
+        && state.value.savePhase !== 'RELOADING'
+        && !state.value.publishPending
+        && !!state.value.redoStack.length
+    },
     insert,
     selectNode,
     setCapabilityConnection,
@@ -498,28 +520,5 @@ export function useAutomationDraftDocument({
     publish,
     reload,
     retrySave,
-  }), [
-    canEdit,
-    canPublish,
-    insert,
-    publish,
-    redo,
-    reload,
-    retrySave,
-    selectNode,
-    setCapabilityConnection,
-    setCapabilityInput,
-    setWaitDuration,
-    state.conflict,
-    state.document,
-    state.problems,
-    state.publishError,
-    state.publishPending,
-    state.redoStack.length,
-    state.saveError,
-    state.savePhase,
-    state.selectedNodeId,
-    state.undoStack.length,
-    undo,
-  ])
+  }
 }

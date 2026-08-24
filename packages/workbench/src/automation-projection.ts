@@ -1,5 +1,5 @@
 import type { AutomationSource, CompileDiagnostic, ControlSource, ValueExpr } from '@numen/core'
-import { Boxes, Clock3, GitBranch, Network, Play, Radio, Repeat2, Zap } from 'lucide-react'
+import { Boxes, Clock3, GitBranch, Network, Play, Radio, Repeat2, Zap } from '@lucide/vue'
 import type { AutomationStep } from './model.js'
 
 function humanize(identifier: string, fallback: string): string {

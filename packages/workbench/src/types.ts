@@ -1,7 +1,7 @@
 import type { ConsoleProcedureRef } from '@numen/console'
 import type { FrontendPage } from '@numen/webui/extensions'
 import type { SchemaUIResolver } from '@numen/webui/schema-ui'
-import type { ComponentType } from 'react'
+import type { Component } from 'vue'
 
 export interface WorkbenchConsoleClient {
   query<Input, Output>(ref: ConsoleProcedureRef, input: Input, signal?: AbortSignal): Promise<Output>
@@ -19,7 +19,7 @@ export interface WorkbenchPageProps {
   schemaUI?: SchemaUIResolver
 }
 
-export type WorkbenchPageComponent = ComponentType<WorkbenchPageProps>
+export type WorkbenchPageComponent = Component<WorkbenchPageProps>
 
 export interface WorkbenchPageChromeProps {
   page: WorkbenchPageDefinition
@@ -29,7 +29,7 @@ export interface WorkbenchPageChromeProps {
   onInspectorOpenChange(open: boolean): void
 }
 
-export type WorkbenchPageChromeComponent = ComponentType<WorkbenchPageChromeProps>
+export type WorkbenchPageChromeComponent = Component<WorkbenchPageChromeProps>
 
 export interface WorkbenchPageChromeDefinition {
   component: WorkbenchPageChromeComponent

@@ -1,5 +1,6 @@
 import { defineConfig, type Plugin } from 'vite'
 import { fileURLToPath } from 'node:url'
+import vueJsx from '@vitejs/plugin-vue-jsx'
 
 const publicBase = '/workbench/'
 
@@ -24,7 +25,7 @@ function shareWorkbenchRuntime(): Plugin {
 
 export default defineConfig({
   base: publicBase,
-  plugins: [shareWorkbenchRuntime()],
+  plugins: [vueJsx(), shareWorkbenchRuntime()],
   build: {
     outDir: 'dist/app',
     rollupOptions: {

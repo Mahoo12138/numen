@@ -127,6 +127,31 @@ describe('Console Entry asset delivery', () => {
     expect(await stale.json()).toMatchObject({ error: { code: 'ENTRY_GENERATION_STALE' } })
   })
 
+  it('changes immutable asset URLs when the asset service restarts', async () => {
+    const fixture = await setup()
+    const firstResponse = await fetch(`${fixture.baseUrl}/api/console/entries`, {
+      headers: authorized(),
+    })
+    const firstEtag = firstResponse.headers.get('etag')
+    const firstManifest = await firstResponse.json() as ConsoleEntryManifest
+    const firstUrl = new URL(firstManifest.entries[0]!.url, fixture.baseUrl)
+
+    await fixture.disposeAssets()
+    await fixture.root.plugin(consoleAssetPlugin, { mode: 'prod' })
+
+    const secondResponse = await fetch(`${fixture.baseUrl}/api/console/entries`, {
+      headers: authorized(),
+    })
+    const secondManifest = await secondResponse.json() as ConsoleEntryManifest
+    const secondUrl = new URL(secondManifest.entries[0]!.url, fixture.baseUrl)
+    expect(secondResponse.headers.get('etag')).not.toBe(firstEtag)
+    expect(secondUrl.href).not.toBe(firstUrl.href)
+
+    const stale = await fetch(firstUrl, { headers: authorized() })
+    expect(stale.status).toBe(410)
+    expect(await stale.json()).toMatchObject({ error: { code: 'ENTRY_GENERATION_STALE' } })
+  })
+
   it('reports unresolvable sources without exposing them and removes routes with the plugin Fiber', async () => {
     const fixture = await setup()
     fixture.root.consoleEntries.addEntry(fixture.root, {

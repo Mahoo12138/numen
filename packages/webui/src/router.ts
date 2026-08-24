@@ -14,6 +14,7 @@ export interface BrowserRouterEnvironment {
 
 export interface BrowserRouterConfig {
   environment?: BrowserRouterEnvironment
+  basePath?: string
 }
 
 export interface BrowserRouteTarget {
@@ -54,6 +55,20 @@ function defaultEnvironment(): BrowserRouterEnvironment {
 
 function normalizePathname(pathname: string): string {
   return pathname.length > 1 && pathname.endsWith('/') ? pathname.slice(0, -1) : pathname
+}
+
+function normalizeBasePath(basePath: string): string {
+  if (!basePath || basePath === '/') return ''
+  if (!basePath.startsWith('/') || basePath.includes('?') || basePath.includes('#') || basePath.includes('//')) {
+    throw new TypeError(`invalid browser router base path: ${basePath}`)
+  }
+  return normalizePathname(basePath)
+}
+
+function stripBasePath(pathname: string, basePath: string): string {
+  if (!basePath) return pathname
+  if (pathname === basePath) return '/'
+  return pathname.startsWith(`${basePath}/`) ? pathname.slice(basePath.length) : pathname
 }
 
 function splitPath(path: string): string[] {
@@ -114,12 +129,14 @@ export class BrowserRouterService extends Service {
   static inject = ['webuiExtensions']
 
   private readonly environment: BrowserRouterEnvironment
+  private readonly basePath: string
   private readonly listeners = new Set<() => void>()
   private state!: BrowserRouteState
 
   constructor(ctx: Context, config: BrowserRouterConfig = {}) {
     super(ctx, 'webuiRouter')
     this.environment = config.environment ?? defaultEnvironment()
+    this.basePath = normalizeBasePath(config.basePath ?? '')
   }
 
   *[Service.init]() {
@@ -156,7 +173,7 @@ export class BrowserRouterService extends Service {
   href(ref: FrontendExtensionRef, target: BrowserRouteTarget = {}): string {
     const page = this.ctx.webuiExtensions.getPage(ref)
     if (!page) throw new Error(`frontend route not found: ${ref.id}@${ref.version}`)
-    return buildPath(page, target)
+    return `${this.basePath}${buildPath(page, target)}` || '/'
   }
 
   navigate(ref: FrontendExtensionRef, options: BrowserNavigateOptions = {}): BrowserRouteState {
@@ -175,7 +192,7 @@ export class BrowserRouterService extends Service {
 
   reconcile(force = false): BrowserRouteState {
     const url = new URL(this.environment.location.href)
-    const pathname = normalizePathname(url.pathname)
+    const pathname = stripBasePath(normalizePathname(url.pathname), this.basePath)
     let page: FrontendPage | undefined
     let parameters: Record<string, string> = {}
     for (const candidate of this.ctx.webuiExtensions.listPages().sort(routePriority)) {

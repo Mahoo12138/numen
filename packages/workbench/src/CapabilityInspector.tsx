@@ -1,7 +1,7 @@
 import type { CapabilitySource, CompileDiagnostic, NumenValue, ValueExpr } from '@numen/core'
 import type { SchemaUIResolver } from '@numen/webui/schema-ui'
-import { AlertCircle } from 'lucide-react'
-import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
+import { AlertCircle } from '@lucide/vue'
+import { h, ref, watch, watchEffect, type SetupContext, type VNodeChild } from 'vue'
 import type {
   WorkbenchAutomationConnectionOption,
   WorkbenchAutomationConnectionSlot,
@@ -9,6 +9,7 @@ import type {
   WorkbenchAutomationInsertItem,
 } from './contracts.js'
 import type { SchemaLiteralRenderer } from './SchemaRenderers.js'
+import { defineSetupComponent } from './vue-component.js'
 
 type CapabilityCatalogItem = Extract<WorkbenchAutomationInsertItem, { kind: 'capability' }>
 
@@ -76,10 +77,14 @@ interface InputFieldProps {
   onChange?(nodeId: string, fieldName: string, expression?: ValueExpr): void
 }
 
-function useSchemaRevision(schemaUI: SchemaUIResolver | undefined): void {
-  const subscribe = useCallback((listener: () => void) => schemaUI?.subscribe(listener) ?? (() => {}), [schemaUI])
-  const getSnapshot = useCallback(() => schemaUI?.getSnapshot() ?? 0, [schemaUI])
-  useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+function useSchemaRevision(schemaUI: () => SchemaUIResolver | undefined) {
+  const revision = ref(schemaUI()?.getSnapshot() ?? 0)
+  watchEffect((onCleanup) => {
+    const resolver = schemaUI()
+    revision.value = resolver?.getSnapshot() ?? 0
+    if (resolver) onCleanup(resolver.subscribe(() => { revision.value = resolver.getSnapshot() }))
+  })
+  return revision
 }
 
 function defaultLiteral(field: WorkbenchAutomationInputField): NumenValue | undefined {
@@ -104,66 +109,70 @@ function modeExpression(field: WorkbenchAutomationInputField, mode: EditableValu
   return value === undefined ? undefined : { type: 'literal', value }
 }
 
-function ReferenceEditor({ nodeId, field, expression, problem, canEdit, onChange }: InputFieldProps) {
-  const value = expression?.type === 'ref' ? expression.path : 'trigger.value'
-  const [localError, setLocalError] = useState<string>()
-  const problemId = inputProblemId(nodeId, field.name)
+const ReferenceEditor = defineSetupComponent<InputFieldProps>('ReferenceEditor', ['nodeId', 'field', 'expression', 'problem', 'canEdit', 'schemaUI', 'onChange'], props => {
+  const localError = ref<string>()
+  const problemId = inputProblemId(props.nodeId, props.field.name)
   const localProblemId = `${problemId}-reference`
-  useEffect(() => setLocalError(undefined), [value])
-  return <>
+  watch(() => props.expression, () => { localError.value = undefined })
+  return () => {
+    const value = props.expression?.type === 'ref' ? props.expression.path : 'trigger.value'
+    return <>
     <input
-      aria-describedby={[problem ? problemId : undefined, localError ? localProblemId : undefined].filter(Boolean).join(' ') || undefined}
-      aria-invalid={!!problem || !!localError}
-      defaultValue={value}
-      disabled={!canEdit}
-      id={`${nodeId}-input-${field.name}`}
-      key={`${nodeId}:${field.name}:${value}`}
+      aria-describedby={[props.problem ? problemId : undefined, localError.value ? localProblemId : undefined].filter(Boolean).join(' ') || undefined}
+      aria-invalid={!!props.problem || !!localError.value}
+      value={value}
+      disabled={!props.canEdit}
+      id={`${props.nodeId}-input-${props.field.name}`}
+      key={`${props.nodeId}:${props.field.name}:${value}`}
       onBlur={event => {
-        const path = event.currentTarget.value.trim()
+        const path = (event.target as HTMLInputElement).value.trim()
         if (!referencePattern.test(path)) {
-          setLocalError('Use a stable path such as trigger.payload or steps.fetch.output.')
+          localError.value = 'Use a stable path such as trigger.payload or steps.fetch.output.'
           return
         }
-        setLocalError(undefined)
-        if (path !== value) onChange?.(nodeId, field.name, { type: 'ref', path })
+        localError.value = undefined
+        if (path !== value) props.onChange?.(props.nodeId, props.field.name, { type: 'ref', path })
       }}
-      onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur() }}
+      onKeydown={event => { if (event.key === 'Enter') (event.target as HTMLElement).blur() }}
       placeholder="trigger.value"
       type="text"
     />
-    {localError ? <p className="inspector-field-error" id={localProblemId} role="alert">{localError}</p> : null}
+    {localError.value ? <p class="inspector-field-error" id={localProblemId} role="alert">{localError.value}</p> : null}
   </>
-}
+  }
+})
 
-function TemplateEditor({ nodeId, field, expression, problem, canEdit, onChange }: InputFieldProps) {
-  const value = expression?.type === 'template' ? printAutomationTemplate(expression) : ''
-  const [localError, setLocalError] = useState<string>()
-  const problemId = inputProblemId(nodeId, field.name)
+const TemplateEditor = defineSetupComponent<InputFieldProps>('TemplateEditor', ['nodeId', 'field', 'expression', 'problem', 'canEdit', 'schemaUI', 'onChange'], props => {
+  const localError = ref<string>()
+  const problemId = inputProblemId(props.nodeId, props.field.name)
   const localProblemId = `${problemId}-template`
-  useEffect(() => setLocalError(undefined), [value])
-  return <>
+  watch(() => props.expression, () => { localError.value = undefined })
+  return () => {
+    const value = props.expression?.type === 'template' ? printAutomationTemplate(props.expression) : ''
+    return <>
     <textarea
-      aria-describedby={[problem ? problemId : undefined, localError ? localProblemId : undefined].filter(Boolean).join(' ') || undefined}
-      aria-invalid={!!problem || !!localError}
-      defaultValue={value}
-      disabled={!canEdit}
-      id={`${nodeId}-input-${field.name}`}
-      key={`${nodeId}:${field.name}:${value}`}
+      aria-describedby={[props.problem ? problemId : undefined, localError.value ? localProblemId : undefined].filter(Boolean).join(' ') || undefined}
+      aria-invalid={!!props.problem || !!localError.value}
+      value={value}
+      disabled={!props.canEdit}
+      id={`${props.nodeId}-input-${props.field.name}`}
+      key={`${props.nodeId}:${props.field.name}:${value}`}
       onBlur={event => {
         try {
-          const next = parseAutomationTemplate(event.currentTarget.value)
-          setLocalError(undefined)
-          if (JSON.stringify(next) !== JSON.stringify(expression)) onChange?.(nodeId, field.name, next)
+          const next = parseAutomationTemplate((event.target as HTMLInputElement).value)
+          localError.value = undefined
+          if (JSON.stringify(next) !== JSON.stringify(props.expression)) props.onChange?.(props.nodeId, props.field.name, next)
         } catch (error) {
-          setLocalError(error instanceof Error ? error.message : 'Enter a valid template.')
+          localError.value = error instanceof Error ? error.message : 'Enter a valid template.'
         }
       }}
       placeholder="Hello {{ trigger.name }}"
       rows={3}
     />
-    {localError ? <p className="inspector-field-error" id={localProblemId} role="alert">{localError}</p> : null}
+    {localError.value ? <p class="inspector-field-error" id={localProblemId} role="alert">{localError.value}</p> : null}
   </>
-}
+  }
+})
 
 function InputField(props: InputFieldProps) {
   const mode = valueMode(props.expression)
@@ -173,28 +182,28 @@ function InputField(props: InputFieldProps) {
     ...(props.field.role ? { role: props.field.role } : {}),
     type: props.field.type,
   }, 'editor')
-  let editor: React.ReactNode
+  let editor: VNodeChild
   if (mode === 'reference') editor = <ReferenceEditor {...props} />
   else if (mode === 'template') editor = <TemplateEditor {...props} />
   else if (mode === 'expression') {
-    editor = <div className="inspector-schema-notice"><AlertCircle size={15} /><span>The current structured expression is preserved but has no visual editor.</span></div>
+    editor = <div class="inspector-schema-notice"><AlertCircle size={15} /><span>The current structured expression is preserved but has no visual editor.</span></div>
   } else if (LiteralRenderer) {
-    editor = <LiteralRenderer
-      canEdit={props.canEdit}
-      controlId={props.nodeId}
-      {...(props.problem ? { describedBy: problemId } : {})}
-      field={props.field}
-      inputId={inputId}
-      invalid={!!props.problem}
-      onCommit={value => props.onChange?.(
+    editor = h(LiteralRenderer, {
+      canEdit: props.canEdit,
+      controlId: props.nodeId,
+      ...(props.problem ? { describedBy: problemId } : {}),
+      field: props.field,
+      inputId,
+      invalid: !!props.problem,
+      onCommit: (value?: NumenValue) => props.onChange?.(
         props.nodeId,
         props.field.name,
         value === undefined ? undefined : { type: 'literal', value },
-      )}
-      {...(props.expression?.type === 'literal' ? { value: props.expression.value } : {})}
-    />
+      ),
+      ...(props.expression?.type === 'literal' ? { value: props.expression.value } : {}),
+    })
   } else {
-    editor = <div className="inspector-schema-notice"><AlertCircle size={15} /><span>No Literal renderer is registered for {props.field.role ?? props.field.type}. The Source value is preserved.</span></div>
+    editor = <div class="inspector-schema-notice"><AlertCircle size={15} /><span>No Literal renderer is registered for {props.field.role ?? props.field.type}. The Source value is preserved.</span></div>
   }
   return <FieldShell
     canEdit={props.canEdit}
@@ -208,7 +217,7 @@ function InputField(props: InputFieldProps) {
   >{editor}</FieldShell>
 }
 
-function FieldShell({ field, nodeId, problem, description, inputId, mode, canEdit, onModeChange, children }: {
+function FieldShell({ field, nodeId, problem, description, inputId, mode, canEdit, onModeChange }: {
   field: WorkbenchAutomationInputField
   nodeId: string
   problem?: CompileDiagnostic | undefined
@@ -217,23 +226,22 @@ function FieldShell({ field, nodeId, problem, description, inputId, mode, canEdi
   mode: ValueMode
   canEdit: boolean
   onModeChange(mode: EditableValueMode): void
-  children: React.ReactNode
-}) {
+}, context: SetupContext) {
   const problemId = inputProblemId(nodeId, field.name)
   return (
-    <div className="schema-field" data-invalid={!!problem}>
-      <div className="schema-field-row">
-        <span className="schema-field-label">
-          <label {...(inputId ? { htmlFor: inputId } : {})}>{field.label}</label>
+    <div class="schema-field" data-invalid={!!problem}>
+      <div class="schema-field-row">
+        <span class="schema-field-label">
+          <label {...(inputId ? { for: inputId } : {})}>{field.label}</label>
           {field.required ? <em>Required</em> : null}
           {field.role ? <code>{field.role}</code> : null}
         </span>
-        <span className="schema-value-editor">
+        <span class="schema-value-editor">
           <select
             aria-label={`${field.label} value mode`}
-            className="schema-value-mode"
+            class="schema-value-mode"
             disabled={!canEdit}
-            onChange={event => onModeChange(event.currentTarget.value as EditableValueMode)}
+            onChange={event => onModeChange((event.target as HTMLInputElement).value as EditableValueMode)}
             value={mode}
           >
             <option value="literal">Literal</option>
@@ -241,11 +249,11 @@ function FieldShell({ field, nodeId, problem, description, inputId, mode, canEdi
             {field.type === 'string' ? <option value="template">Template</option> : null}
             {mode === 'expression' ? <option disabled value="expression">Expression</option> : null}
           </select>
-          <span className="schema-value-control">{children}</span>
+          <span class="schema-value-control">{context.slots.default?.()}</span>
         </span>
       </div>
-      {description ? <p className="inspector-field-help">{description}</p> : null}
-      {problem ? <p className="inspector-field-error" id={problemId}>{problem.message}</p> : null}
+      {description ? <p class="inspector-field-help">{description}</p> : null}
+      {problem ? <p class="inspector-field-error" id={problemId}>{problem.message}</p> : null}
     </div>
   )
 }
@@ -283,14 +291,14 @@ export function CapabilityConnectionFields({
   canEdit: boolean
   onChange?(nodeId: string, slotName: string, connectionId?: string): void
 }) {
-  return slots.map(slot => {
+  return <>{slots.map(slot => {
     const options = compatibleConnections(slot, connections)
     const selected = bindings[slot.name] ?? ''
     const missingSelection = selected && !options.some(option => option.id === selected)
     const problem = problems.find(item => item.source?.fieldPath === `connections.${slot.name}`)
     const problemId = `${nodeId}-connection-${slot.name}-problem`
     return (
-      <div className="connection-binding-field" data-invalid={!!problem} key={slot.name}>
+      <div class="connection-binding-field" data-invalid={!!problem} key={slot.name}>
         <label>
           <span>{slot.name}{slot.required ? <em>Required</em> : null}</span>
           <select
@@ -298,7 +306,7 @@ export function CapabilityConnectionFields({
             aria-invalid={!!problem}
             aria-label={`${slot.name} connection`}
             disabled={!canEdit}
-            onChange={event => onChange?.(nodeId, slot.name, event.currentTarget.value || undefined)}
+            onChange={event => onChange?.(nodeId, slot.name, (event.target as HTMLInputElement).value || undefined)}
             value={selected}
           >
             <option value="">{slot.required ? 'Select a Connection…' : 'No Connection'}</option>
@@ -306,18 +314,18 @@ export function CapabilityConnectionFields({
             {options.map(connection => <option key={connection.id} value={connection.id}>{connectionLabel(connection)}</option>)}
           </select>
         </label>
-        <p className="inspector-field-help">
+        <p class="inspector-field-help">
           {options.length
             ? `Accepts ${slot.accepts.length ? slot.accepts.join(', ') : 'any Connection Adapter'}.`
             : `No compatible Connections configured${slot.accepts.length ? ` for ${slot.accepts.join(', ')}` : ''}.`}
         </p>
-        {problem ? <p className="inspector-field-error" id={problemId}>{problem.message}</p> : null}
+        {problem ? <p class="inspector-field-error" id={problemId}>{problem.message}</p> : null}
       </div>
     )
-  })
+  })}</>
 }
 
-export function CapabilityInputFields({ nodeId, definition, control, problems, canEdit, schemaUI, onChange }: {
+interface CapabilityInputFieldsProps {
   nodeId: string
   definition: CapabilityCatalogItem
   control: CapabilitySource
@@ -325,22 +333,27 @@ export function CapabilityInputFields({ nodeId, definition, control, problems, c
   canEdit: boolean
   schemaUI?: SchemaUIResolver
   onChange?(nodeId: string, fieldName: string, expression?: ValueExpr): void
-}) {
-  useSchemaRevision(schemaUI)
-  if (!definition.inputSchemaSupported) {
-    return <div className="inspector-schema-notice"><AlertCircle size={15} /><span>This Capability does not expose an object input schema supported by the core Inspector.</span></div>
+}
+
+export const CapabilityInputFields = defineSetupComponent<CapabilityInputFieldsProps>('CapabilityInputFields', ['nodeId', 'definition', 'control', 'problems', 'canEdit', 'schemaUI', 'onChange'], props => {
+  const revision = useSchemaRevision(() => props.schemaUI)
+  return () => {
+  revision.value
+  if (!props.definition.inputSchemaSupported) {
+    return <div class="inspector-schema-notice"><AlertCircle size={15} /><span>This Capability does not expose an object input schema supported by the core Inspector.</span></div>
   }
-  if (!definition.inputFields.length) return <p className="inspector-summary">This Capability has no configurable inputs.</p>
-  return definition.inputFields.map(field => (
+  if (!props.definition.inputFields.length) return <p class="inspector-summary">This Capability has no configurable inputs.</p>
+  return props.definition.inputFields.map(field => (
     <InputField
-      canEdit={canEdit}
-      expression={control.input[field.name]}
+      canEdit={props.canEdit}
+      expression={props.control.input[field.name]}
       field={field}
       key={field.name}
-      nodeId={nodeId}
-      {...(onChange ? { onChange } : {})}
-      problem={fieldProblem(problems, field.name)}
-      {...(schemaUI ? { schemaUI } : {})}
+      nodeId={props.nodeId}
+      {...(props.onChange ? { onChange: props.onChange } : {})}
+      problem={fieldProblem(props.problems, field.name)}
+      {...(props.schemaUI ? { schemaUI: props.schemaUI } : {})}
     />
   ))
-}
+  }
+})

@@ -1,6 +1,5 @@
 import type { Context } from 'cordis'
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
+import { createApp } from 'vue'
 import { WorkbenchShell } from './WorkbenchShell.js'
 
 const root = document.querySelector('#root')
@@ -18,7 +17,7 @@ async function startContext(): Promise<{ context: Context; stop(): Promise<void>
     const context = new Context()
     await context.plugin(BrowserExtensionRegistry)
     await context.plugin(SchemaUIRegistry)
-    await context.plugin(BrowserRouterService)
+    await context.plugin(BrowserRouterService, { basePath: import.meta.env.BASE_URL })
     return { context, stop: () => context.fiber.dispose() }
   }
   return import('@numen/webui/runtime').then(({ startBrowserRuntime }) => startBrowserRuntime())
@@ -32,15 +31,15 @@ async function main(): Promise<void> {
     await context.plugin(coreWorkbenchFrontend)
   }
   globalThis.addEventListener('beforeunload', () => void runtime.stop(), { once: true })
-  createRoot(rootElement).render(
-    <StrictMode>
-      <WorkbenchShell
-        router={context.webuiRouter}
-        schemaUI={context.schemaUI}
-        {...(import.meta.env.DEV ? {} : { consoleClient: context.consoleClient })}
-      />
-    </StrictMode>,
-  )
+  const app = createApp(() => (
+    <WorkbenchShell
+      router={context.webuiRouter}
+      schemaUI={context.schemaUI}
+      {...(import.meta.env.DEV ? {} : { consoleClient: context.consoleClient })}
+    />
+  ))
+  app.mount(rootElement)
+  globalThis.addEventListener('beforeunload', () => app.unmount(), { once: true })
 }
 
 void main().catch((error) => {
