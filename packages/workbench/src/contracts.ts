@@ -273,6 +273,41 @@ export interface WorkbenchAutomationInsertCatalog {
   connections: WorkbenchAutomationConnectionOption[]
 }
 
+export const workbenchAutomationVariableCatalogQueryRef = {
+  id: 'numen:automation-variable-catalog',
+  version: 1,
+} as const satisfies ConsoleProcedureRef
+
+export type WorkbenchAutomationVariableValueType =
+  | 'string'
+  | 'number'
+  | 'boolean'
+  | 'object'
+  | 'array'
+  | 'null'
+  | 'unknown'
+
+export interface WorkbenchAutomationVariableField {
+  /** Path segments relative to a Trigger payload or Capability output. Empty means the whole output. */
+  path: string[]
+  label: string
+  valueType: WorkbenchAutomationVariableValueType
+  schemaType: string
+  description?: string
+}
+
+export interface WorkbenchAutomationVariableDefinition {
+  capability: CapabilityRef
+  capabilityKind: 'trigger' | 'query' | 'action'
+  title: string
+  outputFields: WorkbenchAutomationVariableField[]
+  outputSchemaSupported: boolean
+}
+
+export interface WorkbenchAutomationVariableCatalog {
+  definitions: WorkbenchAutomationVariableDefinition[]
+}
+
 export const workbenchSaveAutomationDraftActionRef = {
   id: 'numen:automation-save-draft',
   version: 1,

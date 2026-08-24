@@ -7,10 +7,12 @@ import { projectAutomationSteps } from './automation-projection.js'
 import {
   workbenchAutomationDetailQueryRef,
   workbenchAutomationInsertCatalogQueryRef,
+  workbenchAutomationVariableCatalogQueryRef,
   workbenchAutomationsIndexQueryRef,
   type WorkbenchAutomationDetail,
   type WorkbenchAutomationDetailQueryInput,
   type WorkbenchAutomationInsertCatalog,
+  type WorkbenchAutomationVariableCatalog,
   type WorkbenchAutomationsIndex,
 } from './contracts.js'
 import { Inspector, type InspectorFieldFocus } from './Inspector.js'
@@ -43,6 +45,12 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
   const [insertCatalogState, reloadInsertCatalog] = useConsoleQuery<Record<string, never>, WorkbenchAutomationInsertCatalog>(
     () => props.consoleClient,
     workbenchAutomationInsertCatalogQueryRef,
+    emptyQueryInput,
+    'automationCatalog',
+  )
+  const [variableCatalogState] = useConsoleQuery<Record<string, never>, WorkbenchAutomationVariableCatalog>(
+    () => props.consoleClient,
+    workbenchAutomationVariableCatalogQueryRef,
     emptyQueryInput,
     'automationCatalog',
   )
@@ -181,6 +189,7 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
         activeStepId={activeStepId.value}
         canEdit={authoring.canEdit}
         {...(insertCatalogState.status === 'READY' ? { catalog: insertCatalogState.data } : {})}
+        {...(variableCatalogState.status === 'READY' ? { variableCatalog: variableCatalogState.data } : {})}
         {...(fieldFocus.value ? { fieldFocus: fieldFocus.value } : {})}
         open={props.inspectorOpen}
         problems={authoring.problems}

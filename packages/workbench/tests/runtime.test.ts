@@ -16,6 +16,7 @@ import {
 import {
   workbenchAutomationDetailQueryRef,
   workbenchAutomationInsertCatalogQueryRef,
+  workbenchAutomationVariableCatalogQueryRef,
   workbenchAutomationsIndexQueryRef,
   workbenchPublishAutomationDraftActionRef,
   workbenchSaveAutomationDraftActionRef,
@@ -57,6 +58,7 @@ describe('Workbench Runtime plugin', () => {
     }])
     expect(root.console.get(workbenchAutomationDetailQueryRef)).toMatchObject({ providerAvailable: false })
     expect(root.console.get(workbenchAutomationInsertCatalogQueryRef)).toMatchObject({ providerAvailable: false })
+    expect(root.console.get(workbenchAutomationVariableCatalogQueryRef)).toMatchObject({ providerAvailable: false })
     expect(root.console.get(workbenchAutomationsIndexQueryRef)).toMatchObject({ providerAvailable: false })
     expect(root.console.get(workbenchPublishAutomationDraftActionRef)).toMatchObject({ providerAvailable: false })
     expect(root.console.get(workbenchSaveAutomationDraftActionRef)).toMatchObject({ providerAvailable: false })
@@ -77,6 +79,7 @@ describe('Workbench Runtime plugin', () => {
     expect(root.consoleEntries.list()).toEqual([])
     expect(root.console.get(workbenchAutomationDetailQueryRef)).toBeUndefined()
     expect(root.console.get(workbenchAutomationInsertCatalogQueryRef)).toBeUndefined()
+    expect(root.console.get(workbenchAutomationVariableCatalogQueryRef)).toBeUndefined()
     expect(root.console.get(workbenchAutomationsIndexQueryRef)).toBeUndefined()
     expect(root.console.get(workbenchPublishAutomationDraftActionRef)).toBeUndefined()
     expect(root.console.get(workbenchSaveAutomationDraftActionRef)).toBeUndefined()

@@ -1,13 +1,21 @@
-import type { CapabilitySource, CompileDiagnostic, NumenValue, ValueExpr } from '@numen/core'
+import type { AutomationSource, CapabilitySource, CompileDiagnostic, NumenValue, ValueExpr } from '@numen/core'
 import type { SchemaUIResolver } from '@numen/webui/schema-ui'
 import { AlertCircle } from '@lucide/vue'
-import { h, ref, watch, watchEffect, type SetupContext, type VNodeChild } from 'vue'
+import { h, nextTick, ref, watch, watchEffect, type VNodeChild } from 'vue'
+import {
+  insertTemplateReference,
+  magicVariableExpression,
+  projectMagicVariables,
+  type MagicVariableCandidate,
+} from './automation-variable-catalog.js'
 import type {
   WorkbenchAutomationConnectionOption,
   WorkbenchAutomationConnectionSlot,
   WorkbenchAutomationInputField,
   WorkbenchAutomationInsertItem,
+  WorkbenchAutomationVariableCatalog,
 } from './contracts.js'
+import { MagicVariablePicker } from './MagicVariablePicker.js'
 import type { SchemaLiteralRenderer } from './SchemaRenderers.js'
 import { defineSetupComponent } from './vue-component.js'
 
@@ -74,6 +82,7 @@ interface InputFieldProps {
   problem?: CompileDiagnostic | undefined
   canEdit: boolean
   schemaUI?: SchemaUIResolver | undefined
+  variables?: MagicVariableCandidate[] | undefined
   onChange?(nodeId: string, fieldName: string, expression?: ValueExpr): void
 }
 
@@ -102,14 +111,21 @@ function defaultLiteral(field: WorkbenchAutomationInputField): NumenValue | unde
   }
 }
 
-function modeExpression(field: WorkbenchAutomationInputField, mode: EditableValueMode): ValueExpr | undefined {
-  if (mode === 'reference') return { type: 'ref', path: 'trigger.value' }
+function modeExpression(
+  field: WorkbenchAutomationInputField,
+  mode: EditableValueMode,
+  variables: MagicVariableCandidate[] = [],
+): ValueExpr | undefined {
+  if (mode === 'reference') {
+    const firstDirect = variables.find(variable => variable.compatibility === 'direct')
+    return firstDirect ? magicVariableExpression(firstDirect) : { type: 'ref', path: 'trigger.value' }
+  }
   if (mode === 'template') return { type: 'template', parts: [''] }
   const value = defaultLiteral(field)
   return value === undefined ? undefined : { type: 'literal', value }
 }
 
-const ReferenceEditor = defineSetupComponent<InputFieldProps>('ReferenceEditor', ['nodeId', 'field', 'expression', 'problem', 'canEdit', 'schemaUI', 'onChange'], props => {
+const ReferenceEditor = defineSetupComponent<InputFieldProps>('ReferenceEditor', ['nodeId', 'field', 'expression', 'problem', 'canEdit', 'schemaUI', 'variables', 'onChange'], props => {
   const localError = ref<string>()
   const problemId = inputProblemId(props.nodeId, props.field.name)
   const localProblemId = `${problemId}-reference`
@@ -117,7 +133,8 @@ const ReferenceEditor = defineSetupComponent<InputFieldProps>('ReferenceEditor',
   return () => {
     const value = props.expression?.type === 'ref' ? props.expression.path : 'trigger.value'
     return <>
-    <input
+    <div class="magic-variable-editor">
+      <input
       aria-describedby={[props.problem ? problemId : undefined, localError.value ? localProblemId : undefined].filter(Boolean).join(' ') || undefined}
       aria-invalid={!!props.problem || !!localError.value}
       value={value}
@@ -136,27 +153,43 @@ const ReferenceEditor = defineSetupComponent<InputFieldProps>('ReferenceEditor',
       onKeydown={event => { if (event.key === 'Enter') (event.target as HTMLElement).blur() }}
       placeholder="trigger.value"
       type="text"
-    />
+      />
+      <MagicVariablePicker
+        candidates={props.variables ?? []}
+        disabled={!props.canEdit}
+        onSelect={item => props.onChange?.(props.nodeId, props.field.name, magicVariableExpression(item))}
+      />
+    </div>
     {localError.value ? <p class="inspector-field-error" id={localProblemId} role="alert">{localError.value}</p> : null}
   </>
   }
 })
 
-const TemplateEditor = defineSetupComponent<InputFieldProps>('TemplateEditor', ['nodeId', 'field', 'expression', 'problem', 'canEdit', 'schemaUI', 'onChange'], props => {
+const TemplateEditor = defineSetupComponent<InputFieldProps>('TemplateEditor', ['nodeId', 'field', 'expression', 'problem', 'canEdit', 'schemaUI', 'variables', 'onChange'], props => {
   const localError = ref<string>()
+  const textareaRef = ref<HTMLTextAreaElement>()
+  const selectionStart = ref(0)
+  const selectionEnd = ref(0)
   const problemId = inputProblemId(props.nodeId, props.field.name)
   const localProblemId = `${problemId}-template`
   watch(() => props.expression, () => { localError.value = undefined })
   return () => {
     const value = props.expression?.type === 'template' ? printAutomationTemplate(props.expression) : ''
+    const rememberSelection = () => {
+      selectionStart.value = textareaRef.value?.selectionStart ?? value.length
+      selectionEnd.value = textareaRef.value?.selectionEnd ?? selectionStart.value
+    }
     return <>
-    <textarea
+    <div class="magic-variable-editor magic-variable-template-editor">
+      <textarea
       aria-describedby={[props.problem ? problemId : undefined, localError.value ? localProblemId : undefined].filter(Boolean).join(' ') || undefined}
       aria-invalid={!!props.problem || !!localError.value}
       value={value}
       disabled={!props.canEdit}
       id={`${props.nodeId}-input-${props.field.name}`}
       key={`${props.nodeId}:${props.field.name}:${value}`}
+      onSelect={rememberSelection}
+      onKeyup={rememberSelection}
       onBlur={event => {
         try {
           const next = parseAutomationTemplate((event.target as HTMLInputElement).value)
@@ -167,14 +200,34 @@ const TemplateEditor = defineSetupComponent<InputFieldProps>('TemplateEditor', [
         }
       }}
       placeholder="Hello {{ trigger.name }}"
+      ref={textareaRef}
       rows={3}
-    />
+      />
+      <MagicVariablePicker
+        candidates={props.variables ?? []}
+        disabled={!props.canEdit}
+        onSelect={item => {
+          const current = textareaRef.value?.value ?? value
+          const next = insertTemplateReference(current, item.path, selectionStart.value, selectionEnd.value)
+          try {
+            props.onChange?.(props.nodeId, props.field.name, parseAutomationTemplate(next.value))
+            localError.value = undefined
+            void nextTick(() => {
+              textareaRef.value?.focus()
+              textareaRef.value?.setSelectionRange(next.cursor, next.cursor)
+            })
+          } catch (error) {
+            localError.value = error instanceof Error ? error.message : 'Enter a valid template.'
+          }
+        }}
+      />
+    </div>
     {localError.value ? <p class="inspector-field-error" id={localProblemId} role="alert">{localError.value}</p> : null}
   </>
   }
 })
 
-function InputField(props: InputFieldProps) {
+function renderInputField(props: Readonly<InputFieldProps>) {
   const mode = valueMode(props.expression)
   const problemId = inputProblemId(props.nodeId, props.field.name)
   const inputId = `${props.nodeId}-input-${props.field.name}`
@@ -186,7 +239,15 @@ function InputField(props: InputFieldProps) {
   if (mode === 'reference') editor = <ReferenceEditor {...props} />
   else if (mode === 'template') editor = <TemplateEditor {...props} />
   else if (mode === 'expression') {
-    editor = <div class="inspector-schema-notice"><AlertCircle size={15} /><span>The current structured expression is preserved but has no visual editor.</span></div>
+    const conversionPath = props.expression?.type === 'call'
+      && props.expression.function === 'core:to-string'
+      && props.expression.arguments.length === 1
+      && props.expression.arguments[0]?.type === 'ref'
+      ? props.expression.arguments[0].path
+      : undefined
+    editor = conversionPath
+      ? <div class="inspector-expression-summary"><span>Convert to text</span><code>{conversionPath}</code></div>
+      : <div class="inspector-schema-notice"><AlertCircle size={15} /><span>The current structured expression is preserved but has no visual editor.</span></div>
   } else if (LiteralRenderer) {
     editor = h(LiteralRenderer, {
       canEdit: props.canEdit,
@@ -212,12 +273,12 @@ function InputField(props: InputFieldProps) {
     inputId={mode === 'expression' ? undefined : inputId}
     mode={mode}
     nodeId={props.nodeId}
-    onModeChange={next => props.onChange?.(props.nodeId, props.field.name, modeExpression(props.field, next))}
+    onModeChange={next => props.onChange?.(props.nodeId, props.field.name, modeExpression(props.field, next, props.variables))}
     problem={props.problem}
   >{editor}</FieldShell>
 }
 
-function FieldShell({ field, nodeId, problem, description, inputId, mode, canEdit, onModeChange }: {
+interface FieldShellProps {
   field: WorkbenchAutomationInputField
   nodeId: string
   problem?: CompileDiagnostic | undefined
@@ -226,7 +287,10 @@ function FieldShell({ field, nodeId, problem, description, inputId, mode, canEdi
   mode: ValueMode
   canEdit: boolean
   onModeChange(mode: EditableValueMode): void
-}, context: SetupContext) {
+}
+
+const FieldShell = defineSetupComponent<FieldShellProps>('FieldShell', ['field', 'nodeId', 'problem', 'description', 'inputId', 'mode', 'canEdit', 'onModeChange'], (props, context) => () => {
+  const { field, nodeId, problem, description, inputId, mode, canEdit, onModeChange } = props
   const problemId = inputProblemId(nodeId, field.name)
   return (
     <div class="schema-field" data-invalid={!!problem}>
@@ -256,7 +320,9 @@ function FieldShell({ field, nodeId, problem, description, inputId, mode, canEdi
       {problem ? <p class="inspector-field-error" id={problemId}>{problem.message}</p> : null}
     </div>
   )
-}
+})
+
+const InputField = defineSetupComponent<InputFieldProps>('InputField', ['nodeId', 'field', 'expression', 'problem', 'canEdit', 'schemaUI', 'variables', 'onChange'], props => () => renderInputField(props))
 
 function compatibleConnections(
   slot: WorkbenchAutomationConnectionSlot,
@@ -331,11 +397,13 @@ interface CapabilityInputFieldsProps {
   control: CapabilitySource
   problems: CompileDiagnostic[]
   canEdit: boolean
+  source?: AutomationSource
+  variableCatalog?: WorkbenchAutomationVariableCatalog
   schemaUI?: SchemaUIResolver
   onChange?(nodeId: string, fieldName: string, expression?: ValueExpr): void
 }
 
-export const CapabilityInputFields = defineSetupComponent<CapabilityInputFieldsProps>('CapabilityInputFields', ['nodeId', 'definition', 'control', 'problems', 'canEdit', 'schemaUI', 'onChange'], props => {
+export const CapabilityInputFields = defineSetupComponent<CapabilityInputFieldsProps>('CapabilityInputFields', ['nodeId', 'definition', 'control', 'problems', 'canEdit', 'source', 'variableCatalog', 'schemaUI', 'onChange'], props => {
   const revision = useSchemaRevision(() => props.schemaUI)
   return () => {
   revision.value
@@ -343,8 +411,18 @@ export const CapabilityInputFields = defineSetupComponent<CapabilityInputFieldsP
     return <div class="inspector-schema-notice"><AlertCircle size={15} /><span>This Capability does not expose an object input schema supported by the core Inspector.</span></div>
   }
   if (!props.definition.inputFields.length) return <p class="inspector-summary">This Capability has no configurable inputs.</p>
-  return props.definition.inputFields.map(field => (
-    <InputField
+  return props.definition.inputFields.map(field => {
+    const mode = valueMode(props.control.input[field.name])
+    const variables = props.source && props.variableCatalog
+      ? projectMagicVariables({
+          source: props.source,
+          nodeId: props.nodeId,
+          field,
+          catalog: props.variableCatalog,
+          mode: mode === 'template' ? 'template' : 'reference',
+        })
+      : undefined
+    return <InputField
       canEdit={props.canEdit}
       expression={props.control.input[field.name]}
       field={field}
@@ -353,7 +431,8 @@ export const CapabilityInputFields = defineSetupComponent<CapabilityInputFieldsP
       {...(props.onChange ? { onChange: props.onChange } : {})}
       problem={fieldProblem(props.problems, field.name)}
       {...(props.schemaUI ? { schemaUI: props.schemaUI } : {})}
+      {...(variables ? { variables } : {})}
     />
-  ))
+  })
   }
 })

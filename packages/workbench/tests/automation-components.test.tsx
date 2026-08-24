@@ -10,6 +10,7 @@ import type { SchemaUIResolver } from '@numen/webui/schema-ui'
 import type {
   WorkbenchAutomationDetail,
   WorkbenchAutomationInsertCatalog,
+  WorkbenchAutomationVariableCatalog,
   WorkbenchAutomationsIndex,
 } from '../src/contracts.js'
 
@@ -318,5 +319,42 @@ describe('live Automation workspace projections', () => {
     expect(markup).toContain('numen/expression')
     expect(markup).toContain('for="send-message-input-payload"')
     expect(markup).toContain('Message is invalid.')
+
+    const variableCatalog: WorkbenchAutomationVariableCatalog = {
+      definitions: [{
+        capability: { id: 'test:event', version: 1 },
+        capabilityKind: 'trigger',
+        title: 'Incoming event',
+        outputSchemaSupported: true,
+        outputFields: [
+          { path: [], label: 'Output', valueType: 'object', schemaType: 'object' },
+          { path: ['title'], label: 'Title', valueType: 'string', schemaType: 'string' },
+        ],
+      }],
+    }
+    const referenceSource = {
+      ...capabilitySource,
+      triggers: [{ id: 'event', capability: { id: 'test:event', version: 1 }, config: {} }],
+      flow: {
+        ...capabilitySource.flow,
+        input: { ...capabilitySource.flow.input, message: { type: 'ref' as const, path: 'trigger.title' } },
+      },
+    }
+    const referenceSteps = projectAutomationSteps(referenceSource, [], new Map([['test:send@1', 'Send message']]))
+    const referenceMarkup = await renderToMarkup(<Inspector
+      activeStepId={referenceSteps.find(step => step.sourceId === 'send-message')!.id}
+      canEdit
+      catalog={catalog}
+      onCapabilityInputChange={vi.fn()}
+      onClose={vi.fn()}
+      open
+      source={referenceSource}
+      steps={referenceSteps}
+      variableCatalog={variableCatalog}
+      schemaUI={schemaUI}
+    />)
+
+    expect(referenceMarkup).toContain('value="trigger.title"')
+    expect(referenceMarkup).toContain('aria-label="Insert variable"')
   })
 })

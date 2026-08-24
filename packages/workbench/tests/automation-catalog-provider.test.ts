@@ -1,7 +1,10 @@
 import type { CapabilityDefinition, CapabilityStatus } from '@numen/core'
 import z from 'schemastery'
 import { describe, expect, it } from 'vitest'
-import { projectAutomationInsertCatalog } from '../src/automation-catalog-provider.js'
+import {
+  projectAutomationInsertCatalog,
+  projectAutomationVariableCatalog,
+} from '../src/automation-catalog-provider.js'
 
 function definition(
   id: string,
@@ -85,5 +88,43 @@ describe('Automation insert catalog projection', () => {
     ])
     expect(catalog.connections).toEqual([expect.objectContaining({ id: 'conn-mail', adapterId: 'mail:adapter' })])
     expect(catalog.items).not.toContainEqual(expect.objectContaining({ title: 'Event' }))
+  })
+
+  it('projects nested output contracts for triggers, queries, and actions', () => {
+    const trigger = definition('test:event', 'trigger', 'Event')
+    trigger.output = z.object({
+      title: z.string().description('Event title.'),
+      payload: z.object({ count: z.number(), ready: z.boolean() }),
+      internal: z.string().hidden(),
+      'invalid.path': z.string(),
+    })
+    const lookup = definition('test:lookup', 'query', 'Lookup')
+    lookup.output = z.array(z.string())
+
+    const catalog = projectAutomationVariableCatalog([
+      { definition: lookup, providerAvailable: true },
+      { definition: trigger, providerAvailable: false },
+    ])
+
+    expect(catalog.definitions).toEqual([
+      expect.objectContaining({
+        capability: { id: 'test:event', version: 1 },
+        capabilityKind: 'trigger',
+        outputFields: [
+          expect.objectContaining({ path: [], valueType: 'object' }),
+          expect.objectContaining({ path: ['title'], valueType: 'string', description: 'Event title.' }),
+          expect.objectContaining({ path: ['payload'], valueType: 'object' }),
+          expect.objectContaining({ path: ['payload', 'count'], valueType: 'number' }),
+          expect.objectContaining({ path: ['payload', 'ready'], valueType: 'boolean' }),
+        ],
+      }),
+      expect.objectContaining({
+        capability: { id: 'test:lookup', version: 1 },
+        capabilityKind: 'query',
+        outputFields: [expect.objectContaining({ path: [], valueType: 'array' })],
+      }),
+    ])
+    expect(catalog.definitions[0]!.outputFields.map(field => field.path.join('.'))).not.toContain('internal')
+    expect(catalog.definitions[0]!.outputFields.map(field => field.path.join('.'))).not.toContain('invalid.path')
   })
 })

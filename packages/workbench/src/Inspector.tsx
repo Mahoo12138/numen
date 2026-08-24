@@ -4,7 +4,11 @@ import { ChevronDown, X } from '@lucide/vue'
 import type { SetupContext } from 'vue'
 import { CapabilityConnectionFields, CapabilityInputFields } from './CapabilityInspector.js'
 import { findAutomationControl } from './automation-source-editing.js'
-import type { WorkbenchAutomationInsertCatalog, WorkbenchAutomationInsertItem } from './contracts.js'
+import type {
+  WorkbenchAutomationInsertCatalog,
+  WorkbenchAutomationInsertItem,
+  WorkbenchAutomationVariableCatalog,
+} from './contracts.js'
 import { automationSteps, type AutomationStep } from './model.js'
 
 const noDiagnostics: CompileDiagnostic[] = []
@@ -24,6 +28,7 @@ export interface InspectorProps {
   canEdit?: boolean
   fieldFocus?: InspectorFieldFocus
   catalog?: WorkbenchAutomationInsertCatalog
+  variableCatalog?: WorkbenchAutomationVariableCatalog
   schemaUI?: SchemaUIResolver
   onCapabilityConnectionChange?(nodeId: string, slotName: string, connectionId?: string): void
   onCapabilityInputChange?(nodeId: string, fieldName: string, expression?: ValueExpr): void
@@ -111,6 +116,7 @@ export function Inspector({
   canEdit = false,
   fieldFocus,
   catalog,
+  variableCatalog,
   schemaUI,
   onCapabilityConnectionChange,
   onCapabilityInputChange,
@@ -215,6 +221,8 @@ export function Inspector({
                 nodeId={step.sourceId}
                 {...(onCapabilityInputChange ? { onChange: onCapabilityInputChange } : {})}
                 problems={stepProblems}
+                {...(source ? { source } : {})}
+                {...(variableCatalog ? { variableCatalog } : {})}
                 {...(schemaUI ? { schemaUI } : {})}
               />
             ) : (

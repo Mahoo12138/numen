@@ -5,10 +5,15 @@ import type Schema from 'schemastery'
 import z from 'schemastery'
 import {
   workbenchAutomationInsertCatalogQueryRef,
+  workbenchAutomationVariableCatalogQueryRef,
   type WorkbenchAutomationConnectionOption,
   type WorkbenchAutomationInputField,
   type WorkbenchAutomationInsertCatalog,
   type WorkbenchAutomationInsertItem,
+  type WorkbenchAutomationVariableCatalog,
+  type WorkbenchAutomationVariableDefinition,
+  type WorkbenchAutomationVariableField,
+  type WorkbenchAutomationVariableValueType,
 } from './contracts.js'
 import { projectWorkbenchConnection } from './connection-projection.js'
 
@@ -107,6 +112,46 @@ export const workbenchAutomationInsertCatalogQuery: ConsoleQueryDefinition<
   }),
 }
 
+const variableValueTypeSchema = z.union([
+  'string',
+  'number',
+  'boolean',
+  'object',
+  'array',
+  'null',
+  'unknown',
+]).required()
+
+const variableFieldSchema = z.object({
+  path: z.array(z.string().required()).required(),
+  label: z.string().required(),
+  valueType: variableValueTypeSchema,
+  schemaType: z.string().required(),
+  description: z.string(),
+})
+
+const variableDefinitionSchema = z.object({
+  capability: capabilityRefSchema.required(),
+  capabilityKind: z.union(['trigger', 'query', 'action']).required(),
+  title: z.string().required(),
+  outputFields: z.array(variableFieldSchema).required(),
+  outputSchemaSupported: z.boolean().required(),
+})
+
+export const workbenchAutomationVariableCatalogQuery: ConsoleQueryDefinition<
+  Record<string, unknown>,
+  WorkbenchAutomationVariableCatalog
+> = {
+  ...workbenchAutomationVariableCatalogQueryRef,
+  kind: 'query',
+  title: 'Automation variable catalog',
+  description: 'Presentation-safe Capability output contracts for scope-aware Automation variable authoring.',
+  input: z.object({}),
+  output: z.object({
+    definitions: z.array(variableDefinitionSchema).required(),
+  }),
+}
+
 function humanizeFieldName(name: string): string {
   const words = name.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[-_]+/g, ' ').trim()
   return words ? words.charAt(0).toUpperCase() + words.slice(1) : name
@@ -155,6 +200,69 @@ function projectInputSchema(definition: CapabilityDefinition): {
     inputFields: Object.entries(definition.input.dict).map(([name, schema]) => projectInputField(name, schema)),
     inputSchemaSupported: true,
   }
+}
+
+function schemaValueType(schema: Schema): WorkbenchAutomationVariableValueType {
+  if (schema.type === 'string' || schema.type === 'number' || schema.type === 'boolean') return schema.type
+  if (schema.type === 'object') return 'object'
+  if (schema.type === 'array' || schema.type === 'tuple') return 'array'
+  if (schema.type === 'const') {
+    if (schema.value === null) return 'null'
+    if (typeof schema.value === 'string') return 'string'
+    if (typeof schema.value === 'number') return 'number'
+    if (typeof schema.value === 'boolean') return 'boolean'
+    if (Array.isArray(schema.value)) return 'array'
+    if (schema.value && typeof schema.value === 'object') return 'object'
+  }
+  if (schema.type === 'union' && schema.list?.length) {
+    const types = new Set(schema.list.map(schemaValueType))
+    if (types.size === 1) return [...types][0]!
+  }
+  return 'unknown'
+}
+
+function projectOutputField(path: string[], schema: Schema): WorkbenchAutomationVariableField {
+  const description = typeof schema.meta.description === 'string' ? schema.meta.description : undefined
+  return {
+    path,
+    label: path.length ? humanizeFieldName(path[path.length - 1]!) : 'Output',
+    valueType: schemaValueType(schema),
+    schemaType: schema.type,
+    ...(description ? { description } : {}),
+  }
+}
+
+function projectOutputFields(schema: Schema): WorkbenchAutomationVariableField[] {
+  const fields: WorkbenchAutomationVariableField[] = []
+  const visiting = new Set<Schema>()
+  const segmentPattern = /^[a-zA-Z0-9_$-]+$/
+  const visit = (current: Schema, path: string[], depth: number): void => {
+    fields.push(projectOutputField(path, current))
+    if (current.type !== 'object' || !current.dict || depth >= 8 || visiting.has(current)) return
+    visiting.add(current)
+    for (const [name, child] of Object.entries(current.dict)) {
+      if (!segmentPattern.test(name) || child.meta.hidden) continue
+      visit(child, [...path, name], depth + 1)
+    }
+    visiting.delete(current)
+  }
+  visit(schema, [], 0)
+  return fields
+}
+
+/** @internal Projects Capability output schemas without exposing Schemastery to the browser. */
+export function projectAutomationVariableCatalog(statuses: CapabilityStatus[]): WorkbenchAutomationVariableCatalog {
+  const definitions = statuses.map<WorkbenchAutomationVariableDefinition>(status => ({
+    capability: { id: status.definition.id, version: status.definition.version },
+    capabilityKind: status.definition.kind,
+    title: status.definition.title,
+    outputFields: projectOutputFields(status.definition.output),
+    outputSchemaSupported: true,
+  })).sort((left, right) => (
+    left.title.localeCompare(right.title)
+    || `${left.capability.id}@${left.capability.version}`.localeCompare(`${right.capability.id}@${right.capability.version}`)
+  ))
+  return { definitions }
 }
 
 /** @internal Projects runtime contracts without exposing schemas or Provider implementations to the browser. */
@@ -212,6 +320,11 @@ export function workbenchAutomationCatalogProviderPlugin(ctx: Context): void {
         }
       })
       return projectAutomationInsertCatalog(ctx.capabilities.list(), connections)
+    },
+  })
+  ctx.console.provideQuery(ctx, workbenchAutomationVariableCatalogQueryRef, {
+    query(): WorkbenchAutomationVariableCatalog {
+      return projectAutomationVariableCatalog(ctx.capabilities.list())
     },
   })
 }
