@@ -89,6 +89,10 @@ describe('Numen runtime', () => {
         providerAvailable: true,
       }),
       expect.objectContaining({
+        definition: expect.objectContaining({ id: 'numen:connection-set-enabled', version: 1, kind: 'action' }),
+        providerAvailable: true,
+      }),
+      expect.objectContaining({
         definition: expect.objectContaining({ id: 'numen:connections-index', version: 1, kind: 'query' }),
         providerAvailable: true,
       }),
@@ -542,6 +546,41 @@ describe('Numen runtime', () => {
       },
     })
     expect(JSON.stringify(connectionsDocument)).not.toContain('runtime authentication failed')
+    const enableConnection = await fetch(`${baseUrl}/api/console/call`, {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer runtime-console-token',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        kind: 'action',
+        procedure: 'numen:connection-set-enabled@1',
+        input: { connectionId: disabledConnection.id, expectedGeneration: 1, enabled: true },
+      }),
+    })
+    expect(enableConnection.status).toBe(200)
+    expect(await enableConnection.json()).toMatchObject({
+      result: { connection: { id: disabledConnection.id, enabled: true, generation: 2 } },
+    })
+    const staleConnectionAction = await fetch(`${baseUrl}/api/console/call`, {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer runtime-console-token',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        kind: 'action',
+        procedure: 'numen:connection-set-enabled@1',
+        input: { connectionId: disabledConnection.id, expectedGeneration: 1, enabled: false },
+      }),
+    })
+    expect(staleConnectionAction.status).toBe(409)
+    expect(await staleConnectionAction.json()).toMatchObject({
+      error: {
+        code: 'CONNECTION_GENERATION_CONFLICT',
+        details: { expectedGeneration: 1, actualGeneration: 2 },
+      },
+    })
     await disposeInvalidation()
     const invalidationCount = invalidations.length
     application.context.emit('numen/run-change', 'disposed-run')
@@ -563,10 +602,10 @@ describe('Numen runtime', () => {
         connections: {
           ready: true,
           total: 4,
-          enabled: 3,
+          enabled: 4,
           unavailable: 1,
           starting: 0,
-          runtimeReady: 1,
+          runtimeReady: 2,
           errors: 1,
         },
         credentials: {

@@ -18,12 +18,14 @@ export function useConsoleQuery<Input, Output>(
   ref: ConsoleProcedureRef,
   input: MaybeRefOrGetter<Input>,
   invalidationScope?: WorkbenchInvalidationScope,
-): [ConsoleQueryState<Output>, () => void] {
+): [ConsoleQueryState<Output>, () => void, () => void] {
   const state = shallowReactive<ConsoleQueryState<Output>>(
     toValue(client) ? { status: 'LOADING' } : { status: 'DISABLED' },
   )
   let reloadCurrent: () => void = () => {}
+  let refreshCurrent: () => void = () => {}
   const reload = () => reloadCurrent()
+  const refresh = () => refreshCurrent()
   const setState = (next: ConsoleQueryState<Output>) => {
     delete (state as Partial<{ data: Output }>).data
     delete (state as Partial<{ message: string }>).message
@@ -35,6 +37,7 @@ export function useConsoleQuery<Input, Output>(
     const resolvedInput = toValue(input)
     if (!resolvedClient) {
       reloadCurrent = () => {}
+      refreshCurrent = () => {}
       setState({ status: 'DISABLED' })
       return
     }
@@ -62,6 +65,7 @@ export function useConsoleQuery<Input, Output>(
       )
     }
     reloadCurrent = () => execute(true)
+    refreshCurrent = () => execute(false)
 
     void (async () => {
       if (invalidationScope) {
@@ -87,11 +91,12 @@ export function useConsoleQuery<Input, Output>(
 
     onCleanup(() => {
       reloadCurrent = () => {}
+      refreshCurrent = () => {}
       lifecycle.abort()
       queryController?.abort()
       unsubscribe?.()
     })
   })
 
-  return [state, reload]
+  return [state, reload, refresh]
 }

@@ -11,6 +11,7 @@ export default defineConfig({
       '@numen/config': fromRoot('./packages/config/src/index.ts'),
       '@numen/core': fromRoot('./packages/core/src/index.ts'),
       '@numen/database': fromRoot('./packages/database/src/index.ts'),
+      '@numen/credentials': fromRoot('./packages/credentials/src/index.ts'),
       '@numen/automation': fromRoot('./packages/automation/src/index.ts'),
       '@numen/scheduler': fromRoot('./packages/scheduler/src/index.ts'),
       '@numen/runtime': fromRoot('./packages/runtime/src/index.ts'),

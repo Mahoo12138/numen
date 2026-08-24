@@ -104,6 +104,8 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Typed Connections Index Query separating durable desired state from live Runtime state
 - [x] Secret-safe Connection projection with Adapter availability, credential presence, and sanitized runtime failures
 - [x] Live responsive Connections page with Disabled/Ready/Unavailable/Error status coverage
+- [x] Typed Connection enable/disable Action with optimistic generation fencing and public conflicts
+- [x] Optimistic Connection desired-state controls with retry recovery and live Runtime reconciliation
 - [x] Complete Automation, Run, Connection config, and Connection Runtime change notifications
 - [x] Typed coalesced Workbench invalidation Subscription with reconnect snapshot barrier
 - [x] Abort-safe background refresh for visible Home, Runs, and Connections Queries
@@ -173,12 +175,13 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Schema-driven Capability inputs and named Connection binding authoring lifecycle
 - [x] Plugin-owned Schema Renderer lifecycle and Literal/Reference/Template value-mode authoring
 - [x] Scope-aware Magic Variable catalog and typed Reference/Template insertion lifecycle
+- [x] Connection desired-state Action, optimistic UI, and conflict recovery lifecycle
 
 ## Next
 
-1. Connection enable/disable Actions with optimistic generation checks
-2. Run detail Query with timeline and execution diagnostics
-3. General structured Call expression editor and non-literal Wait modes
+1. Run detail Query with timeline and execution diagnostics
+2. General structured Call expression editor and non-literal Wait modes
+3. Connection create/edit/remove Actions and configuration UI
 
 ## Design Review
 
@@ -199,13 +202,14 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - **Automation ValueExpr seam — pass:** the unified Workbench Field Shell owns Literal/Reference/Template mode selection and safe template parse/print, while plugin Renderer adapters receive only literal values and never learn the ValueExpr AST. Every committed mode change is one generic Source command; invalid transient Reference/Template text remains local, existing structured expressions are preserved when no visual editor exists, and Draft Source remains the sole semantic truth.
 - **Magic Variable catalog seam — pass:** Workbench exposes one stable typed Query whose optional Provider Adapter projects presentation-safe Capability output descriptors, including Triggers, without sending Schemastery or Provider implementations to the browser. A separate pure client module combines those descriptors with the current unsaved Draft to enforce lexical visibility, stable step IDs, target-type filtering, and explicit `core:to-string` conversion; the Picker only emits structured `ValueExpr` commands and never becomes semantic state.
 - **Vue field event boundary — pass:** interactive Field Shell and Input Field layers declare runtime props through the shared setup adapter, preventing native `change` events from falling through as domain callbacks. Reference, Template, and conversion insertion remain one command each, and browser QA confirms mode changes do not produce duplicate edits or console errors.
+- **Connection desired-state Action seam — pass:** Workbench defines one typed Action and an optional Provider Adapter maps it to `ConnectionService.setEnabled`; the durable `enabled + generation` pair remains authoritative and live Runtime status stays a separate projection. The Vue module owns only abortable in-flight intent, confirmed-generation overlay, and recoverable public errors, then reconciles through the existing typed invalidation/query path without introducing a second Connection store.
 
 ## Verification Baseline
 
 ```text
 Typecheck: passing
 Build: passing
-Tests: 39 files, 155 tests passing
+Tests: 41 files, 159 tests passing
 CLI config validate: passing
 CLI doctor: passing
 SQLite schema migration: v10
@@ -229,7 +233,7 @@ pnpm dev
 - Typed Console transports, browser sessions, Browser Cordis clients, frontend extension registries, atomic Entry generations, authenticated revision-fenced asset delivery, and Browser Entry reconciliation/rollback are operational. Generated bootstrap tokens and sessions rotate on restart; the CLI prints a fragment-only Workbench launch URL only with explicit `--print-launch-url` authorization.
 - The responsive Workbench shell, six core Page entries, stable browser Route/Page reconciliation, a secret-free production bootstrap, and authenticated core Entry loading are operational through the default Runtime. Home, Automations, the keyset-paginated Runs index, and the desired/runtime-separated Connections index display live data and refresh through coalesced typed invalidations without replacing server truth in the browser. Automation authoring now supports registry-driven Capability/control insertion, plugin-owned Schema Literal renderers, Literal/Reference/Template Capability inputs, scope-aware typed Magic Variables, named Connection bindings, literal Wait editing, bounded undo/redo, debounced full-document autosave, explicit conflict recovery, immutable Revision publish, and source-linked diagnostics. Automation `input.*` and `vars.*` remain manually addressable because no declaration schema exists yet; a plugin-owned Control Registry, general call-expression editor, non-literal Wait modes, compare/save-copy conflict options, and activation controls remain planned.
 - Manual Runs and event Trigger subscriptions are supported. State Trigger transition detection, filtering, debounce, and throttle remain planned work.
-- Connection desired state, Adapter contracts, generation-fenced Runtime recreation, and Credential snapshots are operational; automatic reconnect policy remains planned work.
+- Connection desired state, optimistic generation-fenced enable/disable Actions, Adapter contracts, generation-fenced Runtime recreation, and Credential snapshots are operational; create/edit/remove UI and automatic reconnect policy remain planned work.
 - Credential payloads use authenticated encryption with environment-provided keys; key-ring migration and external vault providers remain planned work.
 - Local Resource bytes are content-addressed and lifecycle-managed, and Scheduler success commits Execution owners transactionally; authorized HTTP delivery remains planned work.
 - The npm organization/scope is still an architecture placeholder.

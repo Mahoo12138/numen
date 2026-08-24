@@ -124,6 +124,21 @@ export interface WorkbenchConnectionsIndex {
   items: WorkbenchConnectionIndexItem[]
 }
 
+export const workbenchSetConnectionEnabledActionRef = {
+  id: 'numen:connection-set-enabled',
+  version: 1,
+} as const satisfies ConsoleProcedureRef
+
+export interface WorkbenchSetConnectionEnabledInput {
+  connectionId: string
+  expectedGeneration: number
+  enabled: boolean
+}
+
+export interface WorkbenchSetConnectionEnabledResult {
+  connection: WorkbenchConnectionIndexItem
+}
+
 export const workbenchInvalidationSubscriptionRef = {
   id: 'numen:workbench-invalidation',
   version: 1,

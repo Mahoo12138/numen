@@ -16,6 +16,7 @@ import {
 import { coreWorkbenchRoutes, type CoreWorkbenchActivityId } from './routes.js'
 import type { WorkbenchPageDefinition, WorkbenchPageProps } from './types.js'
 import { useConsoleQuery, type ConsoleQueryState } from './useConsoleQuery.js'
+import { useConnectionDesiredState, type ConnectionDesiredState } from './useConnectionDesiredState.js'
 import { defineSetupComponent } from './vue-component.js'
 
 export type { WorkbenchPageComponent, WorkbenchPageDefinition, WorkbenchPageProps } from './types.js'
@@ -239,22 +240,24 @@ function formatCount(count: number, singular: string): string {
 }
 
 const ConnectionsPage = defineSetupComponent<WorkbenchPageProps>('ConnectionsPage', ['consoleClient', 'schemaUI'], props => {
-  const [index, reload] = useConsoleQuery<Record<string, never>, WorkbenchConnectionsIndex>(
+  const [index, reload, refresh] = useConsoleQuery<Record<string, never>, WorkbenchConnectionsIndex>(
     () => props.consoleClient,
     workbenchConnectionsIndexQueryRef,
     emptyQueryInput,
     'connections',
   )
+  const desiredState = useConnectionDesiredState(() => props.consoleClient, refresh)
   return () => (
     <main class="main-workbench core-page">
       <header class="core-page-header"><Cable size={22} /><div><h1>Connections</h1><p>Manage the systems and accounts available to automations.</p></div></header>
-      <ConnectionsIndex state={index} onReload={reload} />
+      <ConnectionsIndex desiredState={desiredState} state={index} onReload={reload} />
     </main>
   )
 })
 
-function ConnectionsIndex({ state, onReload }: {
+function ConnectionsIndex({ state, desiredState, onReload }: {
   state: ConsoleQueryState<WorkbenchConnectionsIndex>
+  desiredState: ConnectionDesiredState
   onReload(): void
 }) {
   if (state.status === 'DISABLED') {
@@ -282,22 +285,43 @@ function ConnectionsIndex({ state, onReload }: {
       <section class="core-page-section connections-section">
         <div class="runs-section-heading"><h2>Configured Connections</h2><span>Desired and live state are shown separately</span></div>
         {items.length ? (
-          <div class="runs-table-wrap">
+          <div class="runs-table-wrap connections-table-wrap">
             <table class="runs-table connections-table">
               <thead><tr><th>Connection</th><th>Status</th><th>Adapter</th><th>Desired</th><th>Updated</th></tr></thead>
               <tbody>
-                {items.map(connection => (
-                  <tr key={connection.id}>
+                {items.map(connection => {
+                  const desired = desiredState.view(connection)
+                  return <tr key={connection.id}>
                     <td><strong>{connection.name}</strong><small>{connection.credentialBound ? 'Credential bound' : 'No credential'}</small></td>
                     <td>
                       <em data-connection-status={connection.status}>{statusLabel(connection.status)}</em>
                       <small class="connection-status-detail">{connection.statusDetail}</small>
                     </td>
                     <td><strong>{connection.adapterTitle}</strong><small>{connection.adapterId}@{connection.adapterVersion}</small></td>
-                    <td>{connection.enabled ? 'Enabled' : 'Disabled'}</td>
+                    <td class="connection-desired-cell">
+                      <button
+                        aria-checked={desired.enabled}
+                        aria-label={`${desired.enabled ? 'Disable' : 'Enable'} ${connection.name}`}
+                        class="connection-desired-switch"
+                        data-enabled={desired.enabled}
+                        disabled={desired.pending}
+                        onClick={() => desiredState.setEnabled(connection, !desired.enabled)}
+                        role="switch"
+                        type="button"
+                      >
+                        <span aria-hidden="true" />
+                        <strong>{desired.pending ? (desired.enabled ? 'Enabling…' : 'Disabling…') : (desired.enabled ? 'Enabled' : 'Disabled')}</strong>
+                      </button>
+                      {desired.error ? (
+                        <span class="connection-action-error" role="alert">
+                          {desired.error}
+                          <button onClick={() => desiredState.retry(connection)} type="button">Try again</button>
+                        </span>
+                      ) : null}
+                    </td>
                     <td>{formatTime(connection.updatedAt)}</td>
                   </tr>
-                ))}
+                })}
               </tbody>
             </table>
           </div>
