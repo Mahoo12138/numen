@@ -16,6 +16,7 @@ const connection: WorkbenchConnectionIndexItem = {
   enabled: false,
   adapterAvailable: true,
   credentialBound: true,
+  config: {},
   status: 'DISABLED',
   statusDetail: 'Disabled by configuration.',
   generation: 1,

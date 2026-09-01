@@ -19,7 +19,7 @@ function statusDetail(status: WorkbenchConnectionStatus): string {
   }
 }
 
-/** Projects one Connection without exposing config, credential IDs, or runtime errors. */
+/** Projects one Connection without exposing credential secrets or runtime errors. */
 export function projectWorkbenchConnection(
   connection: Connection,
   runtime: ConnectionRuntimeState,
@@ -35,6 +35,8 @@ export function projectWorkbenchConnection(
     enabled: connection.enabled,
     adapterAvailable: connection.adapterAvailable,
     credentialBound: !!connection.credentialId,
+    config: connection.config,
+    ...(connection.credentialId ? { credentialId: connection.credentialId } : {}),
     status,
     statusDetail: statusDetail(status),
     generation: connection.generation,

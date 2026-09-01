@@ -106,6 +106,8 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Live responsive Connections page with Disabled/Ready/Unavailable/Error status coverage
 - [x] Typed Connection enable/disable Action with optimistic generation fencing and public conflicts
 - [x] Optimistic Connection desired-state controls with retry recovery and live Runtime reconciliation
+- [x] Generation-fenced Connection create/update/delete Actions with Adapter and Credential metadata projection
+- [x] Schema-driven responsive Connection configuration workspace with inline destructive confirmation
 - [x] Complete Automation, Run, Connection config, and Connection Runtime change notifications
 - [x] Typed coalesced Workbench invalidation Subscription with reconnect snapshot barrier
 - [x] Abort-safe background refresh for visible Home, Runs, and Connections Queries
@@ -183,13 +185,14 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Scope-aware Magic Variable catalog and typed Reference/Template insertion lifecycle
 - [x] Structured Call expression and non-literal Wait duration/until authoring lifecycle
 - [x] Connection desired-state Action, optimistic UI, and conflict recovery lifecycle
+- [x] Connection create/update/delete Actions and Adapter-driven configuration lifecycle
 - [x] Run detail Query, semantic timeline, and Execution/Attempt diagnostic lifecycle
 
 ## Next
 
-1. Connection create/edit/remove Actions and configuration UI
-2. Run Context/Flow projections and cancellation Action
-3. Reuse the unified expression field for If conditions and ForEach item configuration
+1. Run Context/Flow projections and cancellation Action
+2. Reuse the unified expression field for If conditions and ForEach item configuration
+3. Credential metadata/create/rotate/delete management UI
 
 ## Design Review
 
@@ -212,6 +215,7 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - **Magic Variable catalog seam — pass:** Workbench exposes one stable typed Query whose optional Provider Adapter projects presentation-safe Capability output descriptors, including Triggers, without sending Schemastery or Provider implementations to the browser. A separate pure client module combines those descriptors with the current unsaved Draft to enforce lexical visibility, stable step IDs, target-type filtering, and explicit `core:to-string` conversion; the Picker only emits structured `ValueExpr` commands and never becomes semantic state.
 - **Vue field event boundary — pass:** interactive Field Shell and Input Field layers declare runtime props through the shared setup adapter, preventing native `change` events from falling through as domain callbacks. Reference, Template, and conversion insertion remain one command each, and browser QA confirms mode changes do not produce duplicate edits or console errors.
 - **Connection desired-state Action seam — pass:** Workbench defines one typed Action and an optional Provider Adapter maps it to `ConnectionService.setEnabled`; the durable `enabled + generation` pair remains authoritative and live Runtime status stays a separate projection. The Vue module owns only abortable in-flight intent, confirmed-generation overlay, and recoverable public errors, then reconciles through the existing typed invalidation/query path without introducing a second Connection store.
+- **Connection configuration seam — pass:** `ConnectionService` remains the deep module that validates Adapter Schemas and Credential compatibility, persists generation-fenced configuration, and reconciles Runtime stop/recreate after create, update, or delete. Workbench exposes three typed Actions plus a metadata-only Adapter/Credential Query projection; one shared Schemastery-to-`WorkbenchSchemaField` adapter feeds both Automation and Connection Literal Renderers, so Pages never import Schemastery or secret material. The Vue configuration pane owns only transient form state and explicit inline deletion confirmation.
 - **Run diagnostics seam — pass:** Scheduler owns bounded keyset pages over durable Run, Execution, Attempt, and Journal truth; the optional Workbench Provider Adapter composes those pages into a presentation-safe projection. Journal events remain semantic facts rather than logs, retry Attempts remain children of one Execution, and raw event payloads or resolved inputs/outputs never cross the Console boundary. The Vue Page owns only independent pagination cursors and navigation, so it introduces no parallel execution state.
 
 ## Verification Baseline
@@ -219,7 +223,7 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 ```text
 Typecheck: passing
 Build: passing
-Tests: 44 files, 172 tests passing
+Tests: 45 files, 176 tests passing
 CLI config validate: passing
 CLI doctor: passing
 SQLite schema migration: v10
@@ -243,7 +247,7 @@ pnpm dev
 - Typed Console transports, browser sessions, Browser Cordis clients, frontend extension registries, atomic Entry generations, authenticated revision-fenced asset delivery, and Browser Entry reconciliation/rollback are operational. Generated bootstrap tokens and sessions rotate on restart; the CLI prints a fragment-only Workbench launch URL only with explicit `--print-launch-url` authorization.
 - The responsive Workbench shell, seven core Page entries, stable browser Route/Page reconciliation, a secret-free production bootstrap, and authenticated core Entry loading are operational through the default Runtime. Home, Automations, the keyset-paginated Runs index, bounded Run timeline/diagnostics detail, and the desired/runtime-separated Connections index display live data and refresh through coalesced typed invalidations without replacing server truth in the browser. Automation authoring now supports registry-driven Capability/control insertion, plugin-owned Schema Literal renderers, unified Literal/Reference/Template/structured Call inputs, scope-aware typed Magic Variables, named Connection bindings, expression-backed Wait duration/until editing, bounded undo/redo, debounced full-document autosave, explicit conflict recovery, immutable Revision publish, and source-linked diagnostics. Run Context/Flow projections and cancellation controls remain planned. Automation `input.*` and `vars.*` remain manually addressable because no declaration schema exists yet; a plugin-owned Control Registry, If/ForEach expression configuration, compare/save-copy conflict options, and activation controls remain planned.
 - Manual Runs and event Trigger subscriptions are supported. State Trigger transition detection, filtering, debounce, and throttle remain planned work.
-- Connection desired state, optimistic generation-fenced enable/disable Actions, Adapter contracts, generation-fenced Runtime recreation, and Credential snapshots are operational; create/edit/remove UI and automatic reconnect policy remain planned work.
+- Connection desired state, generation-fenced create/update/delete/enable Actions, Adapter Schema configuration UI, generation-fenced Runtime recreation, and metadata-only Credential selection are operational. Credential creation/rotation/deletion UI and automatic reconnect policy remain planned work.
 - Credential payloads use authenticated encryption with environment-provided keys; key-ring migration and external vault providers remain planned work.
 - Local Resource bytes are content-addressed and lifecycle-managed, and Scheduler success commits Execution owners transactionally; authorized HTTP delivery remains planned work.
 - The npm organization/scope is still an architecture placeholder.

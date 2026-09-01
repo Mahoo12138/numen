@@ -1,8 +1,9 @@
 import type { Context } from 'cordis'
-import { Activity, Boxes, Cable, Home, Network, Play, Settings } from '@lucide/vue'
-import { computed, reactive } from 'vue'
+import { Activity, Boxes, Cable, Home, Network, Pencil, Play, Plus, Settings } from '@lucide/vue'
+import { computed, reactive, ref } from 'vue'
 import { AutomationPageChrome, AutomationWorkspacePage } from './AutomationWorkspace.js'
 import { RunDetailPage } from './RunDetailPage.js'
+import { ConnectionConfigurationPanel } from './ConnectionConfigurationPanel.js'
 import {
   workbenchConnectionsIndexQueryRef,
   workbenchHomeOverviewQueryRef,
@@ -260,18 +261,35 @@ const ConnectionsPage = defineSetupComponent<WorkbenchPageProps>('ConnectionsPag
     'connections',
   )
   const desiredState = useConnectionDesiredState(() => props.consoleClient, refresh)
+  const configuration = ref<'create' | string>()
   return () => (
     <main class="main-workbench core-page">
       <header class="core-page-header"><Cable size={22} /><div><h1>Connections</h1><p>Manage the systems and accounts available to automations.</p></div></header>
-      <ConnectionsIndex desiredState={desiredState} state={index} onReload={reload} />
+      <ConnectionsIndex
+        {...(props.consoleClient ? { client: props.consoleClient } : {})}
+        {...(configuration.value ? { configuration: configuration.value } : {})}
+        desiredState={desiredState}
+        {...(props.schemaUI ? { schemaUI: props.schemaUI } : {})}
+        state={index}
+        onCloseConfiguration={() => { configuration.value = undefined }}
+        onConfigure={connectionId => { configuration.value = connectionId ?? 'create' }}
+        onMutated={() => { configuration.value = undefined; refresh() }}
+        onReload={reload}
+      />
     </main>
   )
 })
 
-function ConnectionsIndex({ state, desiredState, onReload }: {
+function ConnectionsIndex({ state, desiredState, client, schemaUI, configuration, onReload, onConfigure, onCloseConfiguration, onMutated }: {
   state: ConsoleQueryState<WorkbenchConnectionsIndex>
   desiredState: ConnectionDesiredState
+  client?: WorkbenchPageProps['consoleClient']
+  schemaUI?: WorkbenchPageProps['schemaUI']
+  configuration?: 'create' | string
   onReload(): void
+  onConfigure(connectionId?: string): void
+  onCloseConfiguration(): void
+  onMutated(): void
 }) {
   if (state.status === 'DISABLED') {
     return <QueryStatePanel title="Runtime preview" message="Open Workbench from a running Numen Runtime to inspect Connections." />
@@ -283,6 +301,9 @@ function ConnectionsIndex({ state, desiredState, onReload }: {
     return <QueryStatePanel action="Try again" message={state.message} onAction={onReload} title="Connections unavailable" tone="error" />
   }
   const { summary, items } = state.data
+  const configuredConnection = configuration && configuration !== 'create'
+    ? items.find(item => item.id === configuration)
+    : undefined
   return (
     <div class="connections-index">
       <section aria-label="Connection summary" class="home-metrics connections-metrics">
@@ -295,12 +316,13 @@ function ConnectionsIndex({ state, desiredState, onReload }: {
           tone={summary.unavailable || summary.errors ? 'warning' : 'default'}
         />
       </section>
-      <section class="core-page-section connections-section">
-        <div class="runs-section-heading"><h2>Configured Connections</h2><span>Desired and live state are shown separately</span></div>
-        {items.length ? (
+      <div class="connections-workspace" data-configuring={!!configuration}>
+        <section class="core-page-section connections-section">
+          <div class="runs-section-heading connection-section-heading"><div><h2>Configured Connections</h2><span>Desired and live state are shown separately</span></div><button class="secondary-button" disabled={!state.data.adapters.length} onClick={() => onConfigure()} type="button"><Plus size={14} />New Connection</button></div>
+          {items.length ? (
           <div class="runs-table-wrap connections-table-wrap">
             <table class="runs-table connections-table">
-              <thead><tr><th>Connection</th><th>Status</th><th>Adapter</th><th>Desired</th><th>Updated</th></tr></thead>
+              <thead><tr><th>Connection</th><th>Status</th><th>Adapter</th><th>Desired</th><th>Updated</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
               <tbody>
                 {items.map(connection => {
                   const desired = desiredState.view(connection)
@@ -333,13 +355,23 @@ function ConnectionsIndex({ state, desiredState, onReload }: {
                       ) : null}
                     </td>
                     <td>{formatTime(connection.updatedAt)}</td>
+                    <td><button aria-label={`Edit ${connection.name}`} class="table-action-button" disabled={!state.data.adapters.some(adapter => adapter.id === connection.adapterId && adapter.version === connection.adapterVersion)} onClick={() => onConfigure(connection.id)} type="button"><Pencil size={14} /></button></td>
                   </tr>
                 })}
               </tbody>
             </table>
           </div>
-        ) : <p class="home-empty">No Connections are configured yet.</p>}
-      </section>
+          ) : <div class="connection-empty"><p>No Connections are configured yet.</p><button class="secondary-button" disabled={!state.data.adapters.length} onClick={() => onConfigure()} type="button"><Plus size={14} />Create the first Connection</button></div>}
+        </section>
+        {configuration ? <ConnectionConfigurationPanel
+          adapters={state.data.adapters}
+          {...(client ? { client } : {})}
+          {...(configuredConnection ? { connection: configuredConnection } : {})}
+          onChanged={onMutated}
+          onClose={onCloseConfiguration}
+          {...(schemaUI ? { schemaUI } : {})}
+        /> : null}
+      </div>
     </div>
   )
 }

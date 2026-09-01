@@ -199,6 +199,8 @@ export interface WorkbenchConnectionIndexItem {
   enabled: boolean
   adapterAvailable: boolean
   credentialBound: boolean
+  config: Record<string, NumenValue>
+  credentialId?: string
   status: WorkbenchConnectionStatus
   statusDetail: string
   generation: number
@@ -215,6 +217,25 @@ export interface WorkbenchConnectionsIndex {
     errors: number
   }
   items: WorkbenchConnectionIndexItem[]
+  adapters: WorkbenchConnectionAdapter[]
+}
+
+export interface WorkbenchConnectionCredentialOption {
+  id: string
+  name: string
+  secretVersion: number
+  typeAvailable: boolean
+}
+
+export interface WorkbenchConnectionAdapter {
+  id: string
+  version: number
+  title: string
+  providerAvailable: boolean
+  configFields: WorkbenchSchemaField[]
+  configSchemaSupported: boolean
+  credentialType?: string
+  credentials: WorkbenchConnectionCredentialOption[]
 }
 
 export const workbenchSetConnectionEnabledActionRef = {
@@ -230,6 +251,54 @@ export interface WorkbenchSetConnectionEnabledInput {
 
 export interface WorkbenchSetConnectionEnabledResult {
   connection: WorkbenchConnectionIndexItem
+}
+
+export const workbenchCreateConnectionActionRef = {
+  id: 'numen:connection-create',
+  version: 1,
+} as const satisfies ConsoleProcedureRef
+
+export interface WorkbenchCreateConnectionInput {
+  name: string
+  adapterId: string
+  adapterVersion: number
+  config: Record<string, NumenValue>
+  credentialId?: string
+}
+
+export interface WorkbenchCreateConnectionResult {
+  connection: WorkbenchConnectionIndexItem
+}
+
+export const workbenchUpdateConnectionActionRef = {
+  id: 'numen:connection-update',
+  version: 1,
+} as const satisfies ConsoleProcedureRef
+
+export interface WorkbenchUpdateConnectionInput {
+  connectionId: string
+  expectedGeneration: number
+  name: string
+  config: Record<string, NumenValue>
+  credentialId?: string
+}
+
+export interface WorkbenchUpdateConnectionResult {
+  connection: WorkbenchConnectionIndexItem
+}
+
+export const workbenchDeleteConnectionActionRef = {
+  id: 'numen:connection-delete',
+  version: 1,
+} as const satisfies ConsoleProcedureRef
+
+export interface WorkbenchDeleteConnectionInput {
+  connectionId: string
+  expectedGeneration: number
+}
+
+export interface WorkbenchDeleteConnectionResult {
+  connectionId: string
 }
 
 export const workbenchInvalidationSubscriptionRef = {
@@ -318,27 +387,31 @@ export const workbenchAutomationInsertCatalogQueryRef = {
 
 export type WorkbenchAutomationControlKind = 'wait' | 'if' | 'parallel' | 'race' | 'foreach'
 
-export type WorkbenchAutomationInputFieldType = 'string' | 'number' | 'boolean' | 'enum' | 'json'
+export type WorkbenchSchemaFieldType = 'string' | 'number' | 'boolean' | 'enum' | 'json'
 
-export interface WorkbenchAutomationInputOption {
+export interface WorkbenchSchemaOption {
   label: string
   value: NumenValue
 }
 
-export interface WorkbenchAutomationInputField {
+export interface WorkbenchSchemaField {
   name: string
   label: string
-  type: WorkbenchAutomationInputFieldType
+  type: WorkbenchSchemaFieldType
   schemaType: string
   required: boolean
   description?: string
   role?: string
   defaultValue?: NumenValue
-  options?: WorkbenchAutomationInputOption[]
+  options?: WorkbenchSchemaOption[]
   min?: number
   max?: number
   step?: number
 }
+
+export type WorkbenchAutomationInputFieldType = WorkbenchSchemaFieldType
+export type WorkbenchAutomationInputOption = WorkbenchSchemaOption
+export interface WorkbenchAutomationInputField extends WorkbenchSchemaField {}
 
 export interface WorkbenchAutomationConnectionSlot {
   name: string

@@ -289,6 +289,9 @@ importers:
       '@numen/core':
         specifier: workspace:*
         version: link:../core
+      '@numen/credentials':
+        specifier: workspace:*
+        version: link:../credentials
       '@numen/scheduler':
         specifier: workspace:*
         version: link:../scheduler

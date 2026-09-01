@@ -112,6 +112,31 @@ describe('ConnectionService', () => {
     await root.fiber.dispose()
   })
 
+  it('removes generation-fenced durable state and stops its runtime', async () => {
+    const root = await createContext(':memory:')
+    let closes = 0
+    const removableAdapter = { ...adapter, id: 'test:removable' }
+    root.connections.defineAdapter(root, removableAdapter)
+    root.connections.provideAdapter(root, removableAdapter, {
+      async open() { return { close: () => { closes += 1 } } },
+    })
+    const created = root.connections.create({
+      name: 'Temporary API',
+      adapter: removableAdapter,
+      config: { baseUrl: 'https://temporary.example.test' },
+      enabled: true,
+    })
+    await root.connections.reconcile()
+
+    expect(() => root.connections.remove(created.id, 2)).toThrow(ConnectionConflictError)
+    root.connections.remove(created.id, created.generation)
+    expect(root.connections.get(created.id)).toBeUndefined()
+    await root.connections.reconcile()
+    expect(closes).toBe(1)
+    expect(root.connections.getRuntimeState(created.id)).toEqual({ connectionId: created.id, status: 'STOPPED' })
+    await root.fiber.dispose()
+  })
+
   it('opens, recreates, and stops generation-fenced runtimes', async () => {
     const root = await createContext(':memory:', false)
     root.connections.defineAdapter(root, adapter)

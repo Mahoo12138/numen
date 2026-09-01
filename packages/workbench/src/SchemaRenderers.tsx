@@ -2,7 +2,7 @@ import { isNumenValue, type NumenValue } from '@numen/core'
 import type { SchemaRendererDefinition } from '@numen/webui/schema-ui'
 import type { Context } from 'cordis'
 import { ref, watch, type Component } from 'vue'
-import type { WorkbenchAutomationInputField } from './contracts.js'
+import type { WorkbenchSchemaField } from './contracts.js'
 import { defineSetupComponent } from './vue-component.js'
 
 export interface SchemaLiteralRendererProps {
@@ -10,7 +10,7 @@ export interface SchemaLiteralRendererProps {
   autofocus?: boolean
   controlId: string
   describedBy?: string
-  field: WorkbenchAutomationInputField
+  field: WorkbenchSchemaField
   inputId: string
   invalid: boolean
   value?: NumenValue

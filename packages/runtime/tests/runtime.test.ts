@@ -89,7 +89,19 @@ describe('Numen runtime', () => {
         providerAvailable: true,
       }),
       expect.objectContaining({
+        definition: expect.objectContaining({ id: 'numen:connection-create', version: 1, kind: 'action' }),
+        providerAvailable: true,
+      }),
+      expect.objectContaining({
+        definition: expect.objectContaining({ id: 'numen:connection-delete', version: 1, kind: 'action' }),
+        providerAvailable: true,
+      }),
+      expect.objectContaining({
         definition: expect.objectContaining({ id: 'numen:connection-set-enabled', version: 1, kind: 'action' }),
+        providerAvailable: true,
+      }),
+      expect.objectContaining({
+        definition: expect.objectContaining({ id: 'numen:connection-update', version: 1, kind: 'action' }),
         providerAvailable: true,
       }),
       expect.objectContaining({

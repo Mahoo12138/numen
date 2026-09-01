@@ -1,8 +1,11 @@
 import '@numen/connections'
+import '@numen/credentials'
+import type { NumenValue } from '@numen/core'
 import {
   ConnectionConflictError,
   ConnectionNotFoundError,
   type Connection,
+  type ConnectionAdapterDefinition,
 } from '@numen/connections'
 import {
   ConsoleProcedureError,
@@ -13,13 +16,24 @@ import type { Context } from 'cordis'
 import z from 'schemastery'
 import {
   workbenchConnectionsIndexQueryRef,
+  workbenchCreateConnectionActionRef,
+  workbenchDeleteConnectionActionRef,
   workbenchSetConnectionEnabledActionRef,
+  workbenchUpdateConnectionActionRef,
+  type WorkbenchConnectionAdapter,
   type WorkbenchConnectionStatus,
   type WorkbenchConnectionsIndex,
+  type WorkbenchCreateConnectionInput,
+  type WorkbenchCreateConnectionResult,
+  type WorkbenchDeleteConnectionInput,
+  type WorkbenchDeleteConnectionResult,
   type WorkbenchSetConnectionEnabledInput,
   type WorkbenchSetConnectionEnabledResult,
+  type WorkbenchUpdateConnectionInput,
+  type WorkbenchUpdateConnectionResult,
 } from './contracts.js'
 import { projectWorkbenchConnection } from './connection-projection.js'
+import { projectObjectSchema, workbenchSchemaFieldSchema } from './schema-field-projection.js'
 
 const connectionStatus = z.union([
   'DISABLED',
@@ -40,11 +54,29 @@ const connectionIndexItemSchema = z.object({
   enabled: z.boolean().required(),
   adapterAvailable: z.boolean().required(),
   credentialBound: z.boolean().required(),
+  config: z.any<Record<string, NumenValue>>().required(),
+  credentialId: z.string(),
   status: connectionStatus,
   statusDetail: z.string().required(),
   generation: z.number().required(),
   createdAt: z.string().required(),
   updatedAt: z.string().required(),
+})
+
+const connectionAdapterSchema = z.object({
+  id: z.string().required(),
+  version: z.number().step(1).min(1).required(),
+  title: z.string().required(),
+  providerAvailable: z.boolean().required(),
+  configFields: z.array(workbenchSchemaFieldSchema).required(),
+  configSchemaSupported: z.boolean().required(),
+  credentialType: z.string(),
+  credentials: z.array(z.object({
+    id: z.string().required(),
+    name: z.string().required(),
+    secretVersion: z.number().step(1).min(1).required(),
+    typeAvailable: z.boolean().required(),
+  })).required(),
 })
 
 export const workbenchConnectionsIndexQuery: ConsoleQueryDefinition<Record<string, unknown>, WorkbenchConnectionsIndex> = {
@@ -62,7 +94,61 @@ export const workbenchConnectionsIndexQuery: ConsoleQueryDefinition<Record<strin
       errors: z.number().required(),
     }).required(),
     items: z.array(connectionIndexItemSchema).required(),
+    adapters: z.array(connectionAdapterSchema).required(),
   }),
+}
+
+const connectionConfigSchema = z.any<Record<string, NumenValue>>().required()
+
+export const workbenchCreateConnectionAction: ConsoleActionDefinition<
+  WorkbenchCreateConnectionInput,
+  WorkbenchCreateConnectionResult
+> = {
+  ...workbenchCreateConnectionActionRef,
+  kind: 'action',
+  title: 'Create Connection',
+  description: 'Create validated durable Connection configuration in the disabled desired state.',
+  input: z.object({
+    name: z.string().required(),
+    adapterId: z.string().required(),
+    adapterVersion: z.number().step(1).min(1).required(),
+    config: connectionConfigSchema,
+    credentialId: z.string(),
+  }),
+  output: z.object({ connection: connectionIndexItemSchema.required() }),
+}
+
+export const workbenchUpdateConnectionAction: ConsoleActionDefinition<
+  WorkbenchUpdateConnectionInput,
+  WorkbenchUpdateConnectionResult
+> = {
+  ...workbenchUpdateConnectionActionRef,
+  kind: 'action',
+  title: 'Update Connection',
+  description: 'Update validated Connection configuration using generation fencing.',
+  input: z.object({
+    connectionId: z.string().required(),
+    expectedGeneration: z.number().step(1).min(1).required(),
+    name: z.string().required(),
+    config: connectionConfigSchema,
+    credentialId: z.string(),
+  }),
+  output: z.object({ connection: connectionIndexItemSchema.required() }),
+}
+
+export const workbenchDeleteConnectionAction: ConsoleActionDefinition<
+  WorkbenchDeleteConnectionInput,
+  WorkbenchDeleteConnectionResult
+> = {
+  ...workbenchDeleteConnectionActionRef,
+  kind: 'action',
+  title: 'Delete Connection',
+  description: 'Delete durable Connection configuration using generation fencing.',
+  input: z.object({
+    connectionId: z.string().required(),
+    expectedGeneration: z.number().step(1).min(1).required(),
+  }),
+  output: z.object({ connectionId: z.string().required() }),
 }
 
 export const workbenchSetConnectionEnabledAction: ConsoleActionDefinition<
@@ -99,7 +185,34 @@ function raisePublicConnectionError(error: unknown): never {
   if (error instanceof ConnectionNotFoundError) {
     throw new ConsoleProcedureError(404, 'CONNECTION_NOT_FOUND', 'The Connection was not found')
   }
+  if (error instanceof TypeError
+    || (error instanceof Error && /^(connection adapter|credential).* (not found|unavailable)/.test(error.message))) {
+    throw new ConsoleProcedureError(422, 'CONNECTION_INVALID', error.message)
+  }
   throw error
+}
+
+function projectAdapter(ctx: Context, definition: ConnectionAdapterDefinition): WorkbenchConnectionAdapter {
+  const config = projectObjectSchema(definition.config)
+  return {
+    id: definition.id,
+    version: definition.version,
+    title: definition.title,
+    providerAvailable: !!ctx.connections.resolveAdapterProvider(definition),
+    configFields: config.fields,
+    configSchemaSupported: config.supported,
+    ...(definition.credentialType ? { credentialType: definition.credentialType } : {}),
+    credentials: definition.credentialType
+      ? ctx.credentials.list()
+          .filter(credential => credential.type.id === definition.credentialType)
+          .map(credential => ({
+            id: credential.id,
+            name: credential.name,
+            secretVersion: credential.secretVersion,
+            typeAvailable: credential.typeAvailable,
+          }))
+      : [],
+  }
 }
 
 export function workbenchConnectionsProviderPlugin(ctx: Context): void {
@@ -115,6 +228,48 @@ export function workbenchConnectionsProviderPlugin(ctx: Context): void {
           errors: items.filter(item => item.status === 'ERROR').length,
         },
         items,
+        adapters: ctx.connections.listAdapters().map(definition => projectAdapter(ctx, definition)),
+      }
+    },
+  })
+  ctx.console.provideAction(ctx, workbenchCreateConnectionActionRef, {
+    action({ input }: { input: WorkbenchCreateConnectionInput }): WorkbenchCreateConnectionResult {
+      try {
+        const connection = ctx.connections.create({
+          name: input.name,
+          adapter: { id: input.adapterId, version: input.adapterVersion },
+          config: input.config,
+          ...(input.credentialId ? { credentialId: input.credentialId } : {}),
+        })
+        return { connection: projectConnection(ctx, connection) }
+      } catch (error) {
+        return raisePublicConnectionError(error)
+      }
+    },
+  })
+  ctx.console.provideAction(ctx, workbenchUpdateConnectionActionRef, {
+    action({ input }: { input: WorkbenchUpdateConnectionInput }): WorkbenchUpdateConnectionResult {
+      try {
+        const connection = ctx.connections.update({
+          id: input.connectionId,
+          expectedGeneration: input.expectedGeneration,
+          name: input.name,
+          config: input.config,
+          credentialId: input.credentialId ?? null,
+        })
+        return { connection: projectConnection(ctx, connection) }
+      } catch (error) {
+        return raisePublicConnectionError(error)
+      }
+    },
+  })
+  ctx.console.provideAction(ctx, workbenchDeleteConnectionActionRef, {
+    action({ input }: { input: WorkbenchDeleteConnectionInput }): WorkbenchDeleteConnectionResult {
+      try {
+        ctx.connections.remove(input.connectionId, input.expectedGeneration)
+        return { connectionId: input.connectionId }
+      } catch (error) {
+        return raisePublicConnectionError(error)
       }
     },
   })
@@ -134,6 +289,6 @@ export function workbenchConnectionsProviderPlugin(ctx: Context): void {
   })
 }
 
-workbenchConnectionsProviderPlugin.inject = ['workbench', 'console', 'connections']
+workbenchConnectionsProviderPlugin.inject = ['workbench', 'console', 'connections', 'credentials']
 
 export default workbenchConnectionsProviderPlugin

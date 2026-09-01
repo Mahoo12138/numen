@@ -462,7 +462,13 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .run-detail-state[data-tone="error"] { border-color: #ebcccc; background: #fffafa; }
 .connections-index { padding-bottom: 28px; }
 .connections-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.connections-workspace { min-width: 0; }
 .connections-section { min-width: 0; }
+.connection-section-heading { max-width: none; align-items: center; }
+.connection-section-heading > div { min-width: 0; }
+.connection-section-heading > div > span { display: block; margin-top: 3px; }
+.connection-section-heading .secondary-button, .connection-empty .secondary-button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; width: auto; margin: 0; padding-inline: 10px; }
+.secondary-button:disabled { cursor: default; opacity: .48; }
 .connections-table td:nth-child(2) { min-width: 130px; }
 .connections-table td:nth-child(4) { min-width: 176px; white-space: normal; }
 .connections-table td:nth-child(3) strong, .connections-table td:nth-child(3) small { display: block; }
@@ -485,6 +491,36 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .connection-desired-switch:disabled { cursor: wait; opacity: .68; }
 .connection-action-error { display: block; max-width: 250px; margin-top: 6px; color: #9e3535; font-size: 9.5px; line-height: 1.35; overflow-wrap: anywhere; }
 .connection-action-error button { margin-left: 5px; padding: 0; border: 0; background: transparent; color: #7d2b2b; cursor: pointer; font: inherit; font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
+.table-action-button { display: inline-grid; width: 28px; height: 28px; place-items: center; border: 1px solid transparent; border-radius: 4px; background: transparent; color: var(--wb-muted); cursor: pointer; }
+.table-action-button:hover:not(:disabled) { border-color: var(--wb-border-strong); background: white; color: var(--wb-text); }
+.table-action-button:disabled { cursor: default; opacity: .35; }
+.connection-empty { display: grid; justify-items: start; gap: 10px; padding: 22px 0; border-block: 1px solid var(--wb-border); }
+.connection-empty p { margin: 0; color: var(--wb-muted); font-size: 11px; }
+.connection-config-panel { min-width: 0; border: 1px solid var(--wb-border); border-radius: 6px; background: white; }
+.connection-config-panel > header { display: flex; min-height: 64px; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--wb-border); }
+.connection-config-panel > header h2 { margin: 0; font-size: 14px; }
+.connection-config-panel > header p { margin: 4px 0 0; color: var(--wb-muted); font-size: 10px; overflow-wrap: anywhere; }
+.connection-config-panel form { display: grid; gap: 13px; padding: 14px; }
+.connection-config-field { display: grid; grid-template-columns: 104px minmax(0, 1fr); align-items: start; gap: 4px 8px; color: #414955; font-size: 11px; }
+.connection-config-field > span { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding-top: 8px; overflow-wrap: anywhere; }
+.connection-config-field em { padding: 1px 4px; border-radius: 3px; background: #edf0f4; color: var(--wb-muted); font-style: normal; font-size: 8px; font-weight: 650; }
+.connection-config-field input, .connection-config-field select, .connection-config-field textarea { width: 100%; min-width: 0; border: 1px solid var(--wb-border-strong); border-radius: 4px; background: white; color: var(--wb-text); font-size: 11.5px; }
+.connection-config-field input, .connection-config-field select { height: 32px; padding-inline: 9px; }
+.connection-config-field textarea { min-height: 76px; padding: 8px 9px; resize: vertical; line-height: 1.4; }
+.connection-config-field > small { grid-column: 2; color: var(--wb-faint); font-size: 9px; line-height: 1.4; overflow-wrap: anywhere; }
+.connection-config-fields { display: grid; gap: 13px; padding-top: 2px; border-top: 1px solid var(--wb-border); }
+.connection-config-fields:empty { display: none; }
+.connection-config-notice, .connection-config-error { display: flex; align-items: flex-start; gap: 7px; margin: 0; color: var(--wb-muted); font-size: 10px; line-height: 1.45; overflow-wrap: anywhere; }
+.connection-config-error { color: #9e3535; }
+.connection-config-panel form > footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 12px; border-top: 1px solid var(--wb-border); }
+.primary-button, .danger-button, .danger-text-button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; padding: 0 11px; border-radius: 4px; cursor: pointer; font-size: 10.5px; font-weight: 650; }
+.primary-button { border: 1px solid var(--wb-accent); background: var(--wb-accent); color: white; }
+.primary-button:disabled, .danger-button:disabled, .danger-text-button:disabled { cursor: wait; opacity: .5; }
+.danger-text-button { border: 0; background: transparent; color: #9e3535; }
+.danger-button { border: 1px solid #b94646; background: #b94646; color: white; }
+.connection-delete-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; color: #7d2b2b; font-size: 9.5px; }
+.connection-delete-confirm > button:not(.danger-button) { min-height: 28px; padding: 0 8px; border: 1px solid var(--wb-border-strong); border-radius: 4px; background: white; cursor: pointer; font-size: 9.5px; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 
 .inspector {
   grid-area: inspector;
@@ -660,6 +696,13 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 }
 
 @media (min-width: 1280px) {
+  .connections-workspace[data-configuring="true"] { display: grid; grid-template-columns: minmax(0, 1fr) 372px; align-items: start; gap: 18px; padding-right: 28px; }
+  .connections-workspace[data-configuring="true"] .connections-section { padding-right: 0; }
+  .connection-config-panel { position: sticky; top: 18px; margin-top: 18px; }
+  .connections-workspace[data-configuring="true"] .connections-table th:nth-child(3),
+  .connections-workspace[data-configuring="true"] .connections-table td:nth-child(3),
+  .connections-workspace[data-configuring="true"] .connections-table th:nth-child(5),
+  .connections-workspace[data-configuring="true"] .connections-table td:nth-child(5) { display: none; }
   .workbench-shell[data-inspector-open="false"] {
     grid-template-columns: 76px 260px minmax(420px, 1fr) 0;
   }
@@ -724,7 +767,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .connections-table { min-width: 0; }
   .connections-table thead { display: none; }
   .connections-table tbody { display: grid; }
-  .connections-table tr { display: grid; grid-template: "connection desired" auto "status desired" auto "adapter updated" auto / minmax(0, 1fr) auto; gap: 9px 12px; padding: 12px; border-bottom: 1px solid var(--wb-border); }
+  .connections-table tr { display: grid; grid-template: "connection desired action" auto "status desired action" auto "adapter updated action" auto / minmax(0, 1fr) auto auto; gap: 9px 12px; padding: 12px; border-bottom: 1px solid var(--wb-border); }
   .connections-table tr:last-child { border-bottom: 0; }
   .connections-table td { height: auto; padding: 0; border: 0; white-space: normal; }
   .connections-table td:first-child { grid-area: connection; min-width: 0; }
@@ -733,6 +776,15 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .connections-table td:nth-child(3) { grid-area: adapter; min-width: 0; }
   .connections-table td:nth-child(4) { grid-area: desired; min-width: 0; }
   .connections-table td:nth-child(5) { grid-area: updated; align-self: end; color: var(--wb-faint); font-size: 9.5px; }
+  .connections-table td:nth-child(6) { grid-area: action; align-self: center; }
+  .connection-config-panel { margin: 0 16px 18px; }
+  .connection-config-field { grid-template-columns: 1fr; }
+  .connection-config-field > span { padding-top: 0; }
+  .connection-config-field > small { grid-column: 1; }
+  .connection-config-field input, .connection-config-field select, .connection-config-field textarea { font-size: 16px; }
+  .connection-config-panel form > footer { align-items: stretch; flex-direction: column-reverse; }
+  .connection-save-button { width: 100%; }
+  .connection-delete-confirm { align-items: stretch; flex-direction: column; }
   .runs-section-heading { align-items: flex-start; flex-direction: column; gap: 4px; }
   .bottom-panel { height: 42px; }
   .panel-tablist { height: 41px; }

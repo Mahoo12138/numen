@@ -276,6 +276,14 @@ export class ConnectionService extends Service {
     return this.get(input.id)!
   }
 
+  remove(connectionId: string, expectedGeneration: number): void {
+    const result = this.ctx.database.db.prepare(`
+      DELETE FROM connections WHERE id = ? AND generation = ?
+    `).run(connectionId, expectedGeneration)
+    if (!result.changes) this.throwConflictOrMissing(connectionId, expectedGeneration)
+    this.ctx.emit('numen/connection-change', connectionId)
+  }
+
   setEnabled(connectionId: string, expectedGeneration: number, enabled: boolean): Connection {
     const now = new Date().toISOString()
     const result = this.ctx.database.db.prepare(`

@@ -10,8 +10,11 @@ import {
 } from './automation-catalog-provider.js'
 import { workbenchAutomationDetailQuery, workbenchAutomationsIndexQuery } from './automations-provider.js'
 import {
+  workbenchCreateConnectionAction,
+  workbenchDeleteConnectionAction,
   workbenchConnectionsIndexQuery,
   workbenchSetConnectionEnabledAction,
+  workbenchUpdateConnectionAction,
 } from './connections-provider.js'
 import { workbenchHomeOverviewQuery } from './home-provider.js'
 import { workbenchInvalidationSubscription } from './invalidation-provider.js'
@@ -34,9 +37,12 @@ export {
   workbenchAutomationsProviderPlugin,
 } from './automations-provider.js'
 export {
+  workbenchCreateConnectionAction,
+  workbenchDeleteConnectionAction,
   workbenchConnectionsIndexQuery,
   workbenchConnectionsProviderPlugin,
   workbenchSetConnectionEnabledAction,
+  workbenchUpdateConnectionAction,
 } from './connections-provider.js'
 export { workbenchHomeOverviewQuery, workbenchHomeProviderPlugin } from './home-provider.js'
 export { workbenchInvalidationProviderPlugin, workbenchInvalidationSubscription } from './invalidation-provider.js'
@@ -67,7 +73,10 @@ export class WorkbenchRuntimeService extends Service {
     ctx.console.define(ctx, workbenchAutomationDetailQuery)
     ctx.console.define(ctx, workbenchAutomationsIndexQuery)
     ctx.console.define(ctx, workbenchConnectionsIndexQuery)
+    ctx.console.define(ctx, workbenchCreateConnectionAction)
+    ctx.console.define(ctx, workbenchDeleteConnectionAction)
     ctx.console.define(ctx, workbenchSetConnectionEnabledAction)
+    ctx.console.define(ctx, workbenchUpdateConnectionAction)
     ctx.console.define(ctx, workbenchHomeOverviewQuery)
     ctx.console.define(ctx, workbenchInvalidationSubscription)
     ctx.console.define(ctx, workbenchRunDetailQuery)
