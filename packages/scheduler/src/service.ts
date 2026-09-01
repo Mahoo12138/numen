@@ -55,6 +55,29 @@ export interface RunSummaryPage {
 
 export type RunStatusCounts = Record<Run['status'], number>
 
+export interface ExecutionListCursor {
+  createdAt: string
+  id: string
+}
+
+export interface RunExecutionDiagnostic {
+  execution: Execution
+  attempts: Attempt[]
+}
+
+export interface RunExecutionDiagnosticsPage {
+  items: RunExecutionDiagnostic[]
+  statusCounts: Record<Execution['status'], number>
+  attemptCount: number
+  nextCursor?: ExecutionListCursor
+}
+
+export interface RunEventPage {
+  items: RunEvent[]
+  total: number
+  nextCursor?: number
+}
+
 interface RunRow {
   id: string
   automation_id: string
@@ -458,6 +481,74 @@ export class SchedulerService extends Service {
     `).all(runId) as ExecutionRow[]).map(mapExecution)
   }
 
+  listExecutionDiagnosticsPage(
+    runId: string,
+    limit = 25,
+    cursor?: ExecutionListCursor,
+  ): RunExecutionDiagnosticsPage {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50) {
+      throw new TypeError('execution diagnostics page limit must be an integer between 1 and 50')
+    }
+    if (cursor && (!cursor.createdAt || !cursor.id)) {
+      throw new TypeError('execution diagnostics cursor is invalid')
+    }
+    const rows = this.ctx.database.db.prepare(`
+      SELECT * FROM executions
+      WHERE run_id = ?
+      ${cursor ? 'AND (created_at < ? OR (created_at = ? AND id < ?))' : ''}
+      ORDER BY created_at DESC, id DESC
+      LIMIT ?
+    `).all(runId, ...(cursor
+      ? [cursor.createdAt, cursor.createdAt, cursor.id, limit + 1]
+      : [limit + 1])) as ExecutionRow[]
+    const hasMore = rows.length > limit
+    const executions = rows.slice(0, limit).map(mapExecution)
+    const attemptsByExecution = new Map<string, Attempt[]>()
+    if (executions.length) {
+      const placeholders = executions.map(() => '?').join(', ')
+      const attempts = (this.ctx.database.db.prepare(`
+        SELECT * FROM attempts
+        WHERE execution_id IN (${placeholders})
+        ORDER BY execution_id, number
+      `).all(...executions.map(execution => execution.id)) as AttemptRow[]).map(mapAttempt)
+      for (const attempt of attempts) {
+        const items = attemptsByExecution.get(attempt.executionId) ?? []
+        items.push(attempt)
+        attemptsByExecution.set(attempt.executionId, items)
+      }
+    }
+    const statusCounts = {
+      RUNNABLE: 0,
+      RUNNING: 0,
+      WAITING: 0,
+      BLOCKED: 0,
+      COMPLETED: 0,
+      FAILED: 0,
+      CANCELLING: 0,
+      CANCELLED: 0,
+      TIMED_OUT: 0,
+    } satisfies Record<Execution['status'], number>
+    const statusRows = this.ctx.database.db.prepare(`
+      SELECT status, COUNT(*) AS count FROM executions WHERE run_id = ? GROUP BY status
+    `).all(runId) as Array<{ status: Execution['status']; count: number }>
+    for (const row of statusRows) statusCounts[row.status] = row.count
+    const attemptCount = (this.ctx.database.db.prepare(`
+      SELECT COUNT(*) AS count FROM attempts
+      JOIN executions ON executions.id = attempts.execution_id
+      WHERE executions.run_id = ?
+    `).get(runId) as { count: number }).count
+    const last = executions.at(-1)
+    return {
+      items: executions.map(execution => ({
+        execution,
+        attempts: attemptsByExecution.get(execution.id) ?? [],
+      })),
+      statusCounts,
+      attemptCount,
+      ...(hasMore && last ? { nextCursor: { createdAt: last.createdAt, id: last.id } } : {}),
+    }
+  }
+
   listAttempts(runId: string): Attempt[] {
     return (this.ctx.database.db.prepare(`
       SELECT attempts.* FROM attempts
@@ -470,6 +561,32 @@ export class SchedulerService extends Service {
     return (this.ctx.database.db.prepare(`
       SELECT * FROM run_events WHERE run_id = ? ORDER BY sequence
     `).all(runId) as EventRow[]).map(mapEvent)
+  }
+
+  listRunEventsPage(runId: string, limit = 50, beforeSequence?: number): RunEventPage {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
+      throw new TypeError('run event page limit must be an integer between 1 and 100')
+    }
+    if (beforeSequence !== undefined && (!Number.isSafeInteger(beforeSequence) || beforeSequence < 1)) {
+      throw new TypeError('run event cursor must be a positive integer')
+    }
+    const rows = this.ctx.database.db.prepare(`
+      SELECT * FROM run_events
+      WHERE run_id = ? ${beforeSequence === undefined ? '' : 'AND sequence < ?'}
+      ORDER BY sequence DESC
+      LIMIT ?
+    `).all(runId, ...(beforeSequence === undefined ? [limit + 1] : [beforeSequence, limit + 1])) as EventRow[]
+    const hasMore = rows.length > limit
+    const items = rows.slice(0, limit).map(mapEvent)
+    const total = (this.ctx.database.db.prepare(`
+      SELECT COUNT(*) AS count FROM run_events WHERE run_id = ?
+    `).get(runId) as { count: number }).count
+    const last = items.at(-1)
+    return {
+      items,
+      total,
+      ...(hasMore && last ? { nextCursor: last.sequence } : {}),
+    }
   }
 
   health(): SchedulerHealth {

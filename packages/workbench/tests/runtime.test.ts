@@ -24,6 +24,7 @@ import {
   workbenchSetConnectionEnabledActionRef,
   workbenchHomeOverviewQueryRef,
   workbenchInvalidationSubscriptionRef,
+  workbenchRunDetailQueryRef,
   workbenchRunsIndexQueryRef,
 } from '../src/contracts.js'
 
@@ -67,6 +68,7 @@ describe('Workbench Runtime plugin', () => {
     expect(root.console.get(workbenchSetConnectionEnabledActionRef)).toMatchObject({ providerAvailable: false })
     expect(root.console.get(workbenchHomeOverviewQueryRef)).toMatchObject({ providerAvailable: false })
     expect(root.console.get(workbenchInvalidationSubscriptionRef)).toMatchObject({ providerAvailable: false })
+    expect(root.console.get(workbenchRunDetailQueryRef)).toMatchObject({ providerAvailable: false })
     expect(root.console.get(workbenchRunsIndexQueryRef)).toMatchObject({ providerAvailable: false })
     const document = await fetch(`${root.server.baseUrl}/`)
     expect(document.status).toBe(200)
@@ -89,6 +91,7 @@ describe('Workbench Runtime plugin', () => {
     expect(root.console.get(workbenchSetConnectionEnabledActionRef)).toBeUndefined()
     expect(root.console.get(workbenchHomeOverviewQueryRef)).toBeUndefined()
     expect(root.console.get(workbenchInvalidationSubscriptionRef)).toBeUndefined()
+    expect(root.console.get(workbenchRunDetailQueryRef)).toBeUndefined()
     expect(root.console.get(workbenchRunsIndexQueryRef)).toBeUndefined()
     expect((await fetch(`${root.server.baseUrl}/`)).status).toBe(404)
   })

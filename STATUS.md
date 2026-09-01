@@ -1,6 +1,6 @@
 # Numen Development Status
 
-> Last updated: 2026-08-24
+> Last updated: 2026-09-01
 >
 > Architecture baseline: V1 Draft in [`docs/`](docs/README.md)
 
@@ -128,6 +128,9 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Unified Capability Field Shell with Literal, Reference, and structured Template Source modes
 - [x] Typed Capability output catalog with scope-aware Magic Variable projection and stable Source paths
 - [x] Responsive Reference/Template Variable Picker with static type filtering and explicit text conversion
+- [x] Typed Run detail Query with bounded Execution/Attempt diagnostics and append-only Journal timeline pages
+- [x] Secret-safe Run detail projection with semantic instruction/event labels and constrained Attempt failures
+- [x] Responsive Run timeline route with independent diagnostic/timeline pagination and stable Runs navigation
 
 ## Milestone 3 — Completed
 
@@ -176,12 +179,13 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Plugin-owned Schema Renderer lifecycle and Literal/Reference/Template value-mode authoring
 - [x] Scope-aware Magic Variable catalog and typed Reference/Template insertion lifecycle
 - [x] Connection desired-state Action, optimistic UI, and conflict recovery lifecycle
+- [x] Run detail Query, semantic timeline, and Execution/Attempt diagnostic lifecycle
 
 ## Next
 
-1. Run detail Query with timeline and execution diagnostics
-2. General structured Call expression editor and non-literal Wait modes
-3. Connection create/edit/remove Actions and configuration UI
+1. General structured Call expression editor and non-literal Wait modes
+2. Connection create/edit/remove Actions and configuration UI
+3. Run Context/Flow projections and cancellation Action
 
 ## Design Review
 
@@ -203,13 +207,14 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - **Magic Variable catalog seam — pass:** Workbench exposes one stable typed Query whose optional Provider Adapter projects presentation-safe Capability output descriptors, including Triggers, without sending Schemastery or Provider implementations to the browser. A separate pure client module combines those descriptors with the current unsaved Draft to enforce lexical visibility, stable step IDs, target-type filtering, and explicit `core:to-string` conversion; the Picker only emits structured `ValueExpr` commands and never becomes semantic state.
 - **Vue field event boundary — pass:** interactive Field Shell and Input Field layers declare runtime props through the shared setup adapter, preventing native `change` events from falling through as domain callbacks. Reference, Template, and conversion insertion remain one command each, and browser QA confirms mode changes do not produce duplicate edits or console errors.
 - **Connection desired-state Action seam — pass:** Workbench defines one typed Action and an optional Provider Adapter maps it to `ConnectionService.setEnabled`; the durable `enabled + generation` pair remains authoritative and live Runtime status stays a separate projection. The Vue module owns only abortable in-flight intent, confirmed-generation overlay, and recoverable public errors, then reconciles through the existing typed invalidation/query path without introducing a second Connection store.
+- **Run diagnostics seam — pass:** Scheduler owns bounded keyset pages over durable Run, Execution, Attempt, and Journal truth; the optional Workbench Provider Adapter composes those pages into a presentation-safe projection. Journal events remain semantic facts rather than logs, retry Attempts remain children of one Execution, and raw event payloads or resolved inputs/outputs never cross the Console boundary. The Vue Page owns only independent pagination cursors and navigation, so it introduces no parallel execution state.
 
 ## Verification Baseline
 
 ```text
 Typecheck: passing
 Build: passing
-Tests: 41 files, 159 tests passing
+Tests: 43 files, 164 tests passing
 CLI config validate: passing
 CLI doctor: passing
 SQLite schema migration: v10
@@ -231,7 +236,7 @@ pnpm dev
 - The current Scheduler executes the Core IR subset emitted by the compiler, including retry, timeout, cancellation, recovery, and structured concurrency.
 - Parallel, first-success Race, and bounded ForEach use durable Execution scopes with interruptible concurrent dispatch; Try/Finally control flow remains planned work.
 - Typed Console transports, browser sessions, Browser Cordis clients, frontend extension registries, atomic Entry generations, authenticated revision-fenced asset delivery, and Browser Entry reconciliation/rollback are operational. Generated bootstrap tokens and sessions rotate on restart; the CLI prints a fragment-only Workbench launch URL only with explicit `--print-launch-url` authorization.
-- The responsive Workbench shell, six core Page entries, stable browser Route/Page reconciliation, a secret-free production bootstrap, and authenticated core Entry loading are operational through the default Runtime. Home, Automations, the keyset-paginated Runs index, and the desired/runtime-separated Connections index display live data and refresh through coalesced typed invalidations without replacing server truth in the browser. Automation authoring now supports registry-driven Capability/control insertion, plugin-owned Schema Literal renderers, Literal/Reference/Template Capability inputs, scope-aware typed Magic Variables, named Connection bindings, literal Wait editing, bounded undo/redo, debounced full-document autosave, explicit conflict recovery, immutable Revision publish, and source-linked diagnostics. Automation `input.*` and `vars.*` remain manually addressable because no declaration schema exists yet; a plugin-owned Control Registry, general call-expression editor, non-literal Wait modes, compare/save-copy conflict options, and activation controls remain planned.
+- The responsive Workbench shell, seven core Page entries, stable browser Route/Page reconciliation, a secret-free production bootstrap, and authenticated core Entry loading are operational through the default Runtime. Home, Automations, the keyset-paginated Runs index, bounded Run timeline/diagnostics detail, and the desired/runtime-separated Connections index display live data and refresh through coalesced typed invalidations without replacing server truth in the browser. Automation authoring now supports registry-driven Capability/control insertion, plugin-owned Schema Literal renderers, Literal/Reference/Template Capability inputs, scope-aware typed Magic Variables, named Connection bindings, literal Wait editing, bounded undo/redo, debounced full-document autosave, explicit conflict recovery, immutable Revision publish, and source-linked diagnostics. Run Context/Flow projections and cancellation controls remain planned. Automation `input.*` and `vars.*` remain manually addressable because no declaration schema exists yet; a plugin-owned Control Registry, general call-expression editor, non-literal Wait modes, compare/save-copy conflict options, and activation controls remain planned.
 - Manual Runs and event Trigger subscriptions are supported. State Trigger transition detection, filtering, debounce, and throttle remain planned work.
 - Connection desired state, optimistic generation-fenced enable/disable Actions, Adapter contracts, generation-fenced Runtime recreation, and Credential snapshots are operational; create/edit/remove UI and automatic reconnect policy remain planned work.
 - Credential payloads use authenticated encryption with environment-provided keys; key-ring migration and external vault providers remain planned work.

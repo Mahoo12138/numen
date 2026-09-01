@@ -1,8 +1,8 @@
-import type { FrontendPage } from '@numen/webui/extensions'
 import type { Context } from 'cordis'
 import { Activity, Boxes, Cable, Home, Network, Play, Settings } from '@lucide/vue'
 import { computed, reactive } from 'vue'
 import { AutomationPageChrome, AutomationWorkspacePage } from './AutomationWorkspace.js'
+import { RunDetailPage } from './RunDetailPage.js'
 import {
   workbenchConnectionsIndexQueryRef,
   workbenchHomeOverviewQueryRef,
@@ -13,7 +13,7 @@ import {
   type WorkbenchRunsIndex,
   type WorkbenchRunsQueryInput,
 } from './contracts.js'
-import { coreWorkbenchRoutes, type CoreWorkbenchActivityId } from './routes.js'
+import { coreWorkbenchRoutes, coreWorkbenchRunTimelineRoute, type CoreWorkbenchActivityId } from './routes.js'
 import type { WorkbenchPageDefinition, WorkbenchPageProps } from './types.js'
 import { useConsoleQuery, type ConsoleQueryState } from './useConsoleQuery.js'
 import { useConnectionDesiredState, type ConnectionDesiredState } from './useConnectionDesiredState.js'
@@ -135,7 +135,7 @@ interface RunsPosition {
   history: Array<WorkbenchRunsCursor | null>
 }
 
-const RunsPage = defineSetupComponent<WorkbenchPageProps>('RunsPage', ['consoleClient', 'schemaUI'], props => {
+const RunsPage = defineSetupComponent<WorkbenchPageProps>('RunsPage', ['consoleClient', 'schemaUI', 'navigation'], props => {
   const position = reactive<RunsPosition>({ history: [] })
   const input = computed<WorkbenchRunsQueryInput>(() => ({
     limit: 20,
@@ -158,12 +158,16 @@ const RunsPage = defineSetupComponent<WorkbenchPageProps>('RunsPage', ['consoleC
     if (previous) position.cursor = previous
     else delete position.cursor
   }
+  const openRun = (runId: string) => {
+    props.navigation?.navigate(coreWorkbenchRunTimelineRoute, { parameters: { id: runId } })
+  }
   return () => (
     <main class="main-workbench core-page">
       <header class="core-page-header"><Play size={22} /><div><h1>Runs</h1><p>Inspect durable automation executions and their outcomes.</p></div></header>
       <RunsIndex
         onNext={goNext}
         onPrevious={goPrevious}
+        {...(props.navigation ? { onOpenRun: openRun } : {})}
         onReload={reload}
         state={index}
         canGoPrevious={position.history.length > 0}
@@ -172,12 +176,13 @@ const RunsPage = defineSetupComponent<WorkbenchPageProps>('RunsPage', ['consoleC
   )
 })
 
-function RunsIndex({ state, canGoPrevious, onNext, onPrevious, onReload }: {
+function RunsIndex({ state, canGoPrevious, onNext, onPrevious, onReload, onOpenRun }: {
   state: ConsoleQueryState<WorkbenchRunsIndex>
   canGoPrevious: boolean
   onNext(): void
   onPrevious(): void
   onReload(): void
+  onOpenRun?(runId: string): void
 }) {
   if (state.status === 'DISABLED') {
     return <QueryStatePanel title="Runtime preview" message="Open Workbench from a running Numen Runtime to inspect durable Runs." />
@@ -205,7 +210,15 @@ function RunsIndex({ state, canGoPrevious, onNext, onPrevious, onReload }: {
               <tbody>
                 {items.map(run => (
                   <tr key={run.id}>
-                    <td><strong>{run.automationName}</strong><small>{run.id}</small></td>
+                    <td>
+                      <button
+                        aria-label={`Open Run ${run.id}`}
+                        class="run-detail-link"
+                        disabled={!onOpenRun}
+                        onClick={() => onOpenRun?.(run.id)}
+                        type="button"
+                      ><strong>{run.automationName}</strong><small>{run.id}</small></button>
+                    </td>
                     <td><em data-status={run.status}>{statusLabel(run.status)}</em></td>
                     <td>{formatTime(run.startedAt ?? run.createdAt)}</td>
                     <td>{formatRunDuration(run)}</td>
@@ -365,22 +378,18 @@ export const coreWorkbenchPageDefinitions: ReadonlyArray<WorkbenchPageDefinition
     chrome: { component: AutomationPageChrome, hasInspector: true, ownsPanel: true, ownsStatus: true },
   },
   { ...coreWorkbenchRoutes.runs, path: '/runs', title: 'Runs', component: RunsPage },
+  { ...coreWorkbenchRunTimelineRoute, path: '/runs/:id/timeline', title: 'Run', component: RunDetailPage },
   { ...coreWorkbenchRoutes.connections, path: '/connections', title: 'Connections', component: ConnectionsPage },
   { ...coreWorkbenchRoutes.plugins, path: '/plugins/installed', title: 'Plugins', component: PluginsPage },
   { ...coreWorkbenchRoutes.system, path: '/system/overview', title: 'System', component: SystemPage },
 ]
 
 const pageByActivity = new Map<CoreWorkbenchActivityId, WorkbenchPageDefinition>(
-  coreWorkbenchPageDefinitions.map(page => [activityIdForPage(page), page]),
+  Object.entries(coreWorkbenchRoutes).map(([activityId, route]) => [
+    activityId as CoreWorkbenchActivityId,
+    coreWorkbenchPageDefinitions.find(page => page.id === route.id && page.version === route.version)!,
+  ]),
 )
-
-function activityIdForPage(page: FrontendPage): CoreWorkbenchActivityId {
-  const entry = Object.entries(coreWorkbenchRoutes).find(([, route]) => (
-    route.id === page.id && route.version === page.version
-  ))
-  if (!entry) throw new Error(`core Workbench Page has no activity: ${page.id}@${page.version}`)
-  return entry[0] as CoreWorkbenchActivityId
-}
 
 export function corePageForActivity(activityId: CoreWorkbenchActivityId): WorkbenchPageDefinition {
   return pageByActivity.get(activityId)!

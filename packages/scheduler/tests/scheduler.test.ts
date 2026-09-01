@@ -138,6 +138,46 @@ describe('SchedulerService', () => {
     await root.fiber.dispose()
   })
 
+  it('pages bounded Execution diagnostics and append-only Run Journal events', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'numen-scheduler-'))
+    directories.push(directory)
+    const root = await createContext(
+      join(directory, 'numen.db'),
+      actionDefinition(),
+      async input => input,
+    )
+    const automationId = publish(root, linearSource)
+    const run = root.scheduler.startManual(automationId)
+    await root.scheduler.dispatchUntilIdle()
+
+    const firstExecutions = root.scheduler.listExecutionDiagnosticsPage(run.id, 2)
+    const secondExecutions = root.scheduler.listExecutionDiagnosticsPage(
+      run.id,
+      2,
+      firstExecutions.nextCursor,
+    )
+    const diagnosticIds = [...firstExecutions.items, ...secondExecutions.items]
+      .map(item => item.execution.id)
+    expect(new Set(diagnosticIds)).toEqual(new Set(root.scheduler.listExecutions(run.id).map(item => item.id)))
+    expect(firstExecutions.statusCounts).toMatchObject({ COMPLETED: 4, FAILED: 0, BLOCKED: 0 })
+    expect(firstExecutions.attemptCount).toBe(2)
+    expect([...firstExecutions.items, ...secondExecutions.items].flatMap(item => item.attempts)).toHaveLength(2)
+    expect(secondExecutions.nextCursor).toBeUndefined()
+
+    const firstEvents = root.scheduler.listRunEventsPage(run.id, 3)
+    const secondEvents = root.scheduler.listRunEventsPage(run.id, 3, firstEvents.nextCursor)
+    expect(firstEvents.total).toBe(root.scheduler.listEvents(run.id).length)
+    expect(firstEvents.items.map(event => event.sequence)).toEqual(
+      [...firstEvents.items.map(event => event.sequence)].sort((left, right) => right - left),
+    )
+    const firstSequences = new Set(firstEvents.items.map(event => event.sequence))
+    expect(secondEvents.items.every(event => !firstSequences.has(event.sequence))).toBe(true)
+    expect(() => root.scheduler.listExecutionDiagnosticsPage(run.id, 51)).toThrow('between 1 and 50')
+    expect(() => root.scheduler.listRunEventsPage(run.id, 101)).toThrow('between 1 and 100')
+    expect(() => root.scheduler.listRunEventsPage(run.id, 10, 0)).toThrow('positive integer')
+    await root.fiber.dispose()
+  })
+
   it('passes named Connection bindings from compiled IR to the Capability Provider', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'numen-scheduler-'))
     directories.push(directory)

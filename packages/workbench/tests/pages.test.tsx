@@ -6,6 +6,7 @@ import {
   corePageForActivity,
   coreWorkbenchPageDefinitions,
   coreWorkbenchPages,
+  coreWorkbenchRunTimelineRoute,
   coreWorkbenchRoutes,
   WorkbenchShell,
   type WorkbenchRouter,
@@ -31,9 +32,10 @@ describe('core Workbench Pages', () => {
       { id: 'numen:connections', path: '/connections' },
       { id: 'numen:plugins', path: '/plugins/installed' },
       { id: 'numen:runs', path: '/runs' },
+      { id: 'numen:run-timeline', path: '/runs/:id/timeline' },
       { id: 'numen:system', path: '/system/overview' },
     ])
-    expect(coreWorkbenchPageDefinitions).toHaveLength(6)
+    expect(coreWorkbenchPageDefinitions).toHaveLength(7)
     await fiber.dispose()
     expect(root.webuiExtensions.listPages()).toEqual([])
     await root.fiber.dispose()
@@ -60,5 +62,21 @@ describe('core Workbench Pages', () => {
       plugins: { id: 'numen:plugins', version: 1 },
       system: { id: 'numen:system', version: 1 },
     })
+    expect(coreWorkbenchRunTimelineRoute).toEqual({ id: 'numen:run-timeline', version: 1 })
+  })
+
+  it('keeps Run detail routes inside the Runs activity', async () => {
+    const page = coreWorkbenchPageDefinitions.find(item => item.id === coreWorkbenchRunTimelineRoute.id)!
+    const markup = await renderToMarkup(<WorkbenchShell router={routerFor({
+      status: 'READY',
+      pathname: '/runs/run_11111111111111111111111111111111/timeline',
+      search: '',
+      parameters: { id: 'run_11111111111111111111111111111111' },
+      page,
+    })} />)
+
+    expect(markup).toContain('Run detail')
+    expect(markup).toContain('Back to Runs')
+    expect(markup).toMatch(/aria-current="page"[^>]*class="activity-button"[^>]*>.*?Runs/s)
   })
 })

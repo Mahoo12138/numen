@@ -9,14 +9,24 @@ export const coreWorkbenchRoutes = {
   system: { id: 'numen:system', version: 1 },
 } as const satisfies Record<string, FrontendExtensionRef>
 
+export const coreWorkbenchRunTimelineRoute = {
+  id: 'numen:run-timeline',
+  version: 1,
+} as const satisfies FrontendExtensionRef
+
 export type CoreWorkbenchActivityId = keyof typeof coreWorkbenchRoutes
 
 const activityByRouteId = new Map<string, CoreWorkbenchActivityId>(
   Object.entries(coreWorkbenchRoutes).map(([activityId, route]) => [route.id, activityId as CoreWorkbenchActivityId]),
 )
+activityByRouteId.set(coreWorkbenchRunTimelineRoute.id, 'runs')
 
 export function activityIdForRoute(route?: FrontendExtensionRef): CoreWorkbenchActivityId | undefined {
   if (!route) return
   const activityId = activityByRouteId.get(route.id)
-  return activityId && coreWorkbenchRoutes[activityId].version === route.version ? activityId : undefined
+  if (!activityId) return
+  if (route.id === coreWorkbenchRunTimelineRoute.id) {
+    return route.version === coreWorkbenchRunTimelineRoute.version ? activityId : undefined
+  }
+  return coreWorkbenchRoutes[activityId].version === route.version ? activityId : undefined
 }

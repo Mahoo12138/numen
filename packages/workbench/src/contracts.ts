@@ -1,5 +1,12 @@
 import type { ConsoleProcedureRef } from '@numen/console'
-import type { AutomationSource, CapabilityRef, NumenValue } from '@numen/core'
+import type {
+  AttemptStatus,
+  AutomationSource,
+  CancellationReason,
+  CapabilityRef,
+  ExecutionStatus,
+  NumenValue,
+} from '@numen/core'
 
 export const workbenchHomeOverviewQueryRef = {
   id: 'numen:home-overview',
@@ -81,6 +88,92 @@ export interface WorkbenchRunsIndex {
   }
   items: WorkbenchRunIndexItem[]
   nextCursor?: WorkbenchRunsCursor
+}
+
+export const workbenchRunDetailQueryRef = {
+  id: 'numen:run-detail',
+  version: 1,
+} as const satisfies ConsoleProcedureRef
+
+export interface WorkbenchRunDetailQueryInput {
+  runId: string
+  executionLimit: number
+  executionCursor?: string
+  eventLimit: number
+  eventCursor?: number
+}
+
+export interface WorkbenchRunExecutionAttempt {
+  id: string
+  number: number
+  status: AttemptStatus
+  providerRef: string
+  errorSummary?: string
+  startedAt: string
+  finishedAt?: string
+}
+
+export interface WorkbenchRunExecution {
+  id: string
+  instructionId: string
+  title: string
+  operation: string
+  status: ExecutionStatus
+  parentExecutionId?: string
+  scopeExecutionId?: string
+  scopeBranch?: number
+  loopIndex?: number
+  blockedReason?: string
+  generation: number
+  createdAt: string
+  updatedAt: string
+  attempts: WorkbenchRunExecutionAttempt[]
+}
+
+export interface WorkbenchRunTimelineEvent {
+  sequence: number
+  type: string
+  title: string
+  detail?: string
+  executionId?: string
+  attemptId?: string
+  occurredAt: string
+}
+
+export interface WorkbenchRunDetail {
+  run: {
+    id: string
+    automationId: string
+    automationName: string
+    revisionId: string
+    revisionNumber?: number
+    status: WorkbenchRunStatus
+    groupKey?: string
+    cancelReason?: CancellationReason
+    createdAt: string
+    startedAt?: string
+    finishedAt?: string
+  }
+  executionSummary: {
+    total: number
+    attempts: number
+    runnable: number
+    running: number
+    waiting: number
+    blocked: number
+    completed: number
+    failed: number
+    cancelling: number
+    cancelled: number
+    timedOut: number
+  }
+  executions: WorkbenchRunExecution[]
+  nextExecutionCursor?: string
+  timeline: {
+    total: number
+    items: WorkbenchRunTimelineEvent[]
+    nextCursor?: number
+  }
 }
 
 export const workbenchConnectionsIndexQueryRef = {

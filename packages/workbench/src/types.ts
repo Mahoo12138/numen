@@ -1,5 +1,7 @@
 import type { ConsoleProcedureRef } from '@numen/console'
 import type { FrontendPage } from '@numen/webui/extensions'
+import type { FrontendExtensionRef } from '@numen/webui/extensions'
+import type { BrowserNavigateOptions, BrowserRouteState } from '@numen/webui/router'
 import type { SchemaUIResolver } from '@numen/webui/schema-ui'
 import type { Component } from 'vue'
 
@@ -17,6 +19,12 @@ export interface WorkbenchConsoleClient {
 export interface WorkbenchPageProps {
   consoleClient?: WorkbenchConsoleClient
   schemaUI?: SchemaUIResolver
+  navigation?: WorkbenchNavigation
+}
+
+export interface WorkbenchNavigation {
+  route: BrowserRouteState
+  navigate(ref: FrontendExtensionRef, options?: BrowserNavigateOptions): BrowserRouteState
 }
 
 export type WorkbenchPageComponent = Component<WorkbenchPageProps>
@@ -25,6 +33,7 @@ export interface WorkbenchPageChromeProps {
   page: WorkbenchPageDefinition
   consoleClient?: WorkbenchConsoleClient
   schemaUI?: SchemaUIResolver
+  navigation?: WorkbenchNavigation
   inspectorOpen: boolean
   onInspectorOpenChange(open: boolean): void
 }

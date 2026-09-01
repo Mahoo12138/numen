@@ -101,6 +101,10 @@ describe('Numen runtime', () => {
         providerAvailable: true,
       }),
       expect.objectContaining({
+        definition: expect.objectContaining({ id: 'numen:run-detail', version: 1, kind: 'query' }),
+        providerAvailable: true,
+      }),
+      expect.objectContaining({
         definition: expect.objectContaining({ id: 'numen:runs-index', version: 1, kind: 'query' }),
         providerAvailable: true,
       }),
@@ -417,6 +421,36 @@ describe('Numen runtime', () => {
           executionCount: 1,
           attemptCount: 0,
         }],
+      },
+    })
+    const runDetail = await fetch(`${baseUrl}/api/console/call`, {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer runtime-console-token',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        kind: 'query',
+        procedure: 'numen:run-detail@1',
+        input: { runId: run.id, executionLimit: 25, eventLimit: 50 },
+      }),
+    })
+    expect(runDetail.status).toBe(200)
+    expect(await runDetail.json()).toMatchObject({
+      result: {
+        run: {
+          id: run.id,
+          automationName: 'Runtime smoke test',
+          revisionNumber: 1,
+          status: 'COMPLETED',
+        },
+        executionSummary: { total: 1, attempts: 0, completed: 1 },
+        executions: [expect.objectContaining({
+          instructionId: '__complete',
+          title: 'Run complete',
+          status: 'COMPLETED',
+        })],
+        timeline: { items: expect.arrayContaining([expect.objectContaining({ title: 'Run Completed' })]) },
       },
     })
     const secondRun = application.context.scheduler.startManual(created.automation.id)

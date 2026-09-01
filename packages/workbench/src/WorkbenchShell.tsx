@@ -38,7 +38,7 @@ export interface WorkbenchShellProps {
   standalonePages?: ReadonlyArray<WorkbenchPageDefinition>
 }
 
-function DefaultPageChrome({ page, consoleClient, schemaUI }: WorkbenchPageChromeProps) {
+function DefaultPageChrome({ page, consoleClient, schemaUI, navigation }: WorkbenchPageChromeProps) {
   const PageComponent = page.component
   return (
     <>
@@ -46,7 +46,11 @@ function DefaultPageChrome({ page, consoleClient, schemaUI }: WorkbenchPageChrom
         <div class="sidebar-heading">{page.title.toUpperCase()}</div>
         <p>Browse {page.title.toLowerCase()} in the main workspace.</p>
       </aside>
-      {h(PageComponent, { ...(consoleClient ? { consoleClient } : {}), ...(schemaUI ? { schemaUI } : {}) })}
+      {h(PageComponent, {
+        ...(consoleClient ? { consoleClient } : {}),
+        ...(schemaUI ? { schemaUI } : {}),
+        ...(navigation ? { navigation } : {}),
+      })}
     </>
   )
 }
@@ -107,6 +111,10 @@ export const WorkbenchShell = defineSetupComponent<WorkbenchShellProps>('Workben
     const hasInspector = !!activePage?.chrome?.hasInspector
     const ownsPanel = !!activePage?.chrome?.ownsPanel
     const ownsStatus = !!activePage?.chrome?.ownsStatus
+    const navigation = props.router ? {
+      route: routeState.value,
+      navigate: props.router.navigate.bind(props.router),
+    } : undefined
     return <div class="workbench-shell" data-inspector-open={hasInspector && inspectorOpen.value}>
       <header class="top-bar">
         <div class="brand"><span class="brand-mark">N</span><strong>Numen Workbench</strong></div>
@@ -130,6 +138,7 @@ export const WorkbenchShell = defineSetupComponent<WorkbenchShellProps>('Workben
           page: activePage,
           ...(props.consoleClient ? { consoleClient: props.consoleClient } : {}),
           ...(props.schemaUI ? { schemaUI: props.schemaUI } : {}),
+          ...(navigation ? { navigation } : {}),
           inspectorOpen: inspectorOpen.value,
           onInspectorOpenChange: (open: boolean) => { inspectorOpen.value = open },
         })

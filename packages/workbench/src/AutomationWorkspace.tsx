@@ -31,7 +31,7 @@ export function useAutomationWorkspace(): ComputedRef<AutomationEditorProps> {
   return workspace
 }
 
-export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProps>('AutomationPageChrome', ['page', 'consoleClient', 'schemaUI', 'inspectorOpen', 'onInspectorOpenChange'], props => {
+export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProps>('AutomationPageChrome', ['page', 'consoleClient', 'schemaUI', 'navigation', 'inspectorOpen', 'onInspectorOpenChange'], props => {
   const requestedAutomationId = ref('morning-brief')
   const activeTab = ref('Editor')
   const requestedStepId = ref('notification')
@@ -184,7 +184,11 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
         onReload={reloadIndex}
         state={indexState}
       />
-      {h(PageComponent, { ...(props.consoleClient ? { consoleClient: props.consoleClient } : {}), ...(props.schemaUI ? { schemaUI: props.schemaUI } : {}) })}
+      {h(PageComponent, {
+        ...(props.consoleClient ? { consoleClient: props.consoleClient } : {}),
+        ...(props.schemaUI ? { schemaUI: props.schemaUI } : {}),
+        ...(props.navigation ? { navigation: props.navigation } : {}),
+      })}
       <Inspector
         activeStepId={activeStepId.value}
         canEdit={authoring.canEdit}

@@ -15,7 +15,7 @@ import {
 } from './connections-provider.js'
 import { workbenchHomeOverviewQuery } from './home-provider.js'
 import { workbenchInvalidationSubscription } from './invalidation-provider.js'
-import { workbenchRunsIndexQuery } from './runs-provider.js'
+import { workbenchRunDetailQuery, workbenchRunsIndexQuery } from './runs-provider.js'
 import { workbenchServerPlugin, type WorkbenchServerConfig } from './server.js'
 
 export {
@@ -40,7 +40,7 @@ export {
 } from './connections-provider.js'
 export { workbenchHomeOverviewQuery, workbenchHomeProviderPlugin } from './home-provider.js'
 export { workbenchInvalidationProviderPlugin, workbenchInvalidationSubscription } from './invalidation-provider.js'
-export { workbenchRunsIndexQuery, workbenchRunsProviderPlugin } from './runs-provider.js'
+export { workbenchRunDetailQuery, workbenchRunsIndexQuery, workbenchRunsProviderPlugin } from './runs-provider.js'
 
 export const coreWorkbenchEntryId = 'numen:workbench-core'
 
@@ -70,6 +70,7 @@ export class WorkbenchRuntimeService extends Service {
     ctx.console.define(ctx, workbenchSetConnectionEnabledAction)
     ctx.console.define(ctx, workbenchHomeOverviewQuery)
     ctx.console.define(ctx, workbenchInvalidationSubscription)
+    ctx.console.define(ctx, workbenchRunDetailQuery)
     ctx.console.define(ctx, workbenchRunsIndexQuery)
     const entry: ConsoleFrontendEntry = {
       id: coreWorkbenchEntryId,
