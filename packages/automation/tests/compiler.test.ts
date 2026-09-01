@@ -104,6 +104,78 @@ describe('automation compiler', () => {
     } as unknown as AutomationSource, resolver)).toThrow(AutomationCompileError)
   })
 
+  it('accepts stable core Call expressions and rejects unavailable functions', () => {
+    const called = structuredClone(source)
+    const flow = called.flow
+    if (flow.type !== 'block' || flow.steps[0]?.type !== 'capability') throw new Error('invalid fixture')
+    flow.steps[0].input.message = {
+      type: 'call',
+      function: 'core:to-string',
+      arguments: [{ type: 'literal', value: 42 }],
+    }
+    expect(compileAutomation(called, resolver).plan.instructions['send-message']).toMatchObject({
+      op: 'invoke',
+      input: { entries: { message: { function: 'core:to-string' } } },
+    })
+
+    flow.steps[0].input.message = {
+      type: 'call',
+      function: 'plugin:arbitrary',
+      arguments: [],
+    }
+    try {
+      compileAutomation(called, resolver)
+      throw new Error('expected compilation to fail')
+    } catch (error) {
+      expect(error).toBeInstanceOf(AutomationCompileError)
+      expect((error as AutomationCompileError).diagnostics).toContainEqual(expect.objectContaining({
+        code: 'EXPRESSION_FUNCTION_UNAVAILABLE',
+        source: { nodeId: 'send-message', fieldPath: 'input.message' },
+      }))
+    }
+
+    flow.steps[0].input.message = {
+      type: 'call',
+      function: 'core:to-string',
+      arguments: [],
+    }
+    try {
+      compileAutomation(called, resolver)
+      throw new Error('expected compilation to fail')
+    } catch (error) {
+      expect(error).toBeInstanceOf(AutomationCompileError)
+      expect((error as AutomationCompileError).diagnostics).toContainEqual(expect.objectContaining({
+        code: 'EXPRESSION_CALL_ARITY_INVALID',
+      }))
+    }
+  })
+
+  it('diagnoses invalid literal Wait sources before a Revision can publish', () => {
+    const invalidDuration: AutomationSource = {
+      triggers: [],
+      flow: { type: 'wait', id: 'wait', durationMs: { type: 'literal', value: -1 } },
+    }
+    const invalidUntil: AutomationSource = {
+      triggers: [],
+      flow: { type: 'wait', id: 'wait', until: { type: 'literal', value: 'not-a-date' } },
+    }
+    for (const [candidate, code, fieldPath] of [
+      [invalidDuration, 'WAIT_DURATION_INVALID', 'durationMs'],
+      [invalidUntil, 'WAIT_UNTIL_INVALID', 'until'],
+    ] as const) {
+      try {
+        compileAutomation(candidate, resolver)
+        throw new Error('expected compilation to fail')
+      } catch (error) {
+        expect(error).toBeInstanceOf(AutomationCompileError)
+        expect((error as AutomationCompileError).diagnostics).toContainEqual(expect.objectContaining({
+          code,
+          source: { nodeId: 'wait', fieldPath },
+        }))
+      }
+    }
+  })
+
   it('rejects retry policies for capabilities whose contract is not retry-safe', () => {
     const retrying = structuredClone(source)
     const flow = retrying.flow

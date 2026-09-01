@@ -202,7 +202,7 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
         onClose={() => props.onInspectorOpenChange(false)}
         onCapabilityConnectionChange={authoring.setCapabilityConnection}
         onCapabilityInputChange={authoring.setCapabilityInput}
-        onWaitDurationChange={authoring.setWaitDuration}
+        onWaitExpressionChange={authoring.setWaitExpression}
         {...(props.schemaUI ? { schemaUI: props.schemaUI } : {})}
       />
       <AutomationPanel

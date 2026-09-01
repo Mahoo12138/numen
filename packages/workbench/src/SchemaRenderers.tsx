@@ -7,6 +7,7 @@ import { defineSetupComponent } from './vue-component.js'
 
 export interface SchemaLiteralRendererProps {
   canEdit: boolean
+  autofocus?: boolean
   controlId: string
   describedBy?: string
   field: WorkbenchAutomationInputField
@@ -22,6 +23,7 @@ function inputAccessibility(props: SchemaLiteralRendererProps) {
   return {
     'aria-describedby': props.describedBy,
     'aria-invalid': props.invalid,
+    autofocus: props.autofocus,
     id: props.inputId,
   }
 }
@@ -111,7 +113,7 @@ function EnumLiteralEditor(props: SchemaLiteralRendererProps) {
   </select>
 }
 
-const JsonLiteralEditor = defineSetupComponent<SchemaLiteralRendererProps>('JsonLiteralEditor', ['canEdit', 'controlId', 'describedBy', 'field', 'inputId', 'invalid', 'value', 'onCommit'], props => {
+const JsonLiteralEditor = defineSetupComponent<SchemaLiteralRendererProps>('JsonLiteralEditor', ['canEdit', 'autofocus', 'controlId', 'describedBy', 'field', 'inputId', 'invalid', 'value', 'onCommit'], props => {
   const localError = ref<string>()
   const localProblemId = `${props.controlId}-input-${props.field.name}-json-problem`
   watch(() => props.value, () => { localError.value = undefined })
@@ -149,7 +151,71 @@ const JsonLiteralEditor = defineSetupComponent<SchemaLiteralRendererProps>('Json
   }
 })
 
+function DurationLiteralEditor(props: SchemaLiteralRendererProps) {
+  const value = typeof props.value === 'number' ? props.value : undefined
+  const seconds = value === undefined ? '' : String(value / 1_000)
+  return <span class="input-with-unit expression-duration-input">
+    <input
+      {...inputAccessibility(props)}
+      aria-label="Wait duration in seconds"
+      disabled={!props.canEdit}
+      key={`${props.controlId}:${props.field.name}:${seconds}`}
+      min="0"
+      onBlur={event => {
+        const raw = (event.target as HTMLInputElement).value
+        const nextSeconds = Number(raw)
+        const nextDuration = Math.round(nextSeconds * 1_000)
+        if (!raw || !Number.isFinite(nextSeconds) || nextSeconds < 0 || !Number.isSafeInteger(nextDuration)) {
+          (event.target as HTMLInputElement).value = seconds
+          return
+        }
+        if (nextDuration !== value) props.onCommit(nextDuration)
+      }}
+      onKeydown={event => { if (event.key === 'Enter') (event.target as HTMLElement).blur() }}
+      placeholder="seconds"
+      step="0.001"
+      type="number"
+      value={seconds}
+    />
+    <span>s</span>
+  </span>
+}
+
+function localDateTimeValue(value: NumenValue | undefined): string {
+  if (typeof value !== 'string') return ''
+  const date = new Date(value)
+  if (!Number.isFinite(date.getTime())) return ''
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
+  return local.toISOString().slice(0, 19)
+}
+
+function IsoDateTimeLiteralEditor(props: SchemaLiteralRendererProps) {
+  const value = typeof props.value === 'string' ? props.value : undefined
+  const localValue = localDateTimeValue(value)
+  return <input
+    {...inputAccessibility(props)}
+    aria-label="Wait until date and time"
+    disabled={!props.canEdit}
+    key={`${props.controlId}:${props.field.name}:${localValue}`}
+    onBlur={event => {
+      const raw = (event.target as HTMLInputElement).value
+      const parsed = new Date(raw)
+      if (!raw || !Number.isFinite(parsed.getTime())) {
+        (event.target as HTMLInputElement).value = localValue
+        return
+      }
+      const next = parsed.toISOString()
+      if (next !== value) props.onCommit(next)
+    }}
+    step="1"
+    type="datetime-local"
+    value={localValue}
+  />
+}
+
 export const coreSchemaLiteralRenderers: ReadonlyArray<SchemaRendererDefinition<SchemaLiteralRenderer>> = [
+  { id: 'numen:schema-duration-ms', version: 1, role: 'numen/duration-ms', editor: DurationLiteralEditor },
+  { id: 'numen:schema-iso-date-time', version: 1, role: 'numen/iso-date-time', editor: IsoDateTimeLiteralEditor },
   { id: 'numen:schema-string', version: 1, type: 'string', editor: StringLiteralEditor },
   { id: 'numen:schema-number', version: 1, type: 'number', editor: NumberLiteralEditor },
   { id: 'numen:schema-boolean', version: 1, type: 'boolean', editor: BooleanLiteralEditor },

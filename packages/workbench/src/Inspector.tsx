@@ -1,4 +1,4 @@
-import type { AutomationSource, CompileDiagnostic, ValueExpr } from '@numen/core'
+import type { AutomationSource, CompileDiagnostic, WaitSource, ValueExpr } from '@numen/core'
 import type { SchemaUIResolver } from '@numen/webui/schema-ui'
 import { ChevronDown, X } from '@lucide/vue'
 import type { SetupContext } from 'vue'
@@ -6,10 +6,12 @@ import { CapabilityConnectionFields, CapabilityInputFields } from './CapabilityI
 import { findAutomationControl } from './automation-source-editing.js'
 import type {
   WorkbenchAutomationInsertCatalog,
+  WorkbenchAutomationInputField,
   WorkbenchAutomationInsertItem,
   WorkbenchAutomationVariableCatalog,
 } from './contracts.js'
 import { automationSteps, type AutomationStep } from './model.js'
+import { ValueExpressionField } from './ValueExpressionEditor.js'
 
 const noDiagnostics: CompileDiagnostic[] = []
 
@@ -32,7 +34,7 @@ export interface InspectorProps {
   schemaUI?: SchemaUIResolver
   onCapabilityConnectionChange?(nodeId: string, slotName: string, connectionId?: string): void
   onCapabilityInputChange?(nodeId: string, fieldName: string, expression?: ValueExpr): void
-  onWaitDurationChange?(nodeId: string, durationMs: number): void
+  onWaitExpressionChange?(nodeId: string, field: 'durationMs' | 'until', expression: ValueExpr): void
   onClose(): void
 }
 
@@ -52,57 +54,84 @@ function InspectorGroup({ title, open = true }: {
 
 function WaitConfiguration({
   nodeId,
-  durationMs,
-  replacesUntil,
+  control,
   canEdit,
   problem,
+  source,
+  variableCatalog,
+  schemaUI,
   focusRequest,
   onChange,
 }: {
   nodeId: string
-  durationMs: number | undefined
-  replacesUntil: boolean
+  control: WaitSource
   canEdit: boolean
   problem: CompileDiagnostic | undefined
+  source: AutomationSource
+  variableCatalog?: WorkbenchAutomationVariableCatalog
+  schemaUI?: SchemaUIResolver
   focusRequest: number | undefined
-  onChange?(nodeId: string, durationMs: number): void
+  onChange?(nodeId: string, field: 'durationMs' | 'until', expression: ValueExpr): void
 }) {
-  const seconds = durationMs === undefined ? '' : String(durationMs / 1_000)
+  const fieldName: 'durationMs' | 'until' = control.until ? 'until' : 'durationMs'
+  const field: WorkbenchAutomationInputField = fieldName === 'durationMs'
+    ? {
+        name: 'durationMs',
+        label: 'Duration',
+        type: 'number',
+        schemaType: 'number',
+        required: true,
+        role: 'numen/duration-ms',
+        min: 0,
+        step: 1,
+        defaultValue: 60_000,
+        description: 'Evaluated when the Wait starts, then persisted as one durable wake time.',
+      }
+    : {
+        name: 'until',
+        label: 'Wake time',
+        type: 'string',
+        schemaType: 'string',
+        required: true,
+        role: 'numen/iso-date-time',
+        defaultValue: '',
+        description: 'An ISO date-time or expression evaluated when the Wait starts.',
+      }
+  const expression = control[fieldName]
   return (
     <>
-      <label class="inspector-edit-field" data-invalid={!!problem}>
-        Duration
-        <span class="input-with-unit">
-          <input
-            aria-describedby={problem ? `${nodeId}-duration-problem` : undefined}
-            aria-invalid={!!problem}
-            aria-label="Wait duration in seconds"
-            autofocus={focusRequest !== undefined}
-            value={seconds}
-            disabled={!canEdit}
-            key={`${nodeId}:${durationMs ?? 'empty'}:${focusRequest ?? 'idle'}`}
-            min="0"
-            onBlur={event => {
-              const nextSeconds = Number((event.target as HTMLInputElement).value)
-              const nextDurationMs = Math.round(nextSeconds * 1_000)
-              if (!(event.target as HTMLInputElement).value || !Number.isFinite(nextSeconds) || nextSeconds < 0) {
-                (event.target as HTMLInputElement).value = seconds
-                return
-              }
-              if (nextDurationMs !== durationMs) onChange?.(nodeId, nextDurationMs)
-            }}
-            onKeydown={event => {
-              if (event.key === 'Enter') (event.target as HTMLElement).blur()
-            }}
-            placeholder={replacesUntil ? 'until expression' : 'seconds'}
-            step="0.001"
-            type="number"
-          />
-          <span>s</span>
-        </span>
+      <label class="wait-source-field">
+        <span>Wake source</span>
+        <select
+          aria-label="Wait wake source"
+          disabled={!canEdit}
+          onChange={event => {
+            const next = (event.target as HTMLInputElement).value as 'durationMs' | 'until'
+            if (next === fieldName) return
+            onChange?.(nodeId, next, next === 'durationMs'
+              ? { type: 'literal', value: 60_000 }
+              : { type: 'literal', value: new Date(Date.now() + 60 * 60 * 1_000).toISOString() })
+          }}
+          value={fieldName}
+        >
+          <option value="durationMs">For a duration</option>
+          <option value="until">Until a date and time</option>
+        </select>
       </label>
-      {replacesUntil ? <p class="inspector-field-help">Setting a duration replaces the current until expression.</p> : null}
-      {problem ? <p class="inspector-field-error" id={`${nodeId}-duration-problem`}>{problem.message}</p> : null}
+      <ValueExpressionField
+        canEdit={canEdit}
+        field={field}
+        {...(focusRequest !== undefined ? { focusRequest } : {})}
+        nodeId={nodeId}
+        onChange={next => {
+          if (next) onChange?.(nodeId, fieldName, next)
+        }}
+        source={source}
+        {...(expression ? { expression } : {})}
+        {...(problem ? { problem } : {})}
+        {...(schemaUI ? { schemaUI } : {})}
+        {...(variableCatalog ? { variableCatalog } : {})}
+      />
     </>
   )
 }
@@ -120,7 +149,7 @@ export function Inspector({
   schemaUI,
   onCapabilityConnectionChange,
   onCapabilityInputChange,
-  onWaitDurationChange,
+  onWaitExpressionChange,
   onClose,
 }: InspectorProps) {
   const projectedSteps = steps ?? automationSteps
@@ -130,15 +159,11 @@ export function Inspector({
   const stepProblems = step?.sourceId
     ? problems.filter(problem => problem.source?.nodeId === step.sourceId)
     : []
-  const durationProblem = stepProblems.find(problem => (
-    problem.source?.fieldPath === 'durationMs'
+  const waitField = control?.type === 'wait' && control.until ? 'until' : 'durationMs'
+  const waitProblem = stepProblems.find(problem => (
+    problem.source?.fieldPath === waitField
     || (problem.code === 'WAIT_SOURCE_INVALID' && !problem.source?.fieldPath)
   ))
-  const durationMs = control?.type === 'wait'
-    && control.durationMs?.type === 'literal'
-    && typeof control.durationMs.value === 'number'
-    ? control.durationMs.value
-    : undefined
   const capabilityDefinition = control?.type === 'capability'
     ? catalog?.items.find((item): item is Extract<WorkbenchAutomationInsertItem, { kind: 'capability' }> => item.kind === 'capability'
       && item.capability.id === control.capability.id
@@ -183,14 +208,16 @@ export function Inspector({
         <InspectorGroup title="Configuration">
           <WaitConfiguration
             canEdit={canEdit}
-            durationMs={durationMs}
-            focusRequest={fieldFocus?.nodeId === step.sourceId && fieldFocus.fieldPath === 'durationMs'
+            control={control}
+            focusRequest={fieldFocus?.nodeId === step.sourceId && fieldFocus.fieldPath === waitField
               ? fieldFocus.request
               : undefined}
             nodeId={step.sourceId}
-            {...(onWaitDurationChange ? { onChange: onWaitDurationChange } : {})}
-            problem={durationProblem}
-            replacesUntil={!!control.until}
+            {...(onWaitExpressionChange ? { onChange: onWaitExpressionChange } : {})}
+            problem={waitProblem}
+            source={source!}
+            {...(schemaUI ? { schemaUI } : {})}
+            {...(variableCatalog ? { variableCatalog } : {})}
           />
           <dl class="inspector-source-fields">
             <div><dt>Source ID</dt><dd>{step.sourceId}</dd></div>
@@ -218,6 +245,10 @@ export function Inspector({
                 canEdit={canEdit}
                 control={control}
                 definition={capabilityDefinition}
+                {...(fieldFocus?.nodeId === step.sourceId ? {
+                  focusFieldPath: fieldFocus.fieldPath,
+                  focusRequest: fieldFocus.request,
+                } : {})}
                 nodeId={step.sourceId}
                 {...(onCapabilityInputChange ? { onChange: onCapabilityInputChange } : {})}
                 problems={stepProblems}

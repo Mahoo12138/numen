@@ -18,6 +18,8 @@ describe('Workbench Schema UI adapters', () => {
       expect(root.schemaUI.resolveRenderer({ type }, 'editor')).toBeTruthy()
     }
     expect(root.schemaUI.resolveRenderer({ role: 'numen/expression', type: 'string' }, 'editor')).toBeTruthy()
+    expect(root.schemaUI.resolveRenderer({ role: 'numen/duration-ms', type: 'number' }, 'editor')).toBeTruthy()
+    expect(root.schemaUI.resolveRenderer({ role: 'numen/iso-date-time', type: 'string' }, 'editor')).toBeTruthy()
 
     await fiber.dispose()
     expect(root.schemaUI.resolveRenderer({ type: 'string' }, 'editor')).toBeUndefined()

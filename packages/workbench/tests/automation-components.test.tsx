@@ -65,7 +65,8 @@ const schemaUI: SchemaUIResolver = {
   subscribe: () => () => {},
   resolveRenderer<Renderer>(request, mode): Renderer | undefined {
     if (mode !== 'editor') return
-    return coreSchemaLiteralRenderers.find(renderer => renderer.type === request.type)?.editor as Renderer | undefined
+    return (coreSchemaLiteralRenderers.find(renderer => request.role && renderer.role === request.role)
+      ?? coreSchemaLiteralRenderers.find(renderer => renderer.type === request.type))?.editor as Renderer | undefined
   },
 }
 
@@ -216,7 +217,7 @@ describe('live Automation workspace projections', () => {
       canEdit
       fieldFocus={{ nodeId: 'pause', fieldPath: 'durationMs', request: 1 }}
       onClose={vi.fn()}
-      onWaitDurationChange={vi.fn()}
+      onWaitExpressionChange={vi.fn()}
       open
       problems={[{
         severity: 'error',
@@ -226,6 +227,7 @@ describe('live Automation workspace projections', () => {
       }]}
       source={detail.draft.source}
       steps={steps}
+      schemaUI={schemaUI}
     />)
 
     expect(steps[0]).toMatchObject({ problemCount: 1 })
@@ -356,5 +358,101 @@ describe('live Automation workspace projections', () => {
 
     expect(referenceMarkup).toContain('value="trigger.title"')
     expect(referenceMarkup).toContain('aria-label="Insert variable"')
+  })
+
+  it('renders editable nested Call expressions from the stable core function catalog', async () => {
+    const source = {
+      triggers: [],
+      flow: {
+        type: 'capability' as const,
+        id: 'compose-message',
+        capability: { id: 'test:compose', version: 1 },
+        input: {
+          message: {
+            type: 'call' as const,
+            function: 'core:coalesce',
+            arguments: [
+              { type: 'ref' as const, path: 'input.preferredMessage' },
+              {
+                type: 'call' as const,
+                function: 'core:to-string',
+                arguments: [{ type: 'ref' as const, path: 'run.id' }],
+              },
+            ],
+          },
+        },
+      },
+    }
+    const catalog: WorkbenchAutomationInsertCatalog = {
+      items: [{
+        kind: 'capability',
+        capability: { id: 'test:compose', version: 1 },
+        capabilityKind: 'action',
+        title: 'Compose message',
+        providerAvailable: true,
+        connectionSlots: [],
+        connectionRequirements: [],
+        inputSchemaSupported: true,
+        inputFields: [{ name: 'message', label: 'Message', type: 'string', schemaType: 'string', required: true }],
+      }],
+      connections: [],
+    }
+    const steps = projectAutomationSteps(source)
+    const markup = await renderToMarkup(<Inspector
+      activeStepId={steps[0]!.id}
+      canEdit
+      catalog={catalog}
+      onCapabilityInputChange={vi.fn()}
+      onClose={vi.fn()}
+      open
+      source={source}
+      steps={steps}
+      schemaUI={schemaUI}
+    />)
+
+    expect(markup).toContain('aria-label="Message value mode"')
+    expect(markup).toContain('value="expression"')
+    expect(markup).toContain('aria-label="Message expression function"')
+    expect(markup).toContain('First available value')
+    expect(markup).toContain('Convert to text')
+    expect(markup).toContain('input.preferredMessage')
+    expect(markup).toContain('run.id')
+    expect(markup).toContain('Add argument')
+  })
+
+  it('renders non-literal Wait sources through the same structured expression field', async () => {
+    const source = {
+      triggers: [],
+      flow: {
+        type: 'wait' as const,
+        id: 'scheduled-resume',
+        until: {
+          type: 'call' as const,
+          function: 'core:coalesce',
+          arguments: [
+            { type: 'ref' as const, path: 'input.resumeAt' },
+            { type: 'literal' as const, value: '2030-01-01T00:00:00.000Z' },
+          ],
+        },
+      },
+    }
+    const steps = projectAutomationSteps(source)
+    const markup = await renderToMarkup(<Inspector
+      activeStepId={steps[0]!.id}
+      canEdit
+      onClose={vi.fn()}
+      onWaitExpressionChange={vi.fn()}
+      open
+      source={source}
+      steps={steps}
+      schemaUI={schemaUI}
+    />)
+
+    expect(markup).toContain('aria-label="Wait wake source"')
+    expect(markup).toContain('value="until"')
+    expect(markup).toContain('aria-label="Wake time value mode"')
+    expect(markup).toContain('aria-label="Wake time expression function"')
+    expect(markup).toContain('First available value')
+    expect(markup).toContain('input.resumeAt')
   })
 })

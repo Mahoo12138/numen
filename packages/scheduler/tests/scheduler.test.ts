@@ -178,6 +178,48 @@ describe('SchedulerService', () => {
     await root.fiber.dispose()
   })
 
+  it('evaluates structured Call and Reference expressions for durable Wait sources', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'numen-scheduler-'))
+    directories.push(directory)
+    const root = await createContext(join(directory, 'numen.db'))
+    const automationId = publish(root, {
+      triggers: [],
+      flow: {
+        type: 'block',
+        id: 'flow',
+        steps: [
+          {
+            type: 'wait',
+            id: 'computed-duration',
+            durationMs: {
+              type: 'call',
+              function: 'core:add',
+              arguments: [
+                { type: 'ref', path: 'input.delayMs' },
+                { type: 'literal', value: 0 },
+              ],
+            },
+          },
+          {
+            type: 'wait',
+            id: 'referenced-time',
+            until: { type: 'ref', path: 'input.resumeAt' },
+          },
+        ],
+      },
+    })
+    const run = root.scheduler.startManual(automationId, {
+      delayMs: 0,
+      resumeAt: '2000-01-01T00:00:00.000Z',
+    })
+
+    await root.scheduler.dispatchUntilIdle()
+
+    expect(root.scheduler.getRun(run.id)?.status).toBe('COMPLETED')
+    expect(root.scheduler.listEvents(run.id).filter(event => event.type === 'ExecutionWaiting')).toHaveLength(2)
+    await root.fiber.dispose()
+  })
+
   it('passes named Connection bindings from compiled IR to the Capability Provider', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'numen-scheduler-'))
     directories.push(directory)

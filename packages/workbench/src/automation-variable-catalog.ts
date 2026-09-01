@@ -71,7 +71,7 @@ function findLexicalScope(
   }
 }
 
-function targetValueTypes(field: WorkbenchAutomationInputField): Set<WorkbenchAutomationVariableValueType> {
+export function targetValueTypes(field: WorkbenchAutomationInputField): Set<WorkbenchAutomationVariableValueType> {
   if (field.type === 'enum') {
     const types = new Set<WorkbenchAutomationVariableValueType>(field.options?.map(option => {
       if (option.value === null) return 'null'

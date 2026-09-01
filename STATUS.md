@@ -126,6 +126,9 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Frontend Schema Renderer Registry with Effect ownership, Role-to-type fallback, and atomic Entry generation staging
 - [x] Core Literal Renderer adapters for string, number, boolean, enum, and JSON Capability fields
 - [x] Unified Capability Field Shell with Literal, Reference, and structured Template Source modes
+- [x] Stable Core Call function catalog shared by compiler validation and Scheduler evaluation
+- [x] Recursive structured Call editor with typed fixed/variadic arguments and unavailable-function preservation
+- [x] Unified non-literal Wait duration/until authoring with Role-based duration and ISO date-time Literal adapters
 - [x] Typed Capability output catalog with scope-aware Magic Variable projection and stable Source paths
 - [x] Responsive Reference/Template Variable Picker with static type filtering and explicit text conversion
 - [x] Typed Run detail Query with bounded Execution/Attempt diagnostics and append-only Journal timeline pages
@@ -178,14 +181,15 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Schema-driven Capability inputs and named Connection binding authoring lifecycle
 - [x] Plugin-owned Schema Renderer lifecycle and Literal/Reference/Template value-mode authoring
 - [x] Scope-aware Magic Variable catalog and typed Reference/Template insertion lifecycle
+- [x] Structured Call expression and non-literal Wait duration/until authoring lifecycle
 - [x] Connection desired-state Action, optimistic UI, and conflict recovery lifecycle
 - [x] Run detail Query, semantic timeline, and Execution/Attempt diagnostic lifecycle
 
 ## Next
 
-1. General structured Call expression editor and non-literal Wait modes
-2. Connection create/edit/remove Actions and configuration UI
-3. Run Context/Flow projections and cancellation Action
+1. Connection create/edit/remove Actions and configuration UI
+2. Run Context/Flow projections and cancellation Action
+3. Reuse the unified expression field for If conditions and ForEach item configuration
 
 ## Design Review
 
@@ -204,6 +208,7 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - **Connection binding seam — pass:** Capability and Trigger Source now bind durable Connections by declared slot name, and the compiler carries the same map into Core IR and the dependency manifest while snapshotting slot requirements. Publish validates slot existence, required bindings, Connection existence, and Adapter compatibility when the Connection service is present; Scheduler and Trigger adapters receive the named map unchanged. The deprecated single `connection` field is normalized only at the compiler/editing boundary for persisted protocol-v1 compatibility.
 - **Schema Renderer seam — pass:** `@numen/webui` owns a small `defineRenderer` / `resolveRenderer` interface with stable IDs, versions, collision checks, Role-first/type-fallback resolution, and Edit/View/Compact projections. Renderer registrations use the caller's Cordis Effect and participate in the same staged, validated, atomic Frontend Entry generation as Pages and Slots, so failed generations never leak renderers and unloading an Entry removes them automatically.
 - **Automation ValueExpr seam — pass:** the unified Workbench Field Shell owns Literal/Reference/Template mode selection and safe template parse/print, while plugin Renderer adapters receive only literal values and never learn the ValueExpr AST. Every committed mode change is one generic Source command; invalid transient Reference/Template text remains local, existing structured expressions are preserved when no visual editor exists, and Draft Source remains the sole semantic truth.
+- **Structured expression seam — pass:** `@numen/core` owns the protocol-v1 pure function catalog, metadata, arity contract, stringification, and deterministic evaluation; the compiler rejects unavailable or malformed Calls before publish, while Scheduler delegates runtime execution to the same catalog. Workbench recursively edits only stable Call AST nodes through the unified Field Shell, preserves unknown functions for repair, and keeps plugin Schema Renderers limited to Literal mode. Wait duration/until changes use the same typed Source command boundary and enforce exactly one durable wake source.
 - **Magic Variable catalog seam — pass:** Workbench exposes one stable typed Query whose optional Provider Adapter projects presentation-safe Capability output descriptors, including Triggers, without sending Schemastery or Provider implementations to the browser. A separate pure client module combines those descriptors with the current unsaved Draft to enforce lexical visibility, stable step IDs, target-type filtering, and explicit `core:to-string` conversion; the Picker only emits structured `ValueExpr` commands and never becomes semantic state.
 - **Vue field event boundary — pass:** interactive Field Shell and Input Field layers declare runtime props through the shared setup adapter, preventing native `change` events from falling through as domain callbacks. Reference, Template, and conversion insertion remain one command each, and browser QA confirms mode changes do not produce duplicate edits or console errors.
 - **Connection desired-state Action seam — pass:** Workbench defines one typed Action and an optional Provider Adapter maps it to `ConnectionService.setEnabled`; the durable `enabled + generation` pair remains authoritative and live Runtime status stays a separate projection. The Vue module owns only abortable in-flight intent, confirmed-generation overlay, and recoverable public errors, then reconciles through the existing typed invalidation/query path without introducing a second Connection store.
@@ -214,7 +219,7 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 ```text
 Typecheck: passing
 Build: passing
-Tests: 43 files, 164 tests passing
+Tests: 44 files, 172 tests passing
 CLI config validate: passing
 CLI doctor: passing
 SQLite schema migration: v10
@@ -236,7 +241,7 @@ pnpm dev
 - The current Scheduler executes the Core IR subset emitted by the compiler, including retry, timeout, cancellation, recovery, and structured concurrency.
 - Parallel, first-success Race, and bounded ForEach use durable Execution scopes with interruptible concurrent dispatch; Try/Finally control flow remains planned work.
 - Typed Console transports, browser sessions, Browser Cordis clients, frontend extension registries, atomic Entry generations, authenticated revision-fenced asset delivery, and Browser Entry reconciliation/rollback are operational. Generated bootstrap tokens and sessions rotate on restart; the CLI prints a fragment-only Workbench launch URL only with explicit `--print-launch-url` authorization.
-- The responsive Workbench shell, seven core Page entries, stable browser Route/Page reconciliation, a secret-free production bootstrap, and authenticated core Entry loading are operational through the default Runtime. Home, Automations, the keyset-paginated Runs index, bounded Run timeline/diagnostics detail, and the desired/runtime-separated Connections index display live data and refresh through coalesced typed invalidations without replacing server truth in the browser. Automation authoring now supports registry-driven Capability/control insertion, plugin-owned Schema Literal renderers, Literal/Reference/Template Capability inputs, scope-aware typed Magic Variables, named Connection bindings, literal Wait editing, bounded undo/redo, debounced full-document autosave, explicit conflict recovery, immutable Revision publish, and source-linked diagnostics. Run Context/Flow projections and cancellation controls remain planned. Automation `input.*` and `vars.*` remain manually addressable because no declaration schema exists yet; a plugin-owned Control Registry, general call-expression editor, non-literal Wait modes, compare/save-copy conflict options, and activation controls remain planned.
+- The responsive Workbench shell, seven core Page entries, stable browser Route/Page reconciliation, a secret-free production bootstrap, and authenticated core Entry loading are operational through the default Runtime. Home, Automations, the keyset-paginated Runs index, bounded Run timeline/diagnostics detail, and the desired/runtime-separated Connections index display live data and refresh through coalesced typed invalidations without replacing server truth in the browser. Automation authoring now supports registry-driven Capability/control insertion, plugin-owned Schema Literal renderers, unified Literal/Reference/Template/structured Call inputs, scope-aware typed Magic Variables, named Connection bindings, expression-backed Wait duration/until editing, bounded undo/redo, debounced full-document autosave, explicit conflict recovery, immutable Revision publish, and source-linked diagnostics. Run Context/Flow projections and cancellation controls remain planned. Automation `input.*` and `vars.*` remain manually addressable because no declaration schema exists yet; a plugin-owned Control Registry, If/ForEach expression configuration, compare/save-copy conflict options, and activation controls remain planned.
 - Manual Runs and event Trigger subscriptions are supported. State Trigger transition detection, filtering, debounce, and throttle remain planned work.
 - Connection desired state, optimistic generation-fenced enable/disable Actions, Adapter contracts, generation-fenced Runtime recreation, and Credential snapshots are operational; create/edit/remove UI and automatic reconnect policy remain planned work.
 - Credential payloads use authenticated encryption with environment-provided keys; key-ring migration and external vault providers remain planned work.

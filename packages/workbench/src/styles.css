@@ -539,6 +539,32 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .schema-value-control [aria-invalid="true"] { border-color: #c94d40; }
 .schema-field > .inspector-field-help, .schema-field > .inspector-field-error, .connection-binding-field > .inspector-field-help, .connection-binding-field > .inspector-field-error { margin: 0 0 0 104px; }
 .schema-value-control > .inspector-field-error { margin: 4px 0 0; }
+.wait-source-field { align-items: start !important; }
+.wait-source-field > span { padding-top: 7px; }
+.expression-duration-input { width: 100%; }
+.schema-field:has(.structured-call-editor) > .schema-field-row { grid-template-columns: 1fr; gap: 5px; }
+.schema-field:has(.structured-call-editor) > .schema-field-row > .schema-field-label { padding-top: 0; }
+.schema-field:has(.structured-call-editor) > .schema-field-row > .schema-value-editor { grid-template-columns: 1fr; gap: 7px; }
+.schema-field:has(.structured-call-editor) > .schema-field-row .schema-value-mode { width: 108px; }
+.schema-field:has(.structured-call-editor) > .inspector-field-help,
+.schema-field:has(.structured-call-editor) > .inspector-field-error { margin-left: 0; }
+.structured-call-editor { display: grid; gap: 8px; min-width: 0; padding-top: 9px; border-top: 1px solid var(--wb-border); }
+.inspector-group-content .structured-call-function { grid-template-columns: 72px minmax(0, 1fr); min-height: 30px; }
+.structured-call-function > span { color: var(--wb-muted); font-size: 10px; }
+.structured-call-editor > p { margin: -2px 0 0 72px; color: var(--wb-muted); font-size: 9.5px; line-height: 1.4; overflow-wrap: anywhere; }
+.structured-call-arguments { display: grid; min-width: 0; border-top: 1px solid var(--wb-border); }
+.structured-call-argument { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; min-width: 0; padding: 9px 0; border-bottom: 1px solid var(--wb-border); }
+.structured-call-argument > .schema-field { min-width: 0; }
+.structured-call-argument > .schema-field > .schema-field-row { grid-template-columns: 82px minmax(0, 1fr); }
+.structured-call-argument > .schema-field > .inspector-field-help,
+.structured-call-argument > .schema-field > .inspector-field-error { margin-left: 82px; }
+.structured-call-remove, .structured-call-extra button { display: grid; place-items: center; width: 26px; height: 26px; margin-top: 3px; padding: 0; border: 1px solid var(--wb-border); border-radius: 4px; background: white; color: var(--wb-muted); cursor: pointer; }
+.structured-call-remove:hover:not(:disabled), .structured-call-extra button:hover:not(:disabled) { border-color: #d8aaaa; color: #9e3535; }
+.structured-call-add { display: inline-flex; align-items: center; justify-content: center; gap: 5px; justify-self: start; min-height: 28px; margin-top: 8px; padding: 0 9px; border: 1px solid var(--wb-border-strong); border-radius: 4px; background: white; color: var(--wb-muted); cursor: pointer; font-size: 10px; }
+.structured-call-add:hover:not(:disabled) { border-color: var(--wb-accent); color: var(--wb-accent-strong); }
+.structured-call-add:disabled, .structured-call-remove:disabled, .structured-call-extra button:disabled { cursor: default; opacity: .45; }
+.structured-call-extra { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px; padding: 7px 0; border-bottom: 1px solid var(--wb-border); }
+.structured-call-extra code { overflow-wrap: anywhere; color: var(--wb-faint); font-size: 9px; }
 .magic-variable-editor { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 32px; align-items: start; gap: 4px; min-width: 0; }
 .magic-variable-editor > input, .magic-variable-editor > textarea { width: 100%; }
 .magic-variable-trigger { display: grid; width: 32px; height: 32px; place-items: center; border: 1px solid var(--wb-border-strong); border-radius: 4px; background: white; color: var(--wb-muted); cursor: pointer; }
@@ -718,6 +744,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .schema-value-editor { grid-template-columns: 110px minmax(0, 1fr); }
   .schema-field > .inspector-field-help, .schema-field > .inspector-field-error { margin-left: 0; }
   .schema-field input, .schema-field select, .schema-field textarea, .connection-binding-field select { font-size: 16px; }
+  .structured-call-argument > .schema-field > .schema-field-row { grid-template-columns: 1fr; }
+  .structured-call-argument > .schema-field > .inspector-field-help,
+  .structured-call-argument > .schema-field > .inspector-field-error { margin-left: 0; }
   .inspector-backdrop { inset: 44px 0 78px; }
 }
 

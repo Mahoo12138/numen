@@ -1,5 +1,6 @@
 import {
   capabilityKey,
+  getCoreExpressionFunction,
   isNumenValue,
   type AutomationSource,
   type CapabilityDefinition,
@@ -203,16 +204,33 @@ export function compileAutomation(
           }
         })
         break
-      case 'call':
+      case 'call': {
+        const definition = getCoreExpressionFunction(expression.function)
         if (!functionPattern.test(expression.function)) {
           report({ severity: 'error', code: 'INVALID_EXPRESSION_FUNCTION', message: `Expression function must be namespaced: ${expression.function}`, source: { nodeId, fieldPath } })
+        } else if (!definition) {
+          report({ severity: 'error', code: 'EXPRESSION_FUNCTION_UNAVAILABLE', message: `Expression function is not available: ${expression.function}`, source: { nodeId, fieldPath } })
         }
         if (!Array.isArray(expression.arguments)) {
           report({ severity: 'error', code: 'EXPRESSION_CALL_INVALID', message: 'Call expression requires arguments.', source: { nodeId, fieldPath } })
           break
         }
+        if (definition) {
+          const minimum = definition.arguments.length
+          const tooFew = expression.arguments.length < minimum
+          const tooMany = !definition.variadic && expression.arguments.length > minimum
+          if (tooFew || tooMany) {
+            report({
+              severity: 'error',
+              code: 'EXPRESSION_CALL_ARITY_INVALID',
+              message: `${definition.id} requires ${definition.variadic ? `at least ${minimum}` : minimum} argument${minimum === 1 ? '' : 's'}.`,
+              source: { nodeId, fieldPath },
+            })
+          }
+        }
         expression.arguments.forEach((item, index) => validateExpression(item, nodeId, `${fieldPath}.arguments.${index}`))
         break
+      }
       default:
         report({ severity: 'error', code: 'UNKNOWN_EXPRESSION', message: 'Unknown expression type.', source: { nodeId, fieldPath } })
     }
@@ -431,6 +449,24 @@ export function compileAutomation(
         }
         if (control.until) validateExpression(control.until, control.id, 'until')
         if (control.durationMs) validateExpression(control.durationMs, control.id, 'durationMs')
+        if (control.durationMs?.type === 'literal'
+          && (typeof control.durationMs.value !== 'number' || control.durationMs.value < 0)) {
+          report({
+            severity: 'error',
+            code: 'WAIT_DURATION_INVALID',
+            message: 'Wait duration must be a non-negative number of milliseconds.',
+            source: { nodeId: control.id, fieldPath: 'durationMs' },
+          })
+        }
+        if (control.until?.type === 'literal'
+          && (typeof control.until.value !== 'string' || !Number.isFinite(Date.parse(control.until.value)))) {
+          report({
+            severity: 'error',
+            code: 'WAIT_UNTIL_INVALID',
+            message: 'Wait until must be a valid ISO date string.',
+            source: { nodeId: control.id, fieldPath: 'until' },
+          })
+        }
         instructions[control.id] = {
           op: 'suspend',
           id: control.id,

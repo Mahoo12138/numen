@@ -351,7 +351,7 @@ export interface AutomationDraftDocumentModel {
   selectNode(nodeId?: string): void
   setCapabilityConnection(nodeId: string, slotName: string, connectionId?: string): void
   setCapabilityInput(nodeId: string, fieldName: string, expression?: ValueExpr): void
-  setWaitDuration(nodeId: string, durationMs: number): void
+  setWaitExpression(nodeId: string, field: 'durationMs' | 'until', expression: ValueExpr): void
   undo(): void
   redo(): void
   publish(): void
@@ -465,8 +465,8 @@ export function useAutomationDraftDocument({
       command: { type: 'SET_CAPABILITY_INPUT', nodeId, fieldName, ...(expression ? { expression } : {}) },
     })
   }
-  const setWaitDuration = (nodeId: string, durationMs: number) => {
-    dispatch({ type: 'EDIT', command: { type: 'SET_WAIT_DURATION', nodeId, durationMs } })
+  const setWaitExpression = (nodeId: string, field: 'durationMs' | 'until', expression: ValueExpr) => {
+    dispatch({ type: 'EDIT', command: { type: 'SET_WAIT_EXPRESSION', nodeId, field, expression } })
   }
   const undo = () => dispatch({ type: 'UNDO' })
   const redo = () => dispatch({ type: 'REDO' })
@@ -514,7 +514,7 @@ export function useAutomationDraftDocument({
     selectNode,
     setCapabilityConnection,
     setCapabilityInput,
-    setWaitDuration,
+    setWaitExpression,
     undo,
     redo,
     publish,

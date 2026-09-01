@@ -232,7 +232,7 @@ describe('local Automation Draft document', () => {
     expect(state.document?.source).toEqual(source)
   })
 
-  it('edits nested Wait duration through one Source command and ignores mismatched nodes', () => {
+  it('edits nested Wait expressions through one Source command and enforces one wake source', () => {
     const nested: AutomationSource = {
       triggers: [],
       flow: {
@@ -248,9 +248,13 @@ describe('local Automation Draft document', () => {
     }
 
     const edited = applyAutomationSourceCommand(nested, {
-      type: 'SET_WAIT_DURATION',
+      type: 'SET_WAIT_EXPRESSION',
       nodeId: 'nested-wait',
-      durationMs: 12_500,
+      field: 'durationMs',
+      expression: { type: 'call', function: 'core:add', arguments: [
+        { type: 'ref', path: 'input.baseDelay' },
+        { type: 'literal', value: 12_500 },
+      ] },
     }).source
     expect(edited.flow).toMatchObject({
       type: 'if',
@@ -258,16 +262,28 @@ describe('local Automation Draft document', () => {
         steps: [{
           type: 'wait',
           id: 'nested-wait',
-          durationMs: { type: 'literal', value: 12_500 },
+          durationMs: { type: 'call', function: 'core:add' },
         }],
       },
     })
     expect(JSON.stringify(edited)).not.toContain('until')
-    expect(applyAutomationSourceCommand(edited, {
-      type: 'SET_WAIT_DURATION',
+    const until = applyAutomationSourceCommand(edited, {
+      type: 'SET_WAIT_EXPRESSION',
+      nodeId: 'nested-wait',
+      field: 'until',
+      expression: { type: 'ref', path: 'trigger.resumeAt' },
+    }).source
+    expect(until.flow).toMatchObject({
+      type: 'if',
+      then: { steps: [{ until: { type: 'ref', path: 'trigger.resumeAt' } }] },
+    })
+    expect(JSON.stringify(until)).not.toContain('durationMs')
+    expect(applyAutomationSourceCommand(until, {
+      type: 'SET_WAIT_EXPRESSION',
       nodeId: 'missing',
-      durationMs: 1_000,
-    }).source).toBe(edited)
+      field: 'durationMs',
+      expression: { type: 'literal', value: 1_000 },
+    }).source).toBe(until)
   })
 
   it('maintains bounded full-document undo and redo history across saved edits', () => {
@@ -275,7 +291,12 @@ describe('local Automation Draft document', () => {
     state = reduceAutomationDraftDocument(state, { type: 'EDIT', command: { type: 'INSERT', item: waitItem } })
     state = reduceAutomationDraftDocument(state, {
       type: 'EDIT',
-      command: { type: 'SET_WAIT_DURATION', nodeId: 'wait-1', durationMs: 5_000 },
+      command: {
+        type: 'SET_WAIT_EXPRESSION',
+        nodeId: 'wait-1',
+        field: 'durationMs',
+        expression: { type: 'literal', value: 5_000 },
+      },
     })
 
     expect(state.undoStack).toHaveLength(2)
@@ -309,7 +330,12 @@ describe('local Automation Draft document', () => {
     for (let durationMs = 1; durationMs <= 55; durationMs += 1) {
       state = reduceAutomationDraftDocument(state, {
         type: 'EDIT',
-        command: { type: 'SET_WAIT_DURATION', nodeId: 'wait-1', durationMs },
+        command: {
+          type: 'SET_WAIT_EXPRESSION',
+          nodeId: 'wait-1',
+          field: 'durationMs',
+          expression: { type: 'literal', value: durationMs },
+        },
       })
     }
     expect(state.undoStack).toHaveLength(50)

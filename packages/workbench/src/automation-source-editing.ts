@@ -5,7 +5,7 @@ export type AutomationSourceCommand =
   | { type: 'INSERT'; item: WorkbenchAutomationInsertItem }
   | { type: 'SET_CAPABILITY_CONNECTION'; nodeId: string; slotName: string; connectionId?: string }
   | { type: 'SET_CAPABILITY_INPUT'; nodeId: string; fieldName: string; expression?: ValueExpr }
-  | { type: 'SET_WAIT_DURATION'; nodeId: string; durationMs: number }
+  | { type: 'SET_WAIT_EXPRESSION'; nodeId: string; field: 'durationMs' | 'until'; expression: ValueExpr }
 
 export interface AutomationSourceCommandResult {
   source: AutomationSource
@@ -190,17 +190,20 @@ function editControl(
   return { control, changed: false }
 }
 
-function setWaitDuration(source: AutomationSource, nodeId: string, durationMs: number): AutomationSource {
-  if (!Number.isSafeInteger(durationMs) || durationMs < 0) {
-    throw new TypeError('Wait duration must be a non-negative whole number of milliseconds.')
-  }
+function setWaitExpression(
+  source: AutomationSource,
+  nodeId: string,
+  field: 'durationMs' | 'until',
+  expression: ValueExpr,
+): AutomationSource {
   const result = editControl(source.flow, nodeId, control => {
     if (control.type !== 'wait') return control
-    if (control.durationMs?.type === 'literal' && control.durationMs.value === durationMs && !control.until) return control
+    if (JSON.stringify(control[field]) === JSON.stringify(expression)
+      && (field === 'durationMs' ? !control.until : !control.durationMs)) return control
     return {
       type: 'wait',
       id: control.id,
-      durationMs: { type: 'literal', value: durationMs },
+      [field]: expression,
     }
   })
   return result.changed ? { ...source, flow: result.control } : source
@@ -265,7 +268,9 @@ export function applyAutomationSourceCommand(
     case 'SET_CAPABILITY_INPUT': return {
       source: setCapabilityInput(source, command.nodeId, command.fieldName, command.expression),
     }
-    case 'SET_WAIT_DURATION': return { source: setWaitDuration(source, command.nodeId, command.durationMs) }
+    case 'SET_WAIT_EXPRESSION': return {
+      source: setWaitExpression(source, command.nodeId, command.field, command.expression),
+    }
   }
 }
 
