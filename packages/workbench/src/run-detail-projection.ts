@@ -1,8 +1,22 @@
-import { capabilityKey, type AutomationRevision, type NumenValue, type Run } from '@numen/core'
-import type { RunEventPage, RunExecutionDiagnosticsPage } from '@numen/scheduler'
+import {
+  capabilityKey,
+  type AutomationRevision,
+  type ControlSource,
+  type NumenValue,
+  type Run,
+} from '@numen/core'
 import type {
+  RunEventPage,
+  RunExecutionDiagnosticsPage,
+  RunInspection,
+  RunInstructionExecutionSummary,
+} from '@numen/scheduler'
+import type {
+  WorkbenchRunContextGroup,
   WorkbenchRunDetail,
   WorkbenchRunExecution,
+  WorkbenchRunFlowNode,
+  WorkbenchRunFlowStatus,
   WorkbenchRunTimelineEvent,
 } from './contracts.js'
 
@@ -10,6 +24,7 @@ export function projectWorkbenchRunDetail(
   run: Run,
   automationName: string,
   revision: AutomationRevision | undefined,
+  inspection: RunInspection,
   diagnostics: RunExecutionDiagnosticsPage,
   events: RunEventPage,
   encodeExecutionCursor: (cursor: NonNullable<RunExecutionDiagnosticsPage['nextCursor']>) => string,
@@ -18,6 +33,7 @@ export function projectWorkbenchRunDetail(
     (revision?.contractSnapshot.capabilities ?? []).map(capability => [capabilityKey(capability), capability.title]),
   )
   const instructions = revision?.compiledPlan.instructions ?? {}
+  const flow = projectRunFlow(revision, inspection.instructionExecutions)
   const counts = diagnostics.statusCounts
   return {
     run: {
@@ -46,6 +62,8 @@ export function projectWorkbenchRunDetail(
       cancelled: counts.CANCELLED,
       timedOut: counts.TIMED_OUT,
     },
+    flow,
+    context: projectRunContext(inspection.context),
     executions: diagnostics.items.map(({ execution, attempts }): WorkbenchRunExecution => {
       const instruction = instructions[execution.instructionId]
       return {
@@ -83,6 +101,183 @@ export function projectWorkbenchRunDetail(
       ...(events.nextCursor ? { nextCursor: events.nextCursor } : {}),
     },
   }
+}
+
+const flowStatusPriority: WorkbenchRunFlowStatus[] = [
+  'FAILED', 'CANCELLING', 'RUNNING', 'BLOCKED', 'WAITING', 'CANCELLED', 'COMPLETED', 'QUEUED', 'IDLE',
+]
+
+function projectRunFlow(
+  revision: AutomationRevision | undefined,
+  summaries: RunInstructionExecutionSummary[],
+): WorkbenchRunDetail['flow'] {
+  if (!revision) {
+    return {
+      root: {
+        id: '__missing-revision',
+        type: 'block',
+        title: 'Flow unavailable',
+        detail: 'The immutable Revision is no longer available.',
+        status: 'IDLE',
+        executionCount: 0,
+        children: [],
+      },
+      truncated: false,
+    }
+  }
+  const capabilityTitles = new Map(
+    revision.contractSnapshot.capabilities.map(capability => [capabilityKey(capability), capability.title]),
+  )
+  const byInstruction = new Map(summaries.map(summary => [summary.instructionId, summary]))
+  const budget = { remaining: 250, truncated: false }
+  const source = projectFlowNode(revision.source.flow, byInstruction, capabilityTitles, budget)!
+  const root: WorkbenchRunFlowNode = {
+    id: '__flow',
+    type: 'block',
+    title: 'Flow',
+    detail: `Revision ${revision.number} · IR ${revision.irVersion}`,
+    status: source.status,
+    executionCount: source.executionCount,
+    children: [source],
+  }
+  return { root, truncated: budget.truncated }
+}
+
+function projectFlowNode(
+  control: ControlSource,
+  summaries: ReadonlyMap<string, RunInstructionExecutionSummary>,
+  capabilityTitles: ReadonlyMap<string, string>,
+  budget: { remaining: number; truncated: boolean },
+  label?: string,
+): WorkbenchRunFlowNode | undefined {
+  if (budget.remaining <= 0) {
+    budget.truncated = true
+    return
+  }
+  budget.remaining -= 1
+  const children: WorkbenchRunFlowNode[] = []
+  const append = (child: ControlSource, childLabel?: string) => {
+    const projected = projectFlowNode(child, summaries, capabilityTitles, budget, childLabel)
+    if (projected) children.push(projected)
+  }
+  switch (control.type) {
+    case 'block':
+      for (const child of control.steps) append(child)
+      break
+    case 'if':
+      append(control.then, 'Then')
+      if (control.else) append(control.else, 'Else')
+      break
+    case 'parallel':
+    case 'race':
+      control.branches.forEach((branch, index) => append(branch, `Branch ${index + 1}`))
+      break
+    case 'foreach':
+      append(control.body, 'Iteration')
+      break
+  }
+  const summary = summaries.get(control.id)
+  const directStatus = summary ? flowStatusFromSummary(summary) : 'IDLE'
+  const status = highestFlowStatus([directStatus, ...children.map(child => child.status)])
+  return {
+    id: control.id,
+    type: control.type,
+    title: label ?? flowNodeTitle(control, capabilityTitles),
+    detail: flowNodeDetail(control),
+    status,
+    executionCount: totalExecutions(summary) + children.reduce((total, child) => total + child.executionCount, 0),
+    children,
+  }
+}
+
+function flowNodeTitle(control: ControlSource, capabilityTitles: ReadonlyMap<string, string>): string {
+  switch (control.type) {
+    case 'block': return 'Sequence'
+    case 'capability': return capabilityTitles.get(capabilityKey(control.capability)) ?? control.capability.id
+    case 'if': return 'Condition'
+    case 'wait': return 'Wait'
+    case 'parallel': return 'Parallel'
+    case 'race': return 'Race'
+    case 'foreach': return 'For each'
+  }
+}
+
+function flowNodeDetail(control: ControlSource): string {
+  switch (control.type) {
+    case 'block': return `${control.steps.length} ${control.steps.length === 1 ? 'step' : 'steps'}`
+    case 'capability': return `${capabilityKey(control.capability)} · ${Object.keys(control.connections ?? {}).length} connection bindings`
+    case 'if': return control.else ? 'Then / Else' : 'Then branch'
+    case 'wait': return control.until ? 'Until expression' : 'Duration expression'
+    case 'parallel': return `${control.branches.length} branches · wait for all`
+    case 'race': return `${control.branches.length} branches · first success`
+    case 'foreach': return `Concurrency ${control.concurrency ?? 1}`
+  }
+}
+
+function flowStatusFromSummary(summary: RunInstructionExecutionSummary): WorkbenchRunFlowStatus {
+  const counts = summary.statusCounts
+  if (counts.FAILED || counts.TIMED_OUT) return 'FAILED'
+  if (counts.CANCELLING) return 'CANCELLING'
+  if (counts.RUNNING) return 'RUNNING'
+  if (counts.BLOCKED) return 'BLOCKED'
+  if (counts.WAITING) return 'WAITING'
+  if (counts.CANCELLED) return 'CANCELLED'
+  if (counts.COMPLETED) return 'COMPLETED'
+  if (counts.RUNNABLE) return 'QUEUED'
+  return 'IDLE'
+}
+
+function highestFlowStatus(statuses: WorkbenchRunFlowStatus[]): WorkbenchRunFlowStatus {
+  return flowStatusPriority.find(status => statuses.includes(status)) ?? 'IDLE'
+}
+
+function totalExecutions(summary: RunInstructionExecutionSummary | undefined): number {
+  return summary ? Object.values(summary.statusCounts).reduce((total, count) => total + count, 0) : 0
+}
+
+const sensitiveContextKey = /(?:^|[-_])(authorization|cookie|credential|password|secret|token)(?:$|[-_])/i
+
+function projectRunContext(context: RunInspection['context']): WorkbenchRunContextGroup[] {
+  const names: WorkbenchRunContextGroup['name'][] = ['run', 'trigger', 'input', 'steps', 'vars', 'loop', 'error']
+  return names.map(name => {
+    const state = { remaining: 160, truncated: false }
+    return {
+      name,
+      value: projectContextValue(context[name], state, 0, name === 'run'),
+      truncated: state.truncated,
+    }
+  })
+}
+
+function projectContextValue(
+  value: NumenValue,
+  state: { remaining: number; truncated: boolean },
+  depth: number,
+  revealScalars: boolean,
+): NumenValue {
+  if (state.remaining <= 0 || depth > 6) {
+    state.truncated = true
+    return '[Truncated]'
+  }
+  state.remaining -= 1
+  if (typeof value === 'string') {
+    if (!revealScalars) return `[string · ${value.length} chars]`
+    if (value.length <= 1_000) return value
+    state.truncated = true
+    return `${value.slice(0, 1_000)}…`
+  }
+  if (value === null) return null
+  if (typeof value !== 'object') return revealScalars ? value : `[${typeof value}]`
+  if (Array.isArray(value)) {
+    if (value.length > 30) state.truncated = true
+    return value.slice(0, 30).map(item => projectContextValue(item, state, depth + 1, revealScalars))
+  }
+  const entries = Object.entries(value)
+  if (entries.length > 30) state.truncated = true
+  return Object.fromEntries(entries.slice(0, 30).map(([key, item]) => [
+    key,
+    sensitiveContextKey.test(key) ? '[Redacted]' : projectContextValue(item, state, depth + 1, revealScalars),
+  ]))
 }
 
 function instructionTitle(

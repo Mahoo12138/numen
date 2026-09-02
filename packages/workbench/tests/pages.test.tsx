@@ -7,6 +7,9 @@ import {
   coreWorkbenchPageDefinitions,
   coreWorkbenchPages,
   coreWorkbenchRunTimelineRoute,
+  coreWorkbenchRunContextRoute,
+  coreWorkbenchRunFlowRoute,
+  coreWorkbenchRunRoutes,
   coreWorkbenchRoutes,
   WorkbenchShell,
   type WorkbenchRouter,
@@ -32,10 +35,12 @@ describe('core Workbench Pages', () => {
       { id: 'numen:connections', path: '/connections' },
       { id: 'numen:plugins', path: '/plugins/installed' },
       { id: 'numen:runs', path: '/runs' },
+      { id: 'numen:run-context', path: '/runs/:id/context' },
+      { id: 'numen:run-flow', path: '/runs/:id/flow' },
       { id: 'numen:run-timeline', path: '/runs/:id/timeline' },
       { id: 'numen:system', path: '/system/overview' },
     ])
-    expect(coreWorkbenchPageDefinitions).toHaveLength(7)
+    expect(coreWorkbenchPageDefinitions).toHaveLength(9)
     await fiber.dispose()
     expect(root.webuiExtensions.listPages()).toEqual([])
     await root.fiber.dispose()
@@ -63,6 +68,13 @@ describe('core Workbench Pages', () => {
       system: { id: 'numen:system', version: 1 },
     })
     expect(coreWorkbenchRunTimelineRoute).toEqual({ id: 'numen:run-timeline', version: 1 })
+    expect(coreWorkbenchRunFlowRoute).toEqual({ id: 'numen:run-flow', version: 1 })
+    expect(coreWorkbenchRunContextRoute).toEqual({ id: 'numen:run-context', version: 1 })
+    expect(coreWorkbenchRunRoutes).toEqual({
+      flow: coreWorkbenchRunFlowRoute,
+      timeline: coreWorkbenchRunTimelineRoute,
+      context: coreWorkbenchRunContextRoute,
+    })
   })
 
   it('keeps Run detail routes inside the Runs activity', async () => {

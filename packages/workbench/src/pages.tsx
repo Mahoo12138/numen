@@ -14,7 +14,13 @@ import {
   type WorkbenchRunsIndex,
   type WorkbenchRunsQueryInput,
 } from './contracts.js'
-import { coreWorkbenchRoutes, coreWorkbenchRunTimelineRoute, type CoreWorkbenchActivityId } from './routes.js'
+import {
+  coreWorkbenchRoutes,
+  coreWorkbenchRunContextRoute,
+  coreWorkbenchRunFlowRoute,
+  coreWorkbenchRunTimelineRoute,
+  type CoreWorkbenchActivityId,
+} from './routes.js'
 import type { WorkbenchPageDefinition, WorkbenchPageProps } from './types.js'
 import { useConsoleQuery, type ConsoleQueryState } from './useConsoleQuery.js'
 import { useConnectionDesiredState, type ConnectionDesiredState } from './useConnectionDesiredState.js'
@@ -160,7 +166,7 @@ const RunsPage = defineSetupComponent<WorkbenchPageProps>('RunsPage', ['consoleC
     else delete position.cursor
   }
   const openRun = (runId: string) => {
-    props.navigation?.navigate(coreWorkbenchRunTimelineRoute, { parameters: { id: runId } })
+    props.navigation?.navigate(coreWorkbenchRunFlowRoute, { parameters: { id: runId } })
   }
   return () => (
     <main class="main-workbench core-page">
@@ -410,7 +416,9 @@ export const coreWorkbenchPageDefinitions: ReadonlyArray<WorkbenchPageDefinition
     chrome: { component: AutomationPageChrome, hasInspector: true, ownsPanel: true, ownsStatus: true },
   },
   { ...coreWorkbenchRoutes.runs, path: '/runs', title: 'Runs', component: RunsPage },
+  { ...coreWorkbenchRunFlowRoute, path: '/runs/:id/flow', title: 'Run', component: RunDetailPage },
   { ...coreWorkbenchRunTimelineRoute, path: '/runs/:id/timeline', title: 'Run', component: RunDetailPage },
+  { ...coreWorkbenchRunContextRoute, path: '/runs/:id/context', title: 'Run', component: RunDetailPage },
   { ...coreWorkbenchRoutes.connections, path: '/connections', title: 'Connections', component: ConnectionsPage },
   { ...coreWorkbenchRoutes.plugins, path: '/plugins/installed', title: 'Plugins', component: PluginsPage },
   { ...coreWorkbenchRoutes.system, path: '/system/overview', title: 'System', component: SystemPage },

@@ -28,6 +28,31 @@ const detail: WorkbenchRunDetail = {
     cancelled: 0,
     timedOut: 0,
   },
+  flow: {
+    truncated: false,
+    root: {
+      id: 'recovery-flow',
+      type: 'block',
+      title: 'Flow',
+      detail: '1 step',
+      status: 'FAILED',
+      executionCount: 1,
+      children: [{
+        id: 'notify-customer',
+        type: 'capability',
+        title: 'Send recovery notice',
+        detail: 'notifications:send@1 · 1 connection binding',
+        status: 'FAILED',
+        executionCount: 1,
+        children: [],
+      }],
+    },
+  },
+  context: [{ name: 'run', value: { id: 'run_11111111111111111111111111111111' }, truncated: false }, {
+    name: 'input', value: { customer: '[string · 18 chars]' }, truncated: false,
+  }, {
+    name: 'steps', value: { 'notify-customer': { message: '[string · 84 chars]' } }, truncated: false,
+  }],
   executions: [{
     id: 'exec_11111111111111111111111111111111',
     instructionId: 'notify-customer-with-an-intentionally-long-stable-identifier',
@@ -66,6 +91,7 @@ const detail: WorkbenchRunDetail = {
 describe('Run detail UI', () => {
   it('renders durable facts, Execution diagnostics, Attempts, and semantic Timeline paging', async () => {
     const markup = await renderToMarkup(<RunDetailContent
+      activeView="timeline"
       canShowNewerEvents
       canShowNewerExecutions
       onNewerEvents={vi.fn()}
@@ -73,6 +99,7 @@ describe('Run detail UI', () => {
       onOlderEvents={vi.fn()}
       onOlderExecutions={vi.fn()}
       onReload={vi.fn()}
+      onSelectView={vi.fn()}
       state={{ status: 'READY', data: detail }}
     />)
 
@@ -86,8 +113,33 @@ describe('Run detail UI', () => {
     expect(markup).not.toContain('resolvedInput')
   })
 
+  it('renders Flow structure and sanitized Context as separate stable views', async () => {
+    const shared = {
+      canShowNewerEvents: false,
+      canShowNewerExecutions: false,
+      onNewerEvents: vi.fn(),
+      onNewerExecutions: vi.fn(),
+      onOlderEvents: vi.fn(),
+      onOlderExecutions: vi.fn(),
+      onReload: vi.fn(),
+      onSelectView: vi.fn(),
+      state: { status: 'READY', data: detail } as const,
+    }
+    const flow = await renderToMarkup(<RunDetailContent {...shared} activeView="flow" />)
+    const context = await renderToMarkup(<RunDetailContent {...shared} activeView="context" />)
+
+    expect(flow).toContain('aria-current="page"')
+    expect(flow).toContain('Send recovery notice')
+    expect(flow).toContain('Failed')
+    expect(context).toContain('run.*')
+    expect(context).toContain('input.*')
+    expect(context).toContain('[string · 18 chars]')
+    expect(context).not.toContain('Execution diagnostics')
+  })
+
   it('renders loading, retryable error, and not-found states without fake diagnostics', async () => {
     const loading = await renderToMarkup(<RunDetailContent
+      activeView="flow"
       canShowNewerEvents={false}
       canShowNewerExecutions={false}
       onNewerEvents={vi.fn()}
@@ -95,9 +147,11 @@ describe('Run detail UI', () => {
       onOlderEvents={vi.fn()}
       onOlderExecutions={vi.fn()}
       onReload={vi.fn()}
+      onSelectView={vi.fn()}
       state={{ status: 'LOADING' }}
     />)
     const failed = await renderToMarkup(<RunDetailContent
+      activeView="flow"
       canShowNewerEvents={false}
       canShowNewerExecutions={false}
       onNewerEvents={vi.fn()}
@@ -105,9 +159,11 @@ describe('Run detail UI', () => {
       onOlderEvents={vi.fn()}
       onOlderExecutions={vi.fn()}
       onReload={vi.fn()}
+      onSelectView={vi.fn()}
       state={{ status: 'ERROR', message: 'Runtime disconnected.' }}
     />)
     const missing = await renderToMarkup(<RunDetailContent
+      activeView="flow"
       canShowNewerEvents={false}
       canShowNewerExecutions={false}
       onNewerEvents={vi.fn()}
@@ -115,6 +171,7 @@ describe('Run detail UI', () => {
       onOlderEvents={vi.fn()}
       onOlderExecutions={vi.fn()}
       onReload={vi.fn()}
+      onSelectView={vi.fn()}
       state={{ status: 'READY', data: null }}
     />)
 

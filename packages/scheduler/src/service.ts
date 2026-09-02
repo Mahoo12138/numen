@@ -78,6 +78,17 @@ export interface RunEventPage {
   nextCursor?: number
 }
 
+export interface RunInstructionExecutionSummary {
+  instructionId: string
+  statusCounts: Record<Execution['status'], number>
+  latestUpdatedAt: string
+}
+
+export interface RunInspection {
+  context: EvaluationBindings
+  instructionExecutions: RunInstructionExecutionSummary[]
+}
+
 interface RunRow {
   id: string
   automation_id: string
@@ -417,6 +428,48 @@ export class SchedulerService extends Service {
   getRun(runId: string): Run | undefined {
     const row = this.ctx.database.db.prepare('SELECT * FROM runs WHERE id = ?').get(runId) as RunRow | undefined
     return row ? mapRun(row) : undefined
+  }
+
+  inspectRun(runId: string): RunInspection | undefined {
+    const run = this.getRun(runId)
+    if (!run) return
+    const emptyCounts = (): Record<Execution['status'], number> => ({
+      RUNNABLE: 0,
+      RUNNING: 0,
+      WAITING: 0,
+      BLOCKED: 0,
+      COMPLETED: 0,
+      FAILED: 0,
+      CANCELLING: 0,
+      CANCELLED: 0,
+      TIMED_OUT: 0,
+    })
+    const summaries = new Map<string, RunInstructionExecutionSummary>()
+    const rows = this.ctx.database.db.prepare(`
+      SELECT instruction_id, status, COUNT(*) AS count, MAX(updated_at) AS latest_updated_at
+      FROM executions WHERE run_id = ?
+      GROUP BY instruction_id, status
+      ORDER BY instruction_id, status
+    `).all(runId) as Array<{
+      instruction_id: string
+      status: Execution['status']
+      count: number
+      latest_updated_at: string
+    }>
+    for (const row of rows) {
+      const summary = summaries.get(row.instruction_id) ?? {
+        instructionId: row.instruction_id,
+        statusCounts: emptyCounts(),
+        latestUpdatedAt: row.latest_updated_at,
+      }
+      summary.statusCounts[row.status] = row.count
+      if (row.latest_updated_at > summary.latestUpdatedAt) summary.latestUpdatedAt = row.latest_updated_at
+      summaries.set(row.instruction_id, summary)
+    }
+    return {
+      context: this.createBindings(run),
+      instructionExecutions: [...summaries.values()],
+    }
   }
 
   listRuns(limit = 20): Run[] {
@@ -776,7 +829,9 @@ export class SchedulerService extends Service {
       WHERE run_id = ? AND status = 'COMPLETED' AND output_json IS NOT NULL
       ORDER BY created_at, id
     `).all(run.id) as Array<{ instruction_id: string; output_json: string }>
-    for (const row of rows) steps[row.instruction_id] = parseJson(row.output_json)
+    for (const row of rows) {
+      if (!row.instruction_id.startsWith('__')) steps[row.instruction_id] = parseJson(row.output_json)
+    }
     if (execution) {
       const ancestors = this.ctx.database.db.prepare(`
         WITH RECURSIVE ancestors(id, parent_execution_id, instruction_id, output_json, status, depth) AS (
@@ -795,7 +850,9 @@ export class SchedulerService extends Service {
         instruction_id: string
         output_json: string
       }>
-      for (const row of ancestors) steps[row.instruction_id] = parseJson(row.output_json)
+      for (const row of ancestors) {
+        if (!row.instruction_id.startsWith('__')) steps[row.instruction_id] = parseJson(row.output_json)
+      }
     }
     return {
       run: {

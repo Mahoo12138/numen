@@ -103,6 +103,33 @@ export interface WorkbenchRunDetailQueryInput {
   eventCursor?: number
 }
 
+export type WorkbenchRunFlowStatus =
+  | 'IDLE'
+  | 'QUEUED'
+  | 'RUNNING'
+  | 'WAITING'
+  | 'BLOCKED'
+  | 'COMPLETED'
+  | 'FAILED'
+  | 'CANCELLING'
+  | 'CANCELLED'
+
+export interface WorkbenchRunFlowNode {
+  id: string
+  type: 'block' | 'capability' | 'if' | 'wait' | 'parallel' | 'race' | 'foreach'
+  title: string
+  detail: string
+  status: WorkbenchRunFlowStatus
+  executionCount: number
+  children: WorkbenchRunFlowNode[]
+}
+
+export interface WorkbenchRunContextGroup {
+  name: 'run' | 'trigger' | 'input' | 'steps' | 'vars' | 'loop' | 'error'
+  value: NumenValue
+  truncated: boolean
+}
+
 export interface WorkbenchRunExecutionAttempt {
   id: string
   number: number
@@ -167,6 +194,11 @@ export interface WorkbenchRunDetail {
     cancelled: number
     timedOut: number
   }
+  flow: {
+    root: WorkbenchRunFlowNode
+    truncated: boolean
+  }
+  context: WorkbenchRunContextGroup[]
   executions: WorkbenchRunExecution[]
   nextExecutionCursor?: string
   timeline: {
@@ -174,6 +206,22 @@ export interface WorkbenchRunDetail {
     items: WorkbenchRunTimelineEvent[]
     nextCursor?: number
   }
+}
+
+export const workbenchCancelRunActionRef = {
+  id: 'numen:run-cancel',
+  version: 1,
+} as const satisfies ConsoleProcedureRef
+
+export interface WorkbenchCancelRunInput {
+  runId: string
+}
+
+export interface WorkbenchCancelRunResult {
+  runId: string
+  status: WorkbenchRunStatus
+  cancelReason?: CancellationReason
+  finishedAt?: string
 }
 
 export const workbenchConnectionsIndexQueryRef = {

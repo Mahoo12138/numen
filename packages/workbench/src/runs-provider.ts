@@ -1,12 +1,20 @@
 import '@numen/automation'
 import '@numen/scheduler'
-import type { ConsoleQueryDefinition } from '@numen/console'
+import type { NumenValue } from '@numen/core'
+import {
+  ConsoleProcedureError,
+  type ConsoleActionDefinition,
+  type ConsoleQueryDefinition,
+} from '@numen/console'
 import type { ExecutionListCursor, RunListCursor } from '@numen/scheduler'
 import type { Context } from 'cordis'
 import z from 'schemastery'
 import {
   workbenchRunDetailQueryRef,
+  workbenchCancelRunActionRef,
   workbenchRunsIndexQueryRef,
+  type WorkbenchCancelRunInput,
+  type WorkbenchCancelRunResult,
   type WorkbenchRunDetail,
   type WorkbenchRunsIndex,
 } from './contracts.js'
@@ -72,6 +80,23 @@ const cancellationReason = z.union([
   'USER', 'PARENT', 'RACE', 'TIMEOUT', 'PROVIDER_DISPOSED',
   'CONNECTION_DISPOSED', 'RECONFIGURED', 'SHUTDOWN', 'CREDENTIAL_ROTATED',
 ])
+
+export const workbenchCancelRunAction: ConsoleActionDefinition<
+  WorkbenchCancelRunInput,
+  WorkbenchCancelRunResult
+> = {
+  ...workbenchCancelRunActionRef,
+  kind: 'action',
+  title: 'Cancel Run',
+  description: 'Persist user cancellation intent and propagate it through the Run execution scope.',
+  input: z.object({ runId: z.string().required() }),
+  output: z.object({
+    runId: z.string().required(),
+    status: runStatus,
+    cancelReason: cancellationReason,
+    finishedAt: z.string(),
+  }),
+}
 
 export const workbenchRunsIndexQuery: ConsoleQueryDefinition<Record<string, unknown>, WorkbenchRunsIndex> = {
   ...workbenchRunsIndexQueryRef,
@@ -146,6 +171,12 @@ export const workbenchRunDetailQuery: ConsoleQueryDefinition<Record<string, unkn
       cancelled: z.number().required(),
       timedOut: z.number().required(),
     }).required(),
+    flow: z.any<WorkbenchRunDetail['flow']>().required(),
+    context: z.array(z.object({
+      name: z.union(['run', 'trigger', 'input', 'steps', 'vars', 'loop', 'error']).required(),
+      value: z.any<NumenValue>(),
+      truncated: z.boolean().required(),
+    })).required(),
     executions: z.array(z.object({
       id: z.string().required(),
       instructionId: z.string().required(),
@@ -224,6 +255,7 @@ export function workbenchRunsProviderPlugin(ctx: Context): void {
       if (!run) return null
       const automation = ctx.automations.get(run.automationId)
       const revision = ctx.automations.getRevision(run.revisionId)
+      const inspection = ctx.scheduler.inspectRun(run.id)!
       const diagnostics = ctx.scheduler.listExecutionDiagnosticsPage(
         run.id,
         input.executionLimit,
@@ -234,10 +266,25 @@ export function workbenchRunsProviderPlugin(ctx: Context): void {
         run,
         automation?.name ?? 'Unknown automation',
         revision,
+        inspection,
         diagnostics,
         events,
         encodeCursor,
       )
+    },
+  })
+  ctx.console.provideAction(ctx, workbenchCancelRunActionRef, {
+    action({ input }: { input: WorkbenchCancelRunInput }): WorkbenchCancelRunResult {
+      if (!ctx.scheduler.getRun(input.runId)) {
+        throw new ConsoleProcedureError(404, 'RUN_NOT_FOUND', 'The Run was not found')
+      }
+      const run = ctx.scheduler.cancelRun(input.runId, 'USER')
+      return {
+        runId: run.id,
+        status: run.status,
+        ...(run.cancelReason ? { cancelReason: run.cancelReason } : {}),
+        ...(run.finishedAt ? { finishedAt: run.finishedAt } : {}),
+      }
     },
   })
 }

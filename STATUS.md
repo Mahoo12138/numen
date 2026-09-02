@@ -1,6 +1,6 @@
 # Numen Development Status
 
-> Last updated: 2026-09-01
+> Last updated: 2026-09-02
 >
 > Architecture baseline: V1 Draft in [`docs/`](docs/README.md)
 
@@ -187,12 +187,13 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Connection desired-state Action, optimistic UI, and conflict recovery lifecycle
 - [x] Connection create/update/delete Actions and Adapter-driven configuration lifecycle
 - [x] Run detail Query, semantic timeline, and Execution/Attempt diagnostic lifecycle
+- [x] Run Flow/Context inspection projections, stable detail routes, and durable cancellation Action lifecycle
 
 ## Next
 
-1. Run Context/Flow projections and cancellation Action
-2. Reuse the unified expression field for If conditions and ForEach item configuration
-3. Credential metadata/create/rotate/delete management UI
+1. Reuse the unified expression field for If conditions and ForEach item configuration
+2. Credential metadata/create/rotate/delete management UI
+3. Plugin-owned Control Registry and Automation activation controls
 
 ## Design Review
 
@@ -217,13 +218,14 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - **Connection desired-state Action seam — pass:** Workbench defines one typed Action and an optional Provider Adapter maps it to `ConnectionService.setEnabled`; the durable `enabled + generation` pair remains authoritative and live Runtime status stays a separate projection. The Vue module owns only abortable in-flight intent, confirmed-generation overlay, and recoverable public errors, then reconciles through the existing typed invalidation/query path without introducing a second Connection store.
 - **Connection configuration seam — pass:** `ConnectionService` remains the deep module that validates Adapter Schemas and Credential compatibility, persists generation-fenced configuration, and reconciles Runtime stop/recreate after create, update, or delete. Workbench exposes three typed Actions plus a metadata-only Adapter/Credential Query projection; one shared Schemastery-to-`WorkbenchSchemaField` adapter feeds both Automation and Connection Literal Renderers, so Pages never import Schemastery or secret material. The Vue configuration pane owns only transient form state and explicit inline deletion confirmation.
 - **Run diagnostics seam — pass:** Scheduler owns bounded keyset pages over durable Run, Execution, Attempt, and Journal truth; the optional Workbench Provider Adapter composes those pages into a presentation-safe projection. Journal events remain semantic facts rather than logs, retry Attempts remain children of one Execution, and raw event payloads or resolved inputs/outputs never cross the Console boundary. The Vue Page owns only independent pagination cursors and navigation, so it introduces no parallel execution state.
+- **Run inspection and cancellation seam — pass:** Scheduler exposes one `inspectRun` interface for rebuildable bindings and per-instruction durable status aggregation while retaining cancellation-state ownership. Workbench projects immutable Source into a bounded semantic Flow, reduces Context payload scalars to type summaries with sensitive-key redaction, and maps one typed cancel Action to the existing durable intent propagation. Vue owns only route selection and an abortable in-flight mutation state; Query invalidation remains the reconciliation path. Browser QA covers Flow/Timeline/Context routes, cancellation convergence, secret-free Context output, zero console warnings/errors, and 390px no-overflow rendering.
 
 ## Verification Baseline
 
 ```text
 Typecheck: passing
 Build: passing
-Tests: 45 files, 176 tests passing
+Tests: 45 files, 177 tests passing
 CLI config validate: passing
 CLI doctor: passing
 SQLite schema migration: v10
@@ -245,7 +247,7 @@ pnpm dev
 - The current Scheduler executes the Core IR subset emitted by the compiler, including retry, timeout, cancellation, recovery, and structured concurrency.
 - Parallel, first-success Race, and bounded ForEach use durable Execution scopes with interruptible concurrent dispatch; Try/Finally control flow remains planned work.
 - Typed Console transports, browser sessions, Browser Cordis clients, frontend extension registries, atomic Entry generations, authenticated revision-fenced asset delivery, and Browser Entry reconciliation/rollback are operational. Generated bootstrap tokens and sessions rotate on restart; the CLI prints a fragment-only Workbench launch URL only with explicit `--print-launch-url` authorization.
-- The responsive Workbench shell, seven core Page entries, stable browser Route/Page reconciliation, a secret-free production bootstrap, and authenticated core Entry loading are operational through the default Runtime. Home, Automations, the keyset-paginated Runs index, bounded Run timeline/diagnostics detail, and the desired/runtime-separated Connections index display live data and refresh through coalesced typed invalidations without replacing server truth in the browser. Automation authoring now supports registry-driven Capability/control insertion, plugin-owned Schema Literal renderers, unified Literal/Reference/Template/structured Call inputs, scope-aware typed Magic Variables, named Connection bindings, expression-backed Wait duration/until editing, bounded undo/redo, debounced full-document autosave, explicit conflict recovery, immutable Revision publish, and source-linked diagnostics. Run Context/Flow projections and cancellation controls remain planned. Automation `input.*` and `vars.*` remain manually addressable because no declaration schema exists yet; a plugin-owned Control Registry, If/ForEach expression configuration, compare/save-copy conflict options, and activation controls remain planned.
+- The responsive Workbench shell, nine registered core Page routes, stable browser Route/Page reconciliation, a secret-free production bootstrap, and authenticated core Entry loading are operational through the default Runtime. Home, Automations, the keyset-paginated Runs index, bounded Run Flow/Timeline/Context detail with cancellation controls, and the desired/runtime-separated Connections index display live data and refresh through coalesced typed invalidations without replacing server truth in the browser. Automation authoring now supports registry-driven Capability/control insertion, plugin-owned Schema Literal renderers, unified Literal/Reference/Template/structured Call inputs, scope-aware typed Magic Variables, named Connection bindings, expression-backed Wait duration/until editing, bounded undo/redo, debounced full-document autosave, explicit conflict recovery, immutable Revision publish, and source-linked diagnostics. Automation `input.*` and `vars.*` remain manually addressable because no declaration schema exists yet; a plugin-owned Control Registry, If/ForEach expression configuration, compare/save-copy conflict options, and activation controls remain planned.
 - Manual Runs and event Trigger subscriptions are supported. State Trigger transition detection, filtering, debounce, and throttle remain planned work.
 - Connection desired state, generation-fenced create/update/delete/enable Actions, Adapter Schema configuration UI, generation-fenced Runtime recreation, and metadata-only Credential selection are operational. Credential creation/rotation/deletion UI and automatic reconnect policy remain planned work.
 - Credential payloads use authenticated encryption with environment-provided keys; key-ring migration and external vault providers remain planned work.

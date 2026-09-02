@@ -11,6 +11,7 @@ import z from 'schemastery'
 import { afterEach, describe, expect, it } from 'vitest'
 import { ResourceService } from '../../resources/src/index.js'
 import {
+  workbenchCancelRunAction,
   workbenchRunDetailQuery,
   workbenchRunsIndexQuery,
   workbenchRunsProviderPlugin,
@@ -61,6 +62,7 @@ describe('Workbench Run detail Provider', () => {
     await root.plugin(SchedulerService, { autoDispatch: false })
     await root.plugin(ConsoleService)
     root.console.define(root, workbenchRunDetailQuery)
+    root.console.define(root, workbenchCancelRunAction)
     root.console.define(root, workbenchRunsIndexQuery)
     const providerPlugin = (ctx: Context) => workbenchRunsProviderPlugin(ctx)
     providerPlugin.inject = ['console', 'automations', 'scheduler']
@@ -96,6 +98,18 @@ describe('Workbench Run detail Provider', () => {
         status: 'COMPLETED',
       },
       executionSummary: { total: 2, attempts: 2, completed: 2, failed: 0 },
+      flow: {
+        root: expect.objectContaining({
+          title: 'Flow',
+          status: 'COMPLETED',
+          executionCount: 1,
+          children: [expect.objectContaining({ title: 'Record value', status: 'COMPLETED' })],
+        }),
+      },
+      context: expect.arrayContaining([
+        expect.objectContaining({ name: 'run', value: expect.objectContaining({ id: run.id }) }),
+        expect.objectContaining({ name: 'steps', value: { record: { value: '[string · 21 chars]' } } }),
+      ]),
       executions: expect.arrayContaining([
         expect.objectContaining({
           instructionId: 'record',
@@ -116,6 +130,18 @@ describe('Workbench Run detail Provider', () => {
       },
     })
     expect(JSON.stringify(detail)).not.toContain('private payload value')
+
+    const cancellable = root.scheduler.startManual(created.automation.id, { password: 'never-project-me' })
+    expect(await root.console.action(workbenchCancelRunAction, { runId: cancellable.id }, request())).toMatchObject({
+      runId: cancellable.id,
+      status: 'CANCELLED',
+      cancelReason: 'USER',
+    })
+    expect(root.scheduler.getRun(cancellable.id)).toMatchObject({ status: 'CANCELLED', cancelReason: 'USER' })
+    await expect(root.console.action(workbenchCancelRunAction, { runId: 'run_missing' }, request())).rejects.toMatchObject({
+      status: 404,
+      code: 'RUN_NOT_FOUND',
+    })
 
     const paged = await root.console.query(workbenchRunDetailQuery, {
       runId: run.id,
