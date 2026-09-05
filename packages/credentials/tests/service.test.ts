@@ -1,3 +1,4 @@
+import { ConnectionService } from '../../connections/src/service.js'
 import { DatabaseService } from '@numen/database'
 import { Context } from 'cordis'
 import { randomBytes } from 'node:crypto'
@@ -8,6 +9,9 @@ import z from 'schemastery'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   CredentialConflictError,
+  CredentialInUseError,
+  CredentialNotFoundError,
+  CredentialValidationError,
   CredentialService,
   type CredentialTypeDefinition,
 } from '../src/index.js'
@@ -100,4 +104,50 @@ describe('CredentialService', () => {
     expect(() => root.credentials.readSecretSnapshot(credential.id)).toThrow()
     await root.fiber.dispose()
   })
+  it('fences deletion by secret version and protects disabled Connection references', async () => {
+    const root = await createContext(':memory:', randomBytes(32).toString('base64'))
+    await root.plugin(ConnectionService)
+    const credential = root.credentials.create('Bound token', type, { token: 'secret' })
+    const adapter = { id: 'test:api', version: 1, title: 'API', credentialType: type.id, config: z.object({}) }
+    root.connections.defineAdapter(root, adapter)
+    const connection = root.connections.create({ name: 'API', adapter, credentialId: credential.id, config: {} })
+    expect(root.credentials.get(credential.id)?.connectionCount).toBe(1)
+    expect(() => root.credentials.remove(credential.id, 2)).toThrow(CredentialConflictError)
+    expect(() => root.credentials.remove(credential.id, 1)).toThrow(CredentialInUseError)
+    expect(root.credentials.readSecretSnapshot(credential.id).value).toEqual({ token: 'secret' })
+    root.connections.remove(connection.id, connection.generation)
+    root.credentials.rotate(credential.id, 1, { token: 'rotated' })
+    expect(() => root.credentials.remove(credential.id, 1)).toThrow(CredentialConflictError)
+    const changes: string[] = []
+    root.on('numen/credential-change', id => { changes.push(id) })
+    root.credentials.remove(credential.id, 2)
+    expect(changes).toEqual([credential.id])
+    expect(root.credentials.get(credential.id)).toBeUndefined()
+    expect(() => root.credentials.remove(credential.id, 2)).toThrow(CredentialNotFoundError)
+    await root.fiber.dispose()
+  })
+
+  it('owns type catalog notifications by Effect and keeps validation errors free of secret values', async () => {
+    const root = await createContext(':memory:', randomBytes(32).toString('base64'))
+    let changes = 0
+    root.on('numen/credential-type-change', () => { changes += 1 })
+    const plugin = (ctx: Context) => {
+      ctx.credentials.defineType(ctx, {
+        id: 'test:strict', version: 1, title: 'Strict',
+        secret: z.object({ token: z.string().pattern(/^allowed$/).required() }),
+      })
+    }
+    plugin.inject = ['credentials']
+    const owner = await root.plugin(plugin)
+    expect(root.credentials.listTypes().map(item => item.id)).toContain('test:strict')
+    expect(() => root.credentials.create('Invalid', { id: 'test:strict', version: 1 }, { token: 'must-never-leak' }))
+      .toThrow(CredentialValidationError)
+    try { root.credentials.create('Invalid', { id: 'test:strict', version: 1 }, { token: 'must-never-leak' }) }
+    catch (error) { expect(String(error)).not.toContain('must-never-leak') }
+    await owner.dispose()
+    expect(root.credentials.listTypes().map(item => item.id)).not.toContain('test:strict')
+    expect(changes).toBe(2)
+    await root.fiber.dispose()
+  })
+
 })

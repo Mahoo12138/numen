@@ -39,6 +39,7 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Connection Runtime open/close lifecycle with generation-fenced recreation
 - [x] Encrypted Credential payload storage with metadata-only reads and versioned rotation
 - [x] Credential-to-Connection fixed runtime snapshots and rotation-driven recreation
+- [x] Effect-owned Credential type catalog notifications, metadata usage counts, version-fenced deletion, and Connection reference protection
 - [x] Content-addressed local Resource Store with atomic deduplication
 - [x] Resource STAGED/COMMITTED/DELETING/GONE lifecycle, Owner, Lease, and recovery GC
 - [x] Scheduler ResourceRef output validation and transactional Execution ownership
@@ -227,7 +228,7 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 ```text
 Typecheck: passing
 Build: passing
-Tests: 45 files, 180 tests passing
+Tests: 45 files, 182 tests passing
 CLI config validate: passing
 CLI doctor: passing
 SQLite schema migration: v10

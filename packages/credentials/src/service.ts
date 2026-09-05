@@ -19,6 +19,7 @@ export interface CredentialMetadata {
   name: string
   type: CredentialTypeRef
   configured: true
+  connectionCount: number
   keyId: string
   secretVersion: number
   typeAvailable: boolean
@@ -49,6 +50,7 @@ interface CredentialRow {
   name: string
   type_id: string
   type_version: number
+  connection_count?: number
   ciphertext: Buffer
   nonce: Buffer
   key_id: string
@@ -59,6 +61,25 @@ interface CredentialRow {
 
 export class CredentialNotFoundError extends Error {
   override name = 'CredentialNotFoundError'
+}
+
+export class CredentialInUseError extends Error {
+  override name = 'CredentialInUseError'
+  constructor(public readonly connectionCount: number) {
+    super('credential is still referenced by Connections')
+  }
+}
+
+export class CredentialValidationError extends Error {
+  override name = 'CredentialValidationError'
+}
+
+export class CredentialTypeUnavailableError extends Error {
+  override name = 'CredentialTypeUnavailableError'
+}
+
+export class CredentialKeyUnavailableError extends Error {
+  override name = 'CredentialKeyUnavailableError'
 }
 
 export class CredentialConflictError extends Error {
@@ -76,6 +97,7 @@ declare module 'cordis' {
 
   interface Events {
     'numen/credential-change'(credentialId: string, secretVersion: number): void
+    'numen/credential-type-change'(): void
   }
 }
 
@@ -135,10 +157,16 @@ export class CredentialService extends Service {
     if (this.types.has(key)) throw new Error(`credential type already defined: ${key}`)
     return owner.effect(() => {
       this.types.set(key, definition)
+      this.ctx.emit('numen/credential-type-change')
       return () => {
         this.types.delete(key)
+        this.ctx.emit('numen/credential-type-change')
       }
     }, `credentials.defineType(${JSON.stringify(key)})`)
+  }
+
+  listTypes(): CredentialTypeDefinition[] {
+    return [...this.types.values()].sort((left, right) => typeKey(left).localeCompare(typeKey(right)))
   }
 
   create(
@@ -182,12 +210,16 @@ export class CredentialService extends Service {
   }
 
   get(credentialId: string): CredentialMetadata | undefined {
-    const row = this.ctx.database.db.prepare('SELECT * FROM credentials WHERE id = ?').get(credentialId) as CredentialRow | undefined
+    const row = this.ctx.database.db.prepare(`SELECT credentials.*,
+      (SELECT COUNT(*) FROM connections WHERE credential_id = credentials.id) AS connection_count
+      FROM credentials WHERE id = ?`).get(credentialId) as CredentialRow | undefined
     return row ? this.mapMetadata(row) : undefined
   }
 
   list(): CredentialMetadata[] {
-    return (this.ctx.database.db.prepare('SELECT * FROM credentials ORDER BY updated_at DESC, id').all() as CredentialRow[])
+    return (this.ctx.database.db.prepare(`SELECT credentials.*,
+      (SELECT COUNT(*) FROM connections WHERE credential_id = credentials.id) AS connection_count
+      FROM credentials ORDER BY updated_at DESC, id`).all() as CredentialRow[])
       .map(row => this.mapMetadata(row))
   }
 
@@ -240,6 +272,21 @@ export class CredentialService extends Service {
     return this.get(credentialId)!
   }
 
+  remove(credentialId: string, expectedSecretVersion: number): void {
+    this.ctx.database.transaction(() => {
+      const current = this.requireRow(credentialId)
+      if (current.secret_version !== expectedSecretVersion) {
+        throw new CredentialConflictError(expectedSecretVersion, current.secret_version)
+      }
+      const usage = this.ctx.database.db.prepare('SELECT COUNT(*) AS count FROM connections WHERE credential_id = ?')
+        .get(credentialId) as { count: number }
+      if (usage.count) throw new CredentialInUseError(usage.count)
+      this.ctx.database.db.prepare('DELETE FROM credentials WHERE id = ? AND secret_version = ?')
+        .run(credentialId, expectedSecretVersion)
+    })
+    this.ctx.emit('numen/credential-change', credentialId, expectedSecretVersion)
+  }
+
   health(): CredentialHealth {
     const credentials = this.list()
     return {
@@ -252,7 +299,7 @@ export class CredentialService extends Service {
 
   private requireType(ref: CredentialTypeRef): CredentialTypeDefinition {
     const definition = this.types.get(typeKey(ref))
-    if (!definition) throw new Error(`credential type not found: ${typeKey(ref)}`)
+    if (!definition) throw new CredentialTypeUnavailableError(`credential type not found: ${typeKey(ref)}`)
     return definition
   }
 
@@ -261,9 +308,14 @@ export class CredentialService extends Service {
     input: Record<string, NumenValue>,
   ): Record<string, NumenValue> {
     assertSecret(input)
-    const secret = definition.secret(input)
-    assertSecret(secret)
-    return secret
+    try {
+      const secret = definition.secret(input)
+      assertSecret(secret)
+      return secret
+    } catch {
+      // Schema errors can include the submitted payload; never propagate it across a public boundary.
+      throw new CredentialValidationError('credential secret does not match its type contract')
+    }
   }
 
   private requireRow(credentialId: string): CredentialRow {
@@ -276,7 +328,7 @@ export class CredentialService extends Service {
     identity: Pick<CredentialRow, 'id' | 'type_id' | 'type_version' | 'key_id' | 'secret_version'>,
     secret: Record<string, NumenValue>,
   ): { ciphertext: Buffer; nonce: Buffer } {
-    if (!this.masterKey) throw new Error(`credential master key is unavailable; set ${this.masterKeyEnv}`)
+    if (!this.masterKey) throw new CredentialKeyUnavailableError(`credential master key is unavailable; set ${this.masterKeyEnv}`)
     const nonce = randomBytes(12)
     const cipher = createCipheriv('aes-256-gcm', this.masterKey, nonce)
     cipher.setAAD(aad(identity))
@@ -285,7 +337,7 @@ export class CredentialService extends Service {
   }
 
   private decrypt(row: CredentialRow): Record<string, NumenValue> {
-    if (!this.masterKey) throw new Error(`credential master key is unavailable; set ${this.masterKeyEnv}`)
+    if (!this.masterKey) throw new CredentialKeyUnavailableError(`credential master key is unavailable; set ${this.masterKeyEnv}`)
     if (row.key_id !== this.keyId) throw new Error(`credential key is unavailable: ${row.key_id}`)
     if (row.ciphertext.length < 16) throw new Error('credential ciphertext is invalid')
     const body = row.ciphertext.subarray(0, -16)
@@ -306,6 +358,7 @@ export class CredentialService extends Service {
       name: row.name,
       type,
       configured: true,
+      connectionCount: row.connection_count ?? 0,
       keyId: row.key_id,
       secretVersion: row.secret_version,
       typeAvailable: this.types.has(typeKey(type)),
