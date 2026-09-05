@@ -286,6 +286,52 @@ describe('local Automation Draft document', () => {
     }).source).toBe(until)
   })
 
+  it('edits nested control expressions without changing branches and preserves history through autosave', () => {
+    const nested: AutomationSource = {
+      triggers: [],
+      flow: {
+        type: 'foreach', id: 'each', concurrency: 3,
+        items: { type: 'literal', value: [] },
+        body: { type: 'block', id: 'body', steps: [{
+          type: 'if', id: 'check', condition: { type: 'literal', value: true },
+          then: { type: 'block', id: 'yes', steps: [] },
+          else: { type: 'block', id: 'no', steps: [] },
+        }] },
+      },
+    }
+    let state = reduceAutomationDraftDocument(loadedState(), { type: 'SERVER', automationId: 'automation-1', draft: draft(2, nested) })
+    state = reduceAutomationDraftDocument(state, { type: 'EDIT', command: {
+      type: 'SET_CONTROL_EXPRESSION', nodeId: 'check', field: 'condition',
+      expression: { type: 'call', function: 'core:equal', arguments: [
+        { type: 'ref', path: 'loop.item' }, { type: 'literal', value: 'ready' },
+      ] },
+    } })
+    const conditionSource = state.document!.source
+    state = reduceAutomationDraftDocument(state, { type: 'SAVE_REQUEST' })
+    state = reduceAutomationDraftDocument(state, { type: 'EDIT', command: {
+      type: 'SET_CONTROL_EXPRESSION', nodeId: 'each', field: 'items',
+      expression: { type: 'ref', path: 'input.items' },
+    } })
+    state = reduceAutomationDraftDocument(state, { type: 'SAVE_SUCCESS', result: { draft: draft(3, conditionSource) } })
+    expect(state.savePhase).toBe('DIRTY')
+    expect(state.document?.source.flow).toMatchObject({
+      concurrency: 3, items: { type: 'ref', path: 'input.items' },
+      body: { steps: [{ condition: { type: 'call' }, then: { id: 'yes' }, else: { id: 'no' } }] },
+    })
+    state = reduceAutomationDraftDocument(state, { type: 'UNDO' })
+    expect(state.document?.source).toEqual(conditionSource)
+    state = reduceAutomationDraftDocument(state, { type: 'UNDO' })
+    expect(state.document?.source).toEqual(nested)
+    state = reduceAutomationDraftDocument(state, { type: 'REDO' })
+    expect(state.document?.source).toEqual(conditionSource)
+    for (const nodeId of ['missing', 'each']) {
+      expect(applyAutomationSourceCommand(nested, {
+        type: 'SET_CONTROL_EXPRESSION', nodeId, field: 'condition', expression: { type: 'literal', value: false },
+      }).source).toBe(nested)
+    }
+    expect(nested.flow).toMatchObject({ items: { type: 'literal', value: [] } })
+  })
+
   it('maintains bounded full-document undo and redo history across saved edits', () => {
     let state = loadedState()
     state = reduceAutomationDraftDocument(state, { type: 'EDIT', command: { type: 'INSERT', item: waitItem } })

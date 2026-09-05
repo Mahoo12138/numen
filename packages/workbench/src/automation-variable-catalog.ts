@@ -83,6 +83,9 @@ export function targetValueTypes(field: WorkbenchAutomationInputField): Set<Work
     }) ?? [])
     return types
   }
+  if (field.type === 'json' && field.schemaType === 'array') return new Set(['array'])
+  if (field.type === 'json' && field.schemaType === 'object') return new Set(['object'])
+  if (field.type === 'json' && field.schemaType === 'null') return new Set(['null'])
   if (field.type === 'json') return new Set(['string', 'number', 'boolean', 'object', 'array', 'null', 'unknown'])
   return new Set([field.type])
 }

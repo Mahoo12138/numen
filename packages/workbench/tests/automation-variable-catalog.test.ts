@@ -141,4 +141,25 @@ describe('scope-aware Automation variable projection', () => {
       cursor: 25,
     })
   })
+  it('offers only visible array outputs for ForEach items and boolean outputs for If conditions', () => {
+    const typedCatalog: WorkbenchAutomationVariableCatalog = { definitions: [{
+      ...catalog.definitions[1]!, outputFields: [
+        { path: ['items'], label: 'Items', valueType: 'array', schemaType: 'array' },
+        { path: ['ready'], label: 'Ready', valueType: 'boolean', schemaType: 'boolean' },
+        { path: ['name'], label: 'Name', valueType: 'string', schemaType: 'string' },
+      ],
+    }] }
+    const source: AutomationSource = { triggers: [], flow: {
+      type: 'block', id: 'root', steps: [capability('before'), {
+        type: 'foreach', id: 'each', items: { type: 'literal', value: [] },
+        body: { type: 'block', id: 'body', steps: [capability('inside')] },
+      }, capability('later')],
+    } }
+    for (const [type, schemaType, path] of [['json', 'array', 'steps.before.items'], ['boolean', 'boolean', 'steps.before.ready']] as const) {
+      expect(projectMagicVariables({ source, nodeId: 'each', catalog: typedCatalog, mode: 'reference',
+        field: { name: 'value', label: 'Value', type, schemaType, required: true },
+      }).map(item => item.path)).toEqual([path])
+    }
+  })
+
 })

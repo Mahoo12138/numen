@@ -96,8 +96,7 @@ function compatibleFunctions(field: WorkbenchAutomationInputField): CoreExpressi
   const targets = targetValueTypes(field)
   return coreExpressionFunctions
     .filter(definition => (
-      field.type === 'json'
-      || definition.outputType === 'unknown'
+      definition.outputType === 'unknown'
       || targets.has(definition.outputType)
     ))
     .sort((left, right) => Number(left.outputType === 'unknown') - Number(right.outputType === 'unknown'))

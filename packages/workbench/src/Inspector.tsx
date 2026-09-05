@@ -34,6 +34,7 @@ export interface InspectorProps {
   schemaUI?: SchemaUIResolver
   onCapabilityConnectionChange?(nodeId: string, slotName: string, connectionId?: string): void
   onCapabilityInputChange?(nodeId: string, fieldName: string, expression?: ValueExpr): void
+  onControlExpressionChange?(nodeId: string, field: 'condition' | 'items', expression: ValueExpr): void
   onWaitExpressionChange?(nodeId: string, field: 'durationMs' | 'until', expression: ValueExpr): void
   onClose(): void
 }
@@ -149,6 +150,7 @@ export function Inspector({
   schemaUI,
   onCapabilityConnectionChange,
   onCapabilityInputChange,
+  onControlExpressionChange,
   onWaitExpressionChange,
   onClose,
 }: InspectorProps) {
@@ -164,6 +166,8 @@ export function Inspector({
     problem.source?.fieldPath === waitField
     || (problem.code === 'WAIT_SOURCE_INVALID' && !problem.source?.fieldPath)
   ))
+  const controlField = control?.type === 'if' ? 'condition' : 'items'
+  const controlProblem = stepProblems.find(problem => problem.source?.fieldPath?.split('.')[0] === controlField)
   const capabilityDefinition = control?.type === 'capability'
     ? catalog?.items.find((item): item is Extract<WorkbenchAutomationInsertItem, { kind: 'capability' }> => item.kind === 'capability'
       && item.capability.id === control.capability.id
@@ -223,6 +227,40 @@ export function Inspector({
             <div><dt>Source ID</dt><dd>{step.sourceId}</dd></div>
             <div><dt>Kind</dt><dd>wait</dd></div>
           </dl>
+        </InspectorGroup>
+      ) : (control?.type === 'if' || control?.type === 'foreach') && step.sourceId ? (
+        <InspectorGroup title="Configuration">
+          <ValueExpressionField
+            canEdit={canEdit}
+            field={control.type === 'if' ? {
+              name: 'condition', label: 'Condition', type: 'boolean', schemaType: 'boolean',
+              required: true, defaultValue: true,
+              description: 'Evaluated before choosing the Then or Else branch.',
+            } : {
+              name: 'items', label: 'Items', type: 'json', schemaType: 'array',
+              required: true, defaultValue: [],
+              description: 'An array evaluated once and saved for iteration. The body can reference loop.item and loop.index.',
+            }}
+            expression={control.type === 'if' ? control.condition : control.items}
+            nodeId={step.sourceId}
+            onChange={expression => {
+              if (expression) onControlExpressionChange?.(step.sourceId!, control.type === 'if' ? 'condition' : 'items', expression)
+            }}
+            source={source!}
+            {...(schemaUI ? { schemaUI } : {})}
+            {...(variableCatalog ? { variableCatalog } : {})}
+            {...(controlProblem ? { problem: controlProblem } : {})}
+            {...(fieldFocus?.nodeId === step.sourceId && fieldFocus.fieldPath?.split('.')[0] === controlField
+              ? { focusRequest: fieldFocus.request } : {})}
+          />
+          <dl class="inspector-source-fields">
+            <div><dt>Source ID</dt><dd>{step.sourceId}</dd></div>
+            <div><dt>Kind</dt><dd>{control.type}</dd></div>
+            {control.type === 'foreach' ? <div><dt>Concurrency</dt><dd>{control.concurrency ?? 1}</dd></div> : null}
+          </dl>
+          {stepProblems.length ? <div class="inspector-diagnostics">
+            {stepProblems.map(problem => <p key={`${problem.code}:${problem.source?.fieldPath ?? ''}`}>{problem.message}</p>)}
+          </div> : null}
         </InspectorGroup>
       ) : control?.type === 'capability' && step.sourceId ? (
         <>

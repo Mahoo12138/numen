@@ -5,6 +5,7 @@ export type AutomationSourceCommand =
   | { type: 'INSERT'; item: WorkbenchAutomationInsertItem }
   | { type: 'SET_CAPABILITY_CONNECTION'; nodeId: string; slotName: string; connectionId?: string }
   | { type: 'SET_CAPABILITY_INPUT'; nodeId: string; fieldName: string; expression?: ValueExpr }
+  | { type: 'SET_CONTROL_EXPRESSION'; nodeId: string; field: 'condition' | 'items'; expression: ValueExpr }
   | { type: 'SET_WAIT_EXPRESSION'; nodeId: string; field: 'durationMs' | 'until'; expression: ValueExpr }
 
 export interface AutomationSourceCommandResult {
@@ -190,6 +191,26 @@ function editControl(
   return { control, changed: false }
 }
 
+function setControlExpression(
+  source: AutomationSource,
+  nodeId: string,
+  field: 'condition' | 'items',
+  expression: ValueExpr,
+): AutomationSource {
+  const result = editControl(source.flow, nodeId, control => {
+    if (field === 'condition' && control.type === 'if') {
+      return JSON.stringify(control.condition) === JSON.stringify(expression)
+        ? control : { ...control, condition: expression }
+    }
+    if (field === 'items' && control.type === 'foreach') {
+      return JSON.stringify(control.items) === JSON.stringify(expression)
+        ? control : { ...control, items: expression }
+    }
+    return control
+  })
+  return result.changed ? { ...source, flow: result.control } : source
+}
+
 function setWaitExpression(
   source: AutomationSource,
   nodeId: string,
@@ -267,6 +288,9 @@ export function applyAutomationSourceCommand(
     }
     case 'SET_CAPABILITY_INPUT': return {
       source: setCapabilityInput(source, command.nodeId, command.fieldName, command.expression),
+    }
+    case 'SET_CONTROL_EXPRESSION': return {
+      source: setControlExpression(source, command.nodeId, command.field, command.expression),
     }
     case 'SET_WAIT_EXPRESSION': return {
       source: setWaitExpression(source, command.nodeId, command.field, command.expression),

@@ -614,7 +614,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .schema-field:has(.structured-call-editor) > .schema-field-row { grid-template-columns: 1fr; gap: 5px; }
 .schema-field:has(.structured-call-editor) > .schema-field-row > .schema-field-label { padding-top: 0; }
 .schema-field:has(.structured-call-editor) > .schema-field-row > .schema-value-editor { grid-template-columns: 1fr; gap: 7px; }
-.schema-field:has(.structured-call-editor) > .schema-field-row .schema-value-mode { width: 108px; }
+.schema-field:has(.structured-call-editor) > .schema-field-row > .schema-value-editor > .schema-value-mode { width: 108px; }
 .schema-field:has(.structured-call-editor) > .inspector-field-help,
 .schema-field:has(.structured-call-editor) > .inspector-field-error { margin-left: 0; }
 .structured-call-editor { display: grid; gap: 8px; min-width: 0; padding-top: 9px; border-top: 1px solid var(--wb-border); }

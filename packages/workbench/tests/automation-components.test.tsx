@@ -455,4 +455,27 @@ describe('live Automation workspace projections', () => {
     expect(markup).toContain('First available value')
     expect(markup).toContain('input.resumeAt')
   })
+  it('renders If and ForEach fields with typed modes, diagnostics, and preserved unknown expressions', async () => {
+    for (const kind of ['if', 'foreach'] as const) {
+      const field = kind === 'if' ? 'condition' : 'items'
+      const label = kind === 'if' ? 'Condition' : 'Items'
+      const block = { type: 'block' as const, id: 'body', steps: [] }
+      const expression = { type: 'call' as const, function: 'plugin:unavailable', arguments: [] }
+      const source = { triggers: [], flow: kind === 'if'
+        ? { type: kind, id: 'control', condition: expression, then: block }
+        : { type: kind, id: 'control', items: expression, body: block, concurrency: 2 } }
+      const markup = await renderToMarkup(<Inspector
+        activeStepId="source:control" onClose={vi.fn()} open source={source}
+        steps={projectAutomationSteps(source)} schemaUI={schemaUI}
+        problems={[{ code: 'INVALID_EXPRESSION', severity: 'error', message: 'Repair this expression.', source: { nodeId: 'control', fieldPath: `${field}.arguments.0` } }]}
+      />)
+      expect(markup).toContain(`aria-label="${label} value mode"`)
+      expect(markup).toContain('plugin:unavailable')
+      expect(markup).toContain('Repair this expression.')
+      expect(markup).toContain('data-invalid="true"')
+      expect(markup).toContain('disabled')
+      expect(markup).not.toContain('<option value="template">')
+    }
+  })
+
 })
