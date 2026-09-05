@@ -1,3 +1,4 @@
+import { workbenchCredentialsIndexQuery, workbenchCreateCredentialAction, workbenchRotateCredentialAction, workbenchDeleteCredentialAction } from './credentials-provider.js'
 import type { ConsoleFrontendEntry } from '@numen/console'
 import { Service, type Context } from 'cordis'
 import {
@@ -53,6 +54,8 @@ export {
   workbenchRunsProviderPlugin,
 } from './runs-provider.js'
 
+export { workbenchCredentialsProviderPlugin, workbenchCredentialsIndexQuery, workbenchCreateCredentialAction, workbenchRotateCredentialAction, workbenchDeleteCredentialAction } from './credentials-provider.js'
+
 export const coreWorkbenchEntryId = 'numen:workbench-core'
 
 export interface WorkbenchRuntimeConfig extends WorkbenchServerConfig {
@@ -77,6 +80,10 @@ export class WorkbenchRuntimeService extends Service {
     ctx.console.define(ctx, workbenchSaveAutomationDraftAction)
     ctx.console.define(ctx, workbenchAutomationDetailQuery)
     ctx.console.define(ctx, workbenchAutomationsIndexQuery)
+    ctx.console.define(ctx, workbenchCredentialsIndexQuery)
+    ctx.console.define(ctx, workbenchCreateCredentialAction)
+    ctx.console.define(ctx, workbenchRotateCredentialAction)
+    ctx.console.define(ctx, workbenchDeleteCredentialAction)
     ctx.console.define(ctx, workbenchConnectionsIndexQuery)
     ctx.console.define(ctx, workbenchCreateConnectionAction)
     ctx.console.define(ctx, workbenchDeleteConnectionAction)

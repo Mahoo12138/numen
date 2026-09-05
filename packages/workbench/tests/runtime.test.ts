@@ -21,6 +21,10 @@ import {
   workbenchPublishAutomationDraftActionRef,
   workbenchSaveAutomationDraftActionRef,
   workbenchConnectionsIndexQueryRef,
+  workbenchCredentialsIndexQueryRef,
+  workbenchCreateCredentialActionRef,
+  workbenchRotateCredentialActionRef,
+  workbenchDeleteCredentialActionRef,
   workbenchSetConnectionEnabledActionRef,
   workbenchHomeOverviewQueryRef,
   workbenchInvalidationSubscriptionRef,
@@ -65,6 +69,9 @@ describe('Workbench Runtime plugin', () => {
     expect(root.console.get(workbenchAutomationsIndexQueryRef)).toMatchObject({ providerAvailable: false })
     expect(root.console.get(workbenchPublishAutomationDraftActionRef)).toMatchObject({ providerAvailable: false })
     expect(root.console.get(workbenchSaveAutomationDraftActionRef)).toMatchObject({ providerAvailable: false })
+    for (const ref of [workbenchCredentialsIndexQueryRef, workbenchCreateCredentialActionRef, workbenchRotateCredentialActionRef, workbenchDeleteCredentialActionRef]) {
+      expect(root.console.get(ref)).toMatchObject({ providerAvailable: false })
+    }
     expect(root.console.get(workbenchConnectionsIndexQueryRef)).toMatchObject({ providerAvailable: false })
     expect(root.console.get(workbenchSetConnectionEnabledActionRef)).toMatchObject({ providerAvailable: false })
     expect(root.console.get(workbenchHomeOverviewQueryRef)).toMatchObject({ providerAvailable: false })
@@ -89,6 +96,9 @@ describe('Workbench Runtime plugin', () => {
     expect(root.console.get(workbenchAutomationsIndexQueryRef)).toBeUndefined()
     expect(root.console.get(workbenchPublishAutomationDraftActionRef)).toBeUndefined()
     expect(root.console.get(workbenchSaveAutomationDraftActionRef)).toBeUndefined()
+    for (const ref of [workbenchCredentialsIndexQueryRef, workbenchCreateCredentialActionRef, workbenchRotateCredentialActionRef, workbenchDeleteCredentialActionRef]) {
+      expect(root.console.get(ref)).toBeUndefined()
+    }
     expect(root.console.get(workbenchConnectionsIndexQueryRef)).toBeUndefined()
     expect(root.console.get(workbenchSetConnectionEnabledActionRef)).toBeUndefined()
     expect(root.console.get(workbenchHomeOverviewQueryRef)).toBeUndefined()

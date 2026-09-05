@@ -10,7 +10,7 @@ import {
   type WorkbenchInvalidationScope,
 } from './contracts.js'
 
-const scopeOrder: WorkbenchInvalidationScope[] = ['home', 'automations', 'automationCatalog', 'runs', 'connections']
+const scopeOrder: WorkbenchInvalidationScope[] = ['home', 'automations', 'automationCatalog', 'runs', 'connections', 'credentials']
 const invalidationScope = z.union(scopeOrder).required()
 
 export const workbenchInvalidationSubscription: ConsoleSubscriptionDefinition<
@@ -51,7 +51,9 @@ export function workbenchInvalidationProviderPlugin(ctx: Context): void {
       const disposeAutomation = ctx.on('numen/automation-change', () => invalidate('home', 'automations'))
       const disposeCapability = ctx.on('numen/capability-change', () => invalidate('automationCatalog'))
       const disposeRun = ctx.on('numen/run-change', () => invalidate('home', 'runs'))
-      const disposeConnection = ctx.on('numen/connection-change', () => invalidate('home', 'automationCatalog', 'connections'))
+      const disposeConnection = ctx.on('numen/connection-change', () => invalidate('home', 'automationCatalog', 'connections', 'credentials'))
+      const disposeCredential = ctx.on('numen/credential-change', () => invalidate('credentials', 'connections'))
+      const disposeCredentialType = ctx.on('numen/credential-type-change', () => invalidate('credentials', 'connections'))
       const disposeConnectionRuntime = ctx.on('numen/connection-runtime-change', () => invalidate('home', 'automationCatalog', 'connections'))
 
       // This initial event is a reconnect barrier. The browser ignores it during first setup,
@@ -64,6 +66,8 @@ export function workbenchInvalidationProviderPlugin(ctx: Context): void {
         disposeAutomation()
         disposeCapability()
         disposeRun()
+        disposeCredential()
+        disposeCredentialType()
         disposeConnection()
         disposeConnectionRuntime()
       }

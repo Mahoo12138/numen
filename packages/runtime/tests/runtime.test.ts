@@ -49,6 +49,7 @@ describe('Numen runtime', () => {
         workbenchAutomationCatalog: {},
         workbenchAutomations: {},
         workbenchConnections: {},
+        workbenchCredentials: {},
         workbenchHome: {},
         workbenchInvalidation: {},
         workbenchRuns: {},
@@ -109,6 +110,22 @@ describe('Numen runtime', () => {
         providerAvailable: true,
       }),
       expect.objectContaining({
+        definition: expect.objectContaining({ id: 'numen:credential-create', version: 1, kind: 'action' }),
+        providerAvailable: true,
+      }),
+      expect.objectContaining({
+        definition: expect.objectContaining({ id: 'numen:credential-delete', version: 1, kind: 'action' }),
+        providerAvailable: true,
+      }),
+      expect.objectContaining({
+        definition: expect.objectContaining({ id: 'numen:credential-rotate', version: 1, kind: 'action' }),
+        providerAvailable: true,
+      }),
+      expect.objectContaining({
+        definition: expect.objectContaining({ id: 'numen:credentials-index', version: 1, kind: 'query' }),
+        providerAvailable: true,
+      }),
+      expect.objectContaining({
         definition: expect.objectContaining({ id: 'numen:home-overview', version: 1, kind: 'query' }),
         providerAvailable: true,
       }),
@@ -142,7 +159,7 @@ describe('Numen runtime', () => {
       },
       event => invalidations.push(event),
     )
-    expect(invalidations).toEqual([{ scopes: ['home', 'automations', 'automationCatalog', 'runs', 'connections'] }])
+    expect(invalidations).toEqual([{ scopes: ['home', 'automations', 'automationCatalog', 'runs', 'connections', 'credentials'] }])
     invalidations.length = 0
     application.context.emit('numen/run-change', 'synthetic-run')
     application.context.emit('numen/automation-change', 'synthetic-automation')
@@ -150,6 +167,13 @@ describe('Numen runtime', () => {
     invalidations.length = 0
     application.context.emit('numen/capability-change', { id: 'synthetic:capability', version: 1 })
     await vi.waitFor(() => expect(invalidations).toEqual([{ scopes: ['automationCatalog'] }]))
+    invalidations.length = 0
+    application.context.emit('numen/credential-change', 'synthetic-credential', 2)
+    application.context.emit('numen/credential-type-change')
+    await vi.waitFor(() => expect(invalidations).toEqual([{ scopes: ['connections', 'credentials'] }]))
+    invalidations.length = 0
+    application.context.emit('numen/connection-change', 'synthetic-connection')
+    await vi.waitFor(() => expect(invalidations).toEqual([{ scopes: ['home', 'automationCatalog', 'connections', 'credentials'] }]))
     expect(application.context.consoleEntries.list()).toEqual([{
       id: 'numen:workbench-core',
       prod: workbenchEntry,

@@ -3,6 +3,7 @@ import { Activity, Boxes, Cable, Home, Network, Pencil, Play, Plus, Settings } f
 import { computed, reactive, ref } from 'vue'
 import { AutomationPageChrome, AutomationWorkspacePage } from './AutomationWorkspace.js'
 import { RunDetailPage } from './RunDetailPage.js'
+import { CredentialsPage } from './CredentialsPage.js'
 import { ConnectionConfigurationPanel } from './ConnectionConfigurationPanel.js'
 import {
   workbenchConnectionsIndexQueryRef,
@@ -16,6 +17,7 @@ import {
 } from './contracts.js'
 import {
   coreWorkbenchRoutes,
+  coreWorkbenchCredentialsRoute,
   coreWorkbenchRunContextRoute,
   coreWorkbenchRunFlowRoute,
   coreWorkbenchRunTimelineRoute,
@@ -259,7 +261,7 @@ function formatCount(count: number, singular: string): string {
   return `${count} ${singular}${count === 1 ? '' : 's'}`
 }
 
-const ConnectionsPage = defineSetupComponent<WorkbenchPageProps>('ConnectionsPage', ['consoleClient', 'schemaUI'], props => {
+const ConnectionsPage = defineSetupComponent<WorkbenchPageProps>('ConnectionsPage', ['consoleClient', 'schemaUI', 'navigation'], props => {
   const [index, reload, refresh] = useConsoleQuery<Record<string, never>, WorkbenchConnectionsIndex>(
     () => props.consoleClient,
     workbenchConnectionsIndexQueryRef,
@@ -271,6 +273,7 @@ const ConnectionsPage = defineSetupComponent<WorkbenchPageProps>('ConnectionsPag
   return () => (
     <main class="main-workbench core-page">
       <header class="core-page-header"><Cable size={22} /><div><h1>Connections</h1><p>Manage the systems and accounts available to automations.</p></div></header>
+      <div class="credential-navigation"><button class="secondary-button" disabled={!props.navigation} onClick={() => props.navigation?.navigate(coreWorkbenchCredentialsRoute)} type="button">Manage Credentials</button></div>
       <ConnectionsIndex
         {...(props.consoleClient ? { client: props.consoleClient } : {})}
         {...(configuration.value ? { configuration: configuration.value } : {})}
@@ -419,6 +422,7 @@ export const coreWorkbenchPageDefinitions: ReadonlyArray<WorkbenchPageDefinition
   { ...coreWorkbenchRunFlowRoute, path: '/runs/:id/flow', title: 'Run', component: RunDetailPage },
   { ...coreWorkbenchRunTimelineRoute, path: '/runs/:id/timeline', title: 'Run', component: RunDetailPage },
   { ...coreWorkbenchRunContextRoute, path: '/runs/:id/context', title: 'Run', component: RunDetailPage },
+  { ...coreWorkbenchCredentialsRoute, path: '/connections/credentials', title: 'Credentials', component: CredentialsPage },
   { ...coreWorkbenchRoutes.connections, path: '/connections', title: 'Connections', component: ConnectionsPage },
   { ...coreWorkbenchRoutes.plugins, path: '/plugins/installed', title: 'Plugins', component: PluginsPage },
   { ...coreWorkbenchRoutes.system, path: '/system/overview', title: 'System', component: SystemPage },

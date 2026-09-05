@@ -190,11 +190,12 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Run detail Query, semantic timeline, and Execution/Attempt diagnostic lifecycle
 - [x] Run Flow/Context inspection projections, stable detail routes, and durable cancellation Action lifecycle
 - [x] Unified If condition / ForEach items expression fields with typed variable filtering, diagnostics, autosave, and undo/redo
+- [x] Credential metadata/type Query and create/rotate/delete Actions with sanitized errors and version fencing
+- [x] Responsive Credential management route with masked write-only forms, Connection usage protection, and live invalidation
 
 ## Next
 
-1. Credential metadata/create/rotate/delete management UI
-2. Plugin-owned Control Registry and Automation activation controls
+1. Plugin-owned Control Registry and Automation activation controls
 
 ## Design Review
 
@@ -223,12 +224,14 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 
 - **Structured control authoring seam — pass:** If condition and ForEach items use the existing ValueExpr Field Shell and one typed Source command, preserving branch/body identity and concurrency. Array/object fields filter variable and Call choices by schema type. Full-document history survives in-flight saves, and Source diagnostics remain visible in the Inspector. Production-browser QA verifies reference save/reload, literal-array and Call editing, and 1440px/390px layouts without console errors.
 
+- **Credential management seam — pass:** CredentialService owns type lifecycle, encrypted writes, version-fenced deletion, and transactional Connection-reference protection. Workbench projects only metadata and secret field shapes, omitting Schema defaults, descriptions, and options. A dedicated Page under Connections keeps masked secret input temporary, preserves the version captured when its form opens, aborts on disposal, and reconciles through coalesced invalidations. Production-browser QA covers create, rotate, concurrent-version conflict/reopen, Connection binding protection, delete, secret-free response bodies, and 1440px/390px layouts.
+
 ## Verification Baseline
 
 ```text
 Typecheck: passing
 Build: passing
-Tests: 45 files, 182 tests passing
+Tests: 47 files, 188 tests passing
 CLI config validate: passing
 CLI doctor: passing
 SQLite schema migration: v10
@@ -250,9 +253,9 @@ pnpm dev
 - The current Scheduler executes the Core IR subset emitted by the compiler, including retry, timeout, cancellation, recovery, and structured concurrency.
 - Parallel, first-success Race, and bounded ForEach use durable Execution scopes with interruptible concurrent dispatch; Try/Finally control flow remains planned work.
 - Typed Console transports, browser sessions, Browser Cordis clients, frontend extension registries, atomic Entry generations, authenticated revision-fenced asset delivery, and Browser Entry reconciliation/rollback are operational. Generated bootstrap tokens and sessions rotate on restart; the CLI prints a fragment-only Workbench launch URL only with explicit `--print-launch-url` authorization.
-- The responsive Workbench shell, nine registered core Page routes, stable browser Route/Page reconciliation, a secret-free production bootstrap, and authenticated core Entry loading are operational through the default Runtime. Home, Automations, the keyset-paginated Runs index, bounded Run Flow/Timeline/Context detail with cancellation controls, and the desired/runtime-separated Connections index display live data and refresh through coalesced typed invalidations without replacing server truth in the browser. Automation authoring now supports registry-driven Capability/control insertion, plugin-owned Schema Literal renderers, unified Literal/Reference/Template/structured Call inputs, scope-aware typed Magic Variables, named Connection bindings, expression-backed Wait duration/until editing, bounded undo/redo, debounced full-document autosave, explicit conflict recovery, immutable Revision publish, and source-linked diagnostics. Automation `input.*` and `vars.*` remain manually addressable because no declaration schema exists yet; a plugin-owned Control Registry, compare/save-copy conflict options, and activation controls remain planned.
+- The responsive Workbench shell, ten registered core Page routes, stable browser Route/Page reconciliation, a secret-free production bootstrap, and authenticated core Entry loading are operational through the default Runtime. Home, Automations, the keyset-paginated Runs index, bounded Run Flow/Timeline/Context detail with cancellation controls, and the desired/runtime-separated Connections index display live data and refresh through coalesced typed invalidations without replacing server truth in the browser. Automation authoring now supports registry-driven Capability/control insertion, plugin-owned Schema Literal renderers, unified Literal/Reference/Template/structured Call inputs, scope-aware typed Magic Variables, named Connection bindings, expression-backed Wait duration/until editing, bounded undo/redo, debounced full-document autosave, explicit conflict recovery, immutable Revision publish, and source-linked diagnostics. Automation `input.*` and `vars.*` remain manually addressable because no declaration schema exists yet; a plugin-owned Control Registry, compare/save-copy conflict options, and activation controls remain planned.
 - Manual Runs and event Trigger subscriptions are supported. State Trigger transition detection, filtering, debounce, and throttle remain planned work.
-- Connection desired state, generation-fenced create/update/delete/enable Actions, Adapter Schema configuration UI, generation-fenced Runtime recreation, and metadata-only Credential selection are operational. Credential creation/rotation/deletion UI and automatic reconnect policy remain planned work.
+- Connection desired state, generation-fenced create/update/delete/enable Actions, Adapter Schema configuration UI, generation-fenced Runtime recreation, and metadata-only Credential selection are operational. Credential metadata, creation/rotation/deletion Actions and UI are operational; automatic reconnect policy remains planned work. Credential writes require an available type plugin and a configured runtime master key. Non-object secret contracts require a plugin-provided editor.
 - Credential payloads use authenticated encryption with environment-provided keys; key-ring migration and external vault providers remain planned work.
 - Local Resource bytes are content-addressed and lifecycle-managed, and Scheduler success commits Execution owners transactionally; authorized HTTP delivery remains planned work.
 - The npm organization/scope is still an architecture placeholder.

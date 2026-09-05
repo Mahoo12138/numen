@@ -840,3 +840,18 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 @media (prefers-reduced-motion: reduce) {
   .inspector, .inspector-backdrop { transition: none; }
 }
+
+.credential-navigation { display: flex; padding: 16px 28px 0; }
+.credential-navigation .secondary-button, .credentials-table .secondary-button { width: auto; margin: 0; padding-inline: 10px; }
+.credential-notice { margin: 0 0 16px; padding: 12px 16px; border: 1px solid var(--wb-border); border-radius: 6px; color: var(--wb-muted); font-size: 12px; line-height: 1.5; }
+.credentials-table-wrap { position: relative; }
+.credentials-table { min-width: 520px; }
+.credentials-table td { white-space: normal; overflow-wrap: anywhere; }
+.credentials-table td:first-child { min-width: 120px; }
+.credentials-table td strong, .credentials-table td small { display: block; }
+.credentials-table td small { margin-top: 4px; color: var(--wb-faint); font-size: 9.5px; }
+@media (max-width: 760px) {
+  .credential-navigation { padding-inline: 16px; }
+}
+.credential-config-panel { min-width: 0; }
+.credential-config-panel input { min-width: 0; }

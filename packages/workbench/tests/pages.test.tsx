@@ -11,6 +11,7 @@ import {
   coreWorkbenchRunFlowRoute,
   coreWorkbenchRunRoutes,
   coreWorkbenchRoutes,
+  coreWorkbenchCredentialsRoute,
   WorkbenchShell,
   type WorkbenchRouter,
 } from '../src/index.js'
@@ -33,6 +34,7 @@ describe('core Workbench Pages', () => {
       { id: 'numen:home', path: '/' },
       { id: 'numen:automations', path: '/automations' },
       { id: 'numen:connections', path: '/connections' },
+      { id: 'numen:credentials', path: '/connections/credentials' },
       { id: 'numen:plugins', path: '/plugins/installed' },
       { id: 'numen:runs', path: '/runs' },
       { id: 'numen:run-context', path: '/runs/:id/context' },
@@ -40,7 +42,7 @@ describe('core Workbench Pages', () => {
       { id: 'numen:run-timeline', path: '/runs/:id/timeline' },
       { id: 'numen:system', path: '/system/overview' },
     ])
-    expect(coreWorkbenchPageDefinitions).toHaveLength(9)
+    expect(coreWorkbenchPageDefinitions).toHaveLength(10)
     await fiber.dispose()
     expect(root.webuiExtensions.listPages()).toEqual([])
     await root.fiber.dispose()
@@ -91,4 +93,13 @@ describe('core Workbench Pages', () => {
     expect(markup).toContain('Back to Runs')
     expect(markup).toMatch(/aria-current="page"[^>]*class="activity-button"[^>]*>.*?Runs/s)
   })
+  it('keeps Credential management in the Connections activity', async () => {
+    const page = coreWorkbenchPageDefinitions.find(item => item.id === coreWorkbenchCredentialsRoute.id)!
+    const markup = await renderToMarkup(<WorkbenchShell router={routerFor({
+      status: 'READY', pathname: '/connections/credentials', search: '', parameters: {}, page,
+    })} />)
+    expect(markup).toContain('Back to Connections')
+    expect(markup).toMatch(/aria-current="page"[^>]*class="activity-button"[^>]*>.*?Connections/s)
+  })
+
 })
