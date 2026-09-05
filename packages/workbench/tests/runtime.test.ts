@@ -15,6 +15,8 @@ import {
 } from '../src/runtime.js'
 import {
   workbenchAutomationDetailQueryRef,
+  workbenchActivateAutomationRevisionActionRef,
+  workbenchSetAutomationEnabledActionRef,
   workbenchAutomationInsertCatalogQueryRef,
   workbenchAutomationVariableCatalogQueryRef,
   workbenchAutomationsIndexQueryRef,
@@ -69,7 +71,7 @@ describe('Workbench Runtime plugin', () => {
     expect(root.console.get(workbenchAutomationsIndexQueryRef)).toMatchObject({ providerAvailable: false })
     expect(root.console.get(workbenchPublishAutomationDraftActionRef)).toMatchObject({ providerAvailable: false })
     expect(root.console.get(workbenchSaveAutomationDraftActionRef)).toMatchObject({ providerAvailable: false })
-    for (const ref of [workbenchCredentialsIndexQueryRef, workbenchCreateCredentialActionRef, workbenchRotateCredentialActionRef, workbenchDeleteCredentialActionRef]) {
+    for (const ref of [workbenchActivateAutomationRevisionActionRef, workbenchSetAutomationEnabledActionRef, workbenchCredentialsIndexQueryRef, workbenchCreateCredentialActionRef, workbenchRotateCredentialActionRef, workbenchDeleteCredentialActionRef]) {
       expect(root.console.get(ref)).toMatchObject({ providerAvailable: false })
     }
     expect(root.console.get(workbenchConnectionsIndexQueryRef)).toMatchObject({ providerAvailable: false })
@@ -96,7 +98,7 @@ describe('Workbench Runtime plugin', () => {
     expect(root.console.get(workbenchAutomationsIndexQueryRef)).toBeUndefined()
     expect(root.console.get(workbenchPublishAutomationDraftActionRef)).toBeUndefined()
     expect(root.console.get(workbenchSaveAutomationDraftActionRef)).toBeUndefined()
-    for (const ref of [workbenchCredentialsIndexQueryRef, workbenchCreateCredentialActionRef, workbenchRotateCredentialActionRef, workbenchDeleteCredentialActionRef]) {
+    for (const ref of [workbenchActivateAutomationRevisionActionRef, workbenchSetAutomationEnabledActionRef, workbenchCredentialsIndexQueryRef, workbenchCreateCredentialActionRef, workbenchRotateCredentialActionRef, workbenchDeleteCredentialActionRef]) {
       expect(root.console.get(ref)).toBeUndefined()
     }
     expect(root.console.get(workbenchConnectionsIndexQueryRef)).toBeUndefined()

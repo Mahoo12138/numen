@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import z from 'schemastery'
 import { afterEach, describe, expect, it } from 'vitest'
-import { AutomationService, DraftConflictError } from '../src/index.js'
+import { AutomationService, DraftConflictError, AutomationActivationConflictError, AutomationNotFoundError, AutomationRevisionNotFoundError } from '../src/index.js'
 
 const directories: string[] = []
 
@@ -106,4 +106,36 @@ describe('AutomationService', () => {
     expect(restarted.automations.getRevision(revision.id)?.contentHash).toBe(revision.contentHash)
     await restarted.fiber.dispose()
   })
+  it('fences both desired-state operations and rejects foreign revisions without changing Drafts or history', async () => {
+    const root = await createContext(':memory:')
+    try {
+      const first = root.automations.create({ name: 'First', source })
+      const other = root.automations.create({ name: 'Other', source })
+      const revision = root.automations.publishDraft(first.automation.id, 1)
+      const foreign = root.automations.publishDraft(other.automation.id, 1)
+      const draft = root.automations.getDraft(first.automation.id)
+      const changes: string[] = []
+      root.on('numen/automation-change', id => changes.push(id))
+      expect(() => root.automations.activateRevision(first.automation.id, foreign.id, 0)).toThrow(AutomationRevisionNotFoundError)
+      expect(() => root.automations.activateRevision('missing', revision.id, 0)).toThrow(AutomationNotFoundError)
+      const activated = root.automations.activateRevision(first.automation.id, revision.id, 0)
+      expect(activated).toMatchObject({ activationGeneration: 1, enabled: false, activeRevisionId: revision.id })
+      expect(() => root.automations.setEnabled(first.automation.id, true, 0)).toThrow(AutomationActivationConflictError)
+      expect(() => root.automations.activateRevision(first.automation.id, revision.id, 0)).toThrow(AutomationActivationConflictError)
+      expect(root.automations.activateRevision(first.automation.id, revision.id, 1)).toEqual(activated)
+      expect(root.automations.setEnabled(first.automation.id, false, 1)).toEqual(activated)
+      expect(changes).toEqual([first.automation.id])
+      const enabled = root.automations.setEnabled(first.automation.id, true, 1)
+      expect(enabled).toMatchObject({ enabled: true, activationGeneration: 2 })
+      expect(() => root.automations.setEnabled(first.automation.id, true, 1)).toThrow(AutomationActivationConflictError)
+      const disabled = root.automations.setEnabled(first.automation.id, false, 2)
+      expect(disabled).toMatchObject({ enabled: false, activeRevisionId: revision.id, activationGeneration: 3 })
+      for (const expected of [-1, 0.5, NaN]) expect(() => root.automations.setEnabled(first.automation.id, true, expected)).toThrow(TypeError)
+      expect(root.automations.getDraft(first.automation.id)).toEqual(draft)
+      expect(root.automations.getRevision(revision.id)).toEqual(revision)
+      expect(root.automations.get(other.automation.id)).toMatchObject({ enabled: false, activationGeneration: 0 })
+      expect(changes).toHaveLength(3)
+    } finally { await root.fiber.dispose() }
+  })
+
 })

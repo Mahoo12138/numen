@@ -1,3 +1,4 @@
+import { workbenchActivateAutomationRevisionAction, workbenchSetAutomationEnabledAction } from './automation-activation-provider.js'
 import { workbenchCredentialsIndexQuery, workbenchCreateCredentialAction, workbenchRotateCredentialAction, workbenchDeleteCredentialAction } from './credentials-provider.js'
 import type { ConsoleFrontendEntry } from '@numen/console'
 import { Service, type Context } from 'cordis'
@@ -56,6 +57,8 @@ export {
 
 export { workbenchCredentialsProviderPlugin, workbenchCredentialsIndexQuery, workbenchCreateCredentialAction, workbenchRotateCredentialAction, workbenchDeleteCredentialAction } from './credentials-provider.js'
 
+export { workbenchAutomationActivationProviderPlugin, workbenchActivateAutomationRevisionAction, workbenchSetAutomationEnabledAction } from './automation-activation-provider.js'
+
 export const coreWorkbenchEntryId = 'numen:workbench-core'
 
 export interface WorkbenchRuntimeConfig extends WorkbenchServerConfig {
@@ -74,6 +77,8 @@ export class WorkbenchRuntimeService extends Service {
   constructor(ctx: Context, config: WorkbenchRuntimeConfig = {}) {
     super(ctx, 'workbench')
     workbenchServerPlugin(ctx, config)
+    ctx.console.define(ctx, workbenchActivateAutomationRevisionAction)
+    ctx.console.define(ctx, workbenchSetAutomationEnabledAction)
     ctx.console.define(ctx, workbenchAutomationInsertCatalogQuery)
     ctx.console.define(ctx, workbenchAutomationVariableCatalogQuery)
     ctx.console.define(ctx, workbenchPublishAutomationDraftAction)

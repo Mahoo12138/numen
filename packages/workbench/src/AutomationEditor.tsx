@@ -21,6 +21,7 @@ import type {
 } from './contracts.js'
 import { automations, automationSteps } from './model.js'
 import type { AutomationStep } from './model.js'
+import type { AutomationActivationView } from './useAutomationActivation.js'
 import type { ConsoleQueryState } from './useConsoleQuery.js'
 
 const tabs = ['Editor', 'Runs', 'Revisions', 'State', 'Settings'] as const
@@ -43,6 +44,9 @@ export interface AutomationEditorProps {
     saveError?: string
     publishError?: string
   }
+  activation?: AutomationActivationView
+  onActivateRevision?(revisionId: string): void
+  onSetEnabled?(enabled: boolean): void
   onStepChange(id: string): void
   onTabChange(tab: string): void
   onOpenInspector(): void
@@ -74,6 +78,9 @@ export function AutomationEditor({
   insertCatalogState,
   steps: projectedSteps,
   authoring,
+  activation,
+  onActivateRevision,
+  onSetEnabled,
   onStepChange,
   onTabChange,
   onOpenInspector,
@@ -113,6 +120,15 @@ export function AutomationEditor({
             ) : null}</div>
           </div>
           <div class="entity-title-actions">
+            {detail && activation && onSetEnabled ? <button
+              aria-label={detail.automation.enabled ? 'Disable Automation' : 'Enable Automation'}
+              aria-checked={detail.automation.enabled}
+              role="switch"
+              class="automation-enabled-button"
+              disabled={activation.pending || (!detail.automation.enabled && !detail.automation.activeRevisionId)}
+              onClick={() => onSetEnabled(!detail.automation.enabled)}
+              type="button"
+            >{activation.pending && !activation.activatingRevisionId ? 'Updating…' : detail.automation.enabled ? 'Disable' : 'Enable'}</button> : null}
             {authoring && onPublish ? (
               <button
                 class="publish-button"
@@ -146,6 +162,7 @@ export function AutomationEditor({
           ))}
         </nav>
       </header>
+      {activation?.error ? <section class="authoring-notice" data-tone="error" role="alert"><span>{activation.error}</span></section> : null}
       {authoring?.conflict ? (
         <section class="authoring-notice" data-tone="conflict" role="alert">
           <span><strong>Draft changed elsewhere.</strong> Local version {authoring.conflict.expectedVersion} cannot overwrite server version {authoring.conflict.actualVersion}.</span>
@@ -244,6 +261,7 @@ export function AutomationEditor({
       ) : activeTab === 'Revisions' && detail ? (
         <section class="automation-revisions">
           <div class="runs-section-heading"><h2>Immutable revisions</h2><span>Newest first</span></div>
+          <p class="activation-help">Activate a published Revision, then enable the Automation to accept Trigger events. Existing Runs keep their original Revision.</p>
           {detail.revisions.length ? (
             <div class="revision-list">
               {detail.revisions.map(revision => (
@@ -251,10 +269,29 @@ export function AutomationEditor({
                   <div><strong>Revision {revision.number}</strong>{revision.active ? <em>Active</em> : null}</div>
                   <small>{revision.contentHash}</small>
                   <time datetime={revision.createdAt}>{revision.createdAt}</time>
+                  {activation && onActivateRevision ? <button
+                    aria-label={`Activate Revision ${revision.number}`}
+                    class="revision-activate-button"
+                    disabled={revision.active || activation.pending}
+                    onClick={() => onActivateRevision(revision.id)}
+                    type="button"
+                  >{activation.activatingRevisionId === revision.id ? 'Activating…' : revision.active ? 'Active' : 'Activate'}</button> : null}
                 </article>
               ))}
             </div>
           ) : <p class="automation-flow-empty">No immutable Revision has been published from this Draft.</p>}
+        </section>
+      ) : activeTab === 'State' && detail ? (
+        <section class="automation-activation-state">
+          <h2>Activation</h2>
+          <dl>
+            <div><dt>Desired state</dt><dd>{detail.automation.enabled ? 'Enabled' : 'Disabled'}</dd></div>
+            <div><dt>Active Revision</dt><dd>{activeRevision ? `Revision ${activeRevision.number}` : 'None'}</dd></div>
+          </dl>
+          <p>{!activeRevision ? 'Publish and activate a Revision before enabling this Automation.'
+            : detail.automation.enabled ? 'Trigger subscriptions follow the active Revision. Event delivery depends on available Providers and Connections.'
+              : 'Trigger subscriptions are disabled. Existing Runs continue with their original Revision.'}</p>
+          <button class="revision-activate-button" onClick={() => onTabChange('Revisions')} type="button">Manage revisions</button>
         </section>
       ) : (
         <section class="secondary-view">

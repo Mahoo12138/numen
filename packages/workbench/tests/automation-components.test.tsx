@@ -478,4 +478,34 @@ describe('live Automation workspace projections', () => {
     }
   })
 
+  it('exposes separate Revision activation and Automation enabled controls', async () => {
+    const markup = await renderToMarkup(<AutomationEditor
+      automationId={detail.automation.id} activeStepId="pause" activeTab="Revisions"
+      detailState={{ status: 'READY', data: detail }}
+      activation={{ automation: detail.automation, pending: false }}
+      onActivateRevision={vi.fn()} onSetEnabled={vi.fn()}
+      onStepChange={vi.fn()} onTabChange={vi.fn()} onOpenInspector={vi.fn()}
+    />)
+    expect(markup).toContain('aria-label="Disable Automation"')
+    expect(markup).toContain('aria-checked="true"')
+    expect(markup).toContain('aria-label="Activate Revision 1"')
+    expect(markup).toMatch(/aria-label="Activate Revision 1"[^>]*disabled/)
+    expect(markup).toContain('Existing Runs keep their original Revision.')
+  })
+
+  it('explains the no-active-revision state and blocks enabling through the UI', async () => {
+    const { activeRevisionId: _active, ...identity } = detail.automation
+    const inactive = { ...detail, automation: { ...identity, enabled: false }, revisions: [] }
+    const markup = await renderToMarkup(<AutomationEditor
+      automationId={inactive.automation.id} activeStepId="pause" activeTab="State"
+      detailState={{ status: 'READY', data: inactive }}
+      activation={{ automation: inactive.automation, pending: false }}
+      onActivateRevision={vi.fn()} onSetEnabled={vi.fn()}
+      onStepChange={vi.fn()} onTabChange={vi.fn()} onOpenInspector={vi.fn()}
+    />)
+    expect(markup).toMatch(/aria-label="Enable Automation"[^>]*disabled/)
+    expect(markup).toContain('Publish and activate a Revision before enabling this Automation.')
+    expect(markup).toContain('Manage revisions')
+  })
+
 })

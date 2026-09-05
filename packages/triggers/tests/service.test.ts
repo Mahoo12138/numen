@@ -1,4 +1,4 @@
-import { AutomationService, type AutomationSource } from '@numen/automation'
+import { AutomationService, AutomationActivationConflictError, type AutomationSource } from '@numen/automation'
 import {
   CapabilityRegistry,
   type CapabilityDefinition,
@@ -89,6 +89,12 @@ describe('TriggerService', () => {
     expect(accepted).toMatchObject({ status: 'accepted', runId: expect.any(String) })
     await root.scheduler.dispatchUntilIdle()
     expect(root.scheduler.getRun(accepted.runId!)?.status).toBe('COMPLETED')
+
+    expect(() => root.automations.setEnabled(created.automation.id, false, enabled.activationGeneration - 1))
+      .toThrow(AutomationActivationConflictError)
+    root.automations.activateRevision(created.automation.id, revision.id, enabled.activationGeneration)
+    expect(activations).toHaveLength(1)
+    expect(disposals).toBe(0)
 
     const nextRevision = root.automations.publishDraft(created.automation.id, 1)
     root.automations.activateRevision(created.automation.id, nextRevision.id)

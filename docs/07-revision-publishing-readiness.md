@@ -106,6 +106,17 @@ audit
 
 外部 Trigger subscription 不在这个 DB TX 中同步完成。
 
+当前实现通过 `activationGeneration` 同时保护 Revision 选择和 enabled desired state。
+Workbench 的 Activate / Enable / Disable Action 必须携带 `expectedActivationGeneration`；
+服务在 SQLite transaction 内核对该值，过期请求返回 `AUTOMATION_ACTIVATION_CONFLICT`（409）。
+已发布 Revision 必须属于目标 Automation；重复选择当前 Revision 或重复设置 enabled 不增加 generation，也不重建订阅。
+内部 Service 调用保留不传 expected generation 的兼容入口。
+
+Workbench 在 Revisions 页选择并激活版本，标题栏独立启用/停用，State 页显示 desired state 和 active Revision。
+未激活任何 Revision 时，界面禁用 Enable。Publish 不自动 Activate，Activate 不改变 enabled，Disable 不取消已有 Run。
+状态显示不承诺外部 Provider 已就绪；已有 Run 始终绑定接受时的不可变 Revision。
+并发失败会刷新服务端状态，只有用户再次操作才重试，Draft 的本地编辑和自动保存不受激活操作替换。
+
 ## 7. Activation Reconciler
 
 Cordis Service：

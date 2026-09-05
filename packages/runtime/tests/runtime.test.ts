@@ -46,6 +46,7 @@ describe('Numen runtime', () => {
         server: { host: '127.0.0.1', port: 0 },
         workbench: { root: workbenchRoot, entrySource: workbenchEntry },
         workbenchAutomationAuthoring: {},
+        workbenchAutomationActivation: {},
         workbenchAutomationCatalog: {},
         workbenchAutomations: {},
         workbenchConnections: {},
@@ -66,6 +67,10 @@ describe('Numen runtime', () => {
     applications.push(application)
     expect(application.context.console.list()).toEqual([
       expect.objectContaining({
+        definition: expect.objectContaining({ id: 'numen:automation-activate-revision', version: 1, kind: 'action' }),
+        providerAvailable: true,
+      }),
+      expect.objectContaining({
         definition: expect.objectContaining({ id: 'numen:automation-detail', version: 1, kind: 'query' }),
         providerAvailable: true,
       }),
@@ -79,6 +84,10 @@ describe('Numen runtime', () => {
       }),
       expect.objectContaining({
         definition: expect.objectContaining({ id: 'numen:automation-save-draft', version: 1, kind: 'action' }),
+        providerAvailable: true,
+      }),
+      expect.objectContaining({
+        definition: expect.objectContaining({ id: 'numen:automation-set-enabled', version: 1, kind: 'action' }),
         providerAvailable: true,
       }),
       expect.objectContaining({

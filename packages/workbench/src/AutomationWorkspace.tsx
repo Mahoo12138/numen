@@ -17,6 +17,7 @@ import {
 } from './contracts.js'
 import { Inspector, type InspectorFieldFocus } from './Inspector.js'
 import type { WorkbenchPageChromeProps } from './types.js'
+import { useAutomationActivation } from './useAutomationActivation.js'
 import { useAutomationDraftDocument } from './useAutomationDraftDocument.js'
 import { useConsoleQuery, type ConsoleQueryState } from './useConsoleQuery.js'
 import { defineSetupComponent } from './vue-component.js'
@@ -36,7 +37,7 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
   const activeTab = ref('Editor')
   const requestedStepId = ref('notification')
   const fieldFocus = ref<InspectorFieldFocus>()
-  const [indexState, reloadIndex] = useConsoleQuery<Record<string, never>, WorkbenchAutomationsIndex>(
+  const [indexState, reloadIndex, refreshIndex] = useConsoleQuery<Record<string, never>, WorkbenchAutomationsIndex>(
     () => props.consoleClient,
     workbenchAutomationsIndexQueryRef,
     emptyQueryInput,
@@ -61,7 +62,7 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
   const detailInput = computed<WorkbenchAutomationDetailQueryInput>(() => ({
     automationId: automationId.value ?? '',
   }))
-  const [queriedDetailState, reloadDetail] = useConsoleQuery<WorkbenchAutomationDetailQueryInput, WorkbenchAutomationDetail | null>(
+  const [queriedDetailState, reloadDetail, refreshDetail] = useConsoleQuery<WorkbenchAutomationDetailQueryInput, WorkbenchAutomationDetail | null>(
     () => props.consoleClient && automationId.value ? props.consoleClient : undefined,
     workbenchAutomationDetailQueryRef,
     detailInput,
@@ -77,6 +78,7 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
   const detail = computed(() => detailState.value?.status === 'READY' && detailState.value.data?.automation.id === automationId.value
     ? detailState.value.data ?? undefined
     : undefined)
+  const activation = useAutomationActivation(() => props.consoleClient, () => { refreshDetail(); refreshIndex() })
   const authoring = useAutomationDraftDocument({
     client: () => props.consoleClient,
     automationId,
@@ -84,7 +86,14 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
     reloadDetail,
   })
   const effectiveDetail = computed<WorkbenchAutomationDetail | undefined>(() => {
-    const currentDetail = detail.value
+    const queriedDetail = detail.value
+    const currentDetail = queriedDetail ? {
+      ...queriedDetail,
+      automation: activation.view(queriedDetail.automation).automation,
+      revisions: queriedDetail.revisions.map(revision => ({
+        ...revision, active: revision.id === activation.view(queriedDetail.automation).automation.activeRevisionId,
+      })),
+    } : undefined
     if (!currentDetail || authoring.document?.automationId !== currentDetail.automation.id) return currentDetail
     const document = authoring.document
     return {
@@ -147,6 +156,15 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
       onPublish: authoring.publish,
       onReloadDraft: authoring.reload,
       onRetrySave: authoring.retrySave,
+    } : {}),
+    ...(props.consoleClient && effectiveDetail.value ? {
+      activation: activation.view(effectiveDetail.value.automation),
+      onActivateRevision: (revisionId: string) => {
+        if (effectiveDetail.value) activation.activate(effectiveDetail.value.automation, revisionId)
+      },
+      onSetEnabled: (enabled: boolean) => {
+        if (effectiveDetail.value) activation.setEnabled(effectiveDetail.value.automation, enabled)
+      },
     } : {}),
     onOpenInspector: () => props.onInspectorOpenChange(true),
     onStepChange: id => {

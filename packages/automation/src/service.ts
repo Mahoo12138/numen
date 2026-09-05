@@ -14,6 +14,18 @@ export class AutomationNotFoundError extends Error {
   override name = 'AutomationNotFoundError'
 }
 
+export class AutomationRevisionNotFoundError extends AutomationNotFoundError {
+  override name = 'AutomationRevisionNotFoundError'
+}
+
+export class AutomationActivationConflictError extends Error {
+  override name = 'AutomationActivationConflictError'
+
+  constructor(public readonly expectedGeneration: number, public readonly actualGeneration: number) {
+    super(`automation activation conflict: expected ${expectedGeneration}, actual ${actualGeneration}`)
+  }
+}
+
 export class DraftConflictError extends Error {
   override name = 'DraftConflictError'
 
@@ -321,36 +333,51 @@ export class AutomationService extends Service {
     `).all(automationId) as RevisionRow[]).map(mapRevision)
   }
 
-  activateRevision(automationId: string, revisionId: string): Automation {
-    const now = new Date().toISOString()
-    this.ctx.database.transaction(() => {
+  activateRevision(automationId: string, revisionId: string, expectedActivationGeneration?: number): Automation {
+    const result = this.ctx.database.transaction(() => {
+      const current = this.requireActivationGeneration(automationId, expectedActivationGeneration)
       const revision = this.ctx.database.db.prepare(`
         SELECT 1 FROM automation_revisions WHERE id = ? AND automation_id = ?
       `).get(revisionId, automationId)
-      if (!revision) throw new AutomationNotFoundError(`revision not found for automation: ${revisionId}`)
+      if (!revision) throw new AutomationRevisionNotFoundError(`revision not found for automation: ${revisionId}`)
+      if (current.activeRevisionId === revisionId) return { automation: current, changed: false }
       this.ctx.database.db.prepare(`
         UPDATE automations
         SET active_revision_id = ?, activation_generation = activation_generation + 1,
             updated_at = ?
-        WHERE id = ?
-      `).run(revisionId, now, automationId)
+        WHERE id = ? AND activation_generation = ?
+      `).run(revisionId, new Date().toISOString(), automationId, current.activationGeneration)
+      return { automation: this.get(automationId)!, changed: true }
     })
-    this.ctx.emit('numen/automation-change', automationId)
-    return this.get(automationId)!
+    if (result.changed) this.ctx.emit('numen/automation-change', automationId)
+    return result.automation
   }
 
-  setEnabled(automationId: string, enabled: boolean): Automation {
-    const now = new Date().toISOString()
-    const result = this.ctx.database.db.prepare(`
-      UPDATE automations
-      SET enabled = ?, activation_generation = activation_generation + 1, updated_at = ?
-      WHERE id = ? AND enabled != ?
-    `).run(enabled ? 1 : 0, now, automationId, enabled ? 1 : 0)
-    if (result.changes === 0 && !this.get(automationId)) {
-      throw new AutomationNotFoundError(`automation not found: ${automationId}`)
+  setEnabled(automationId: string, enabled: boolean, expectedActivationGeneration?: number): Automation {
+    const result = this.ctx.database.transaction(() => {
+      const current = this.requireActivationGeneration(automationId, expectedActivationGeneration)
+      if (current.enabled === enabled) return { automation: current, changed: false }
+      this.ctx.database.db.prepare(`
+        UPDATE automations
+        SET enabled = ?, activation_generation = activation_generation + 1, updated_at = ?
+        WHERE id = ? AND activation_generation = ?
+      `).run(enabled ? 1 : 0, new Date().toISOString(), automationId, current.activationGeneration)
+      return { automation: this.get(automationId)!, changed: true }
+    })
+    if (result.changed) this.ctx.emit('numen/automation-change', automationId)
+    return result.automation
+  }
+
+  private requireActivationGeneration(automationId: string, expected?: number): Automation {
+    if (expected !== undefined && (!Number.isSafeInteger(expected) || expected < 0)) {
+      throw new TypeError('expected activation generation must be a non-negative integer')
     }
-    if (result.changes) this.ctx.emit('numen/automation-change', automationId)
-    return this.get(automationId)!
+    const current = this.get(automationId)
+    if (!current) throw new AutomationNotFoundError(`automation not found: ${automationId}`)
+    if (expected !== undefined && current.activationGeneration !== expected) {
+      throw new AutomationActivationConflictError(expected, current.activationGeneration)
+    }
+    return current
   }
 }
 

@@ -625,3 +625,24 @@ export interface WorkbenchDeleteCredentialInput {
 
 export interface WorkbenchCredentialMutationResult { credential: WorkbenchCredential }
 export interface WorkbenchDeleteCredentialResult { credentialId: string }
+
+export const workbenchActivateAutomationRevisionActionRef = {
+  id: 'numen:automation-activate-revision', version: 1,
+} as const satisfies ConsoleProcedureRef
+export const workbenchSetAutomationEnabledActionRef = {
+  id: 'numen:automation-set-enabled', version: 1,
+} as const satisfies ConsoleProcedureRef
+
+export interface WorkbenchActivateAutomationRevisionInput {
+  automationId: string
+  revisionId: string
+  expectedActivationGeneration: number
+}
+export interface WorkbenchSetAutomationEnabledInput {
+  automationId: string
+  enabled: boolean
+  expectedActivationGeneration: number
+}
+export interface WorkbenchAutomationActivationResult {
+  automation: WorkbenchAutomationIdentity
+}
