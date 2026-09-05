@@ -4,6 +4,7 @@ import {
   type AutomationRevision,
   type AutomationSource,
   type NumenValue,
+  type ControlResolver,
 } from '@numen/core'
 import '@numen/database'
 import { Service, type Context } from 'cordis'
@@ -269,6 +270,7 @@ export class AutomationService extends Service {
       draft.source,
       this.ctx.capabilities,
       this.ctx.get('connections') as ConnectionResolver | undefined,
+      this.ctx.get('controls') as ControlResolver | undefined,
     )
     const protocolVersion = 1
     const semanticSnapshot = {

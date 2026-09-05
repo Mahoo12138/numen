@@ -33,6 +33,7 @@ export interface InspectorProps {
   variableCatalog?: WorkbenchAutomationVariableCatalog
   schemaUI?: SchemaUIResolver
   onCapabilityConnectionChange?(nodeId: string, slotName: string, connectionId?: string): void
+  onExtensionInputChange?(nodeId: string, fieldName: string, expression?: ValueExpr): void
   onCapabilityInputChange?(nodeId: string, fieldName: string, expression?: ValueExpr): void
   onControlExpressionChange?(nodeId: string, field: 'condition' | 'items', expression: ValueExpr): void
   onWaitExpressionChange?(nodeId: string, field: 'durationMs' | 'until', expression: ValueExpr): void
@@ -150,6 +151,7 @@ export function Inspector({
   schemaUI,
   onCapabilityConnectionChange,
   onCapabilityInputChange,
+  onExtensionInputChange,
   onControlExpressionChange,
   onWaitExpressionChange,
   onClose,
@@ -172,6 +174,9 @@ export function Inspector({
     ? catalog?.items.find((item): item is Extract<WorkbenchAutomationInsertItem, { kind: 'capability' }> => item.kind === 'capability'
       && item.capability.id === control.capability.id
       && item.capability.version === control.capability.version)
+    : undefined
+  const extensionDefinition = control?.type === 'extension'
+    ? catalog?.items.find((item): item is Extract<WorkbenchAutomationInsertItem, { kind: 'extension' }> => item.kind === 'extension' && item.control.id === control.control.id && item.control.version === control.control.version)
     : undefined
   const connectionBindings = control?.type === 'capability'
     ? control.connections ?? (control.connection
@@ -208,6 +213,18 @@ export function Inspector({
             </label>
           </InspectorGroup>
         </>
+      ) : control?.type === 'extension' && step.sourceId ? (
+        <InspectorGroup title="Configuration">
+          {extensionDefinition ? <CapabilityInputFields
+            nodeId={step.sourceId} definition={extensionDefinition} control={control} problems={stepProblems} canEdit={canEdit}
+            {...(source ? { source } : {})}
+            {...(variableCatalog ? { variableCatalog } : {})}
+            {...(schemaUI ? { schemaUI } : {})}
+            {...(onExtensionInputChange ? { onChange: onExtensionInputChange } : {})}
+            {...(fieldFocus?.nodeId === step.sourceId && fieldFocus.fieldPath ? { focusFieldPath: fieldFocus.fieldPath, focusRequest: fieldFocus.request } : {})}
+          /> : <p class="inspector-schema-notice">Unknown Control. Restore {control.control.id}@{control.control.version} to edit or publish. Saved inputs are preserved.</p>}
+          <dl class="inspector-source-fields"><div><dt>Source ID</dt><dd>{step.sourceId}</dd></div><div><dt>Control</dt><dd>{control.control.id}@{control.control.version}</dd></div></dl>
+        </InspectorGroup>
       ) : control?.type === 'wait' && step.sourceId ? (
         <InspectorGroup title="Configuration">
           <WaitConfiguration

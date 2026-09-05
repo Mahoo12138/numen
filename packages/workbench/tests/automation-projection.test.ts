@@ -3,6 +3,14 @@ import { describe, expect, it } from 'vitest'
 import { projectAutomationSteps } from '../src/automation-projection.js'
 
 describe('Automation Source projection', () => {
+  it('keeps unavailable extension nodes and their inputs intact with a recoverable Unknown Control label', () => {
+    const source: AutomationSource = { triggers: [], flow: { type: 'extension', id: 'custom', control: { id: 'test:pause', version: 2 }, input: { value: { type: 'literal', value: 5 } } } }
+    const before = structuredClone(source)
+    expect(projectAutomationSteps(source)[0]).toMatchObject({ sourceId: 'custom', label: 'Unknown Control', summary: 'Control · test:pause@2' })
+    expect(projectAutomationSteps(source, [], new Map([['control:test:pause@2', 'Pause']]))[0]?.label).toBe('Pause')
+    expect(source).toEqual(before)
+  })
+
   it('derives a stable read-only step list from structured Source', () => {
     const source: AutomationSource = {
       triggers: [{

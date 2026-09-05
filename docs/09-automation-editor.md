@@ -57,7 +57,7 @@ Trigger Inspector：
 
 ## 6. Palette
 
-Palette 由 Capability Registry + Control Registry 自动生成。
+Palette 由 Capability Registry + Control Registry 自动生成。Control 的注册和卸载通过 `numen/control-change` 使目录失效；核心 Control 目录也由插件注册。扩展条目携带版本化引用和经过投影的输入 Schema，复用 ValueExpr Field Shell、Schema Literal Renderer、自动保存和 Undo/Redo，不把编译函数发送到浏览器。
 
 默认使用 Quick Picker，不永久占用 300px 节点库。
 
@@ -143,8 +143,9 @@ Control/Renderer Plugin 缺失：
 
 - Source 原样保留
 - 显示 Unknown Control
-- 允许查看/移动/删除
-- Publish 因 compile dependency missing 被阻止
+- 当前可查看节点身份，Source 和输入完整保留；恢复相同版本插件后继续编辑。移动/删除仍待 Canvas 结构编辑实现。
+- Publish 因 compile dependency missing 被阻止，并定位原 Source 节点
+- 已发布 Revision 的 Run Flow 使用契约快照标题和指令 Source Map 聚合执行状态，不依赖实时 Control Registry
 
 ## 13. Presentation Metadata
 

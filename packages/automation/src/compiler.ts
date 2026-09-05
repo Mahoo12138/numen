@@ -1,5 +1,7 @@
+import type Schema from 'schemastery'
 import {
   capabilityKey,
+  controlKey,
   getCoreExpressionFunction,
   isNumenValue,
   type AutomationSource,
@@ -10,6 +12,10 @@ import {
   type CompileDiagnostic,
   type ContractSnapshotCapability,
   type ControlSource,
+  type ControlResolver,
+  type CoreControlSource,
+  type ExtensionControlDefinition,
+  type SourceRef,
   type CoreInstruction,
   type CorePlan,
   type DependencyManifest,
@@ -50,7 +56,7 @@ const nodeIdPattern = /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/
 const refPattern = /^(run|trigger|input|steps|vars|loop|error)(\.[a-zA-Z0-9_$-]+)+$/
 const functionPattern = /^[a-z0-9][a-z0-9_.-]*:[a-z0-9][a-z0-9_.-]*$/
 
-function schemaSnapshot(schema: CapabilityDefinition['input']): unknown {
+function schemaSnapshot(schema: Schema): unknown {
   return JSON.parse(JSON.stringify(schema.toJSON())) as unknown
 }
 
@@ -79,12 +85,52 @@ function literalValue(expression: ValueExpr): NumenValue | undefined {
   }
 }
 
+function freezeControlInput(value: unknown): void {
+  if (!value || typeof value !== 'object' || Object.isFrozen(value)) return
+  Object.freeze(value)
+  for (const child of Object.values(value)) freezeControlInput(child)
+}
+
+/** Extension output is bounded, JSON-only, namespaced, and cannot recursively invoke extensions. */
+function validateLoweredControl(value: CoreControlSource, nodeId: string): void {
+  const active = new Set<object>()
+  let values = 0
+  const json = (item: unknown, depth: number): void => {
+    if (++values > 20_000 || depth > 64) throw new TypeError('lowered tree too large')
+    if (item === null || typeof item === 'string' || typeof item === 'boolean') return
+    if (typeof item === 'number' && Number.isFinite(item)) return
+    if (!item || typeof item !== 'object' || active.has(item)) throw new TypeError('non-JSON lowered tree')
+    if (!Array.isArray(item) && Object.getPrototypeOf(item) !== Object.prototype && Object.getPrototypeOf(item) !== null) throw new TypeError('non-JSON object')
+    active.add(item)
+    for (const child of Object.values(item)) json(child, depth + 1)
+    active.delete(item)
+  }
+  json(value, 0)
+  let nodes = 0
+  const visit = (control: ControlSource, root = false): void => {
+    if (++nodes > 256 || !control || typeof control.id !== 'string'
+      || (root ? control.id !== nodeId : !control.id.startsWith(`${nodeId}.`))) throw new TypeError('invalid lowered identity')
+    switch (control.type) {
+      case 'capability': case 'wait': return
+      case 'block': control.steps.forEach(child => visit(child)); return
+      case 'if': visit(control.then); if (control.else) visit(control.else); return
+      case 'parallel': case 'race': control.branches.forEach(child => visit(child)); return
+      case 'foreach': visit(control.body); return
+      default: throw new TypeError('unsupported lowered control')
+    }
+  }
+  visit(value, true)
+}
+
 export function compileAutomation(
   source: AutomationSource,
   capabilities: CapabilityResolver,
   connections?: ConnectionResolver,
+  controls?: ControlResolver,
 ): CompileResult {
   const diagnostics: CompileDiagnostic[] = []
+  const usedControls = new Map<string, ExtensionControlDefinition>()
+  const sourceMap: Record<string, SourceRef> = {}
   const instructions: Record<string, CoreInstruction> = {}
   const nodeIds = new Set<string>()
   const dependencies = new Map<string, CapabilityDependency>()
@@ -331,7 +377,7 @@ export function compileAutomation(
   }
 
   const validateCapabilityInput = (
-    definition: CapabilityDefinition,
+    definition: { input: Schema },
     input: Record<string, ValueExpr>,
     nodeId: string,
   ) => {
@@ -370,14 +416,49 @@ export function compileAutomation(
     }
   }
 
-  const compileControl = (control: ControlSource, next: string): string => {
+  const compileControl = (control: ControlSource, next: string, registered = false): string => {
     if (!control || typeof control !== 'object' || typeof control.id !== 'string') {
       report({ severity: 'error', code: 'INVALID_CONTROL', message: 'Control must have a stable id.' })
       return next
     }
     const controlId = control.id
-    registerNode(controlId)
+    if (!registered) registerNode(controlId)
     switch (control.type) {
+      case 'extension': {
+        const ref = control.control
+        if (!ref || typeof ref.id !== 'string' || !Number.isSafeInteger(ref.version) || ref.version < 1) {
+          report({ severity: 'error', code: 'CONTROL_REF_INVALID', message: 'Control reference requires an id and positive integer version.', source: { nodeId: controlId, fieldPath: 'control' } })
+          return next
+        }
+        const definition = controls?.get(ref)
+        if (definition?.kind !== 'extension') {
+          report({ severity: 'error', code: 'CONTROL_UNAVAILABLE', message: `Control compiler unavailable: ${controlKey(ref)}`, source: { nodeId: controlId, fieldPath: 'control' } })
+          return next
+        }
+        if (!control.input || typeof control.input !== 'object' || Array.isArray(control.input)) {
+          report({ severity: 'error', code: 'CONTROL_INPUT_INVALID', message: 'Control input must be an object of expressions.', source: { nodeId: controlId, fieldPath: 'input' } })
+          return next
+        }
+        const diagnosticStart = diagnostics.length
+        validateCapabilityInput(definition, control.input, controlId)
+        if (diagnostics.slice(diagnosticStart).some(item => item.severity === 'error')) return next
+        let lowered: CoreControlSource
+        try {
+          const input = structuredClone(control.input)
+          freezeControlInput(input)
+          lowered = definition.lower(Object.freeze({ nodeId: controlId, input }))
+          validateLoweredControl(lowered, controlId)
+        } catch {
+          report({ severity: 'error', code: 'CONTROL_LOWER_FAILED', message: `Control ${controlKey(ref)} did not produce a valid core control tree.`, source: { nodeId: controlId } })
+          return next
+        }
+        usedControls.set(controlKey(ref), definition)
+        const existingInstructions = new Set(Object.keys(instructions))
+        const entry = compileControl(lowered, next, true)
+        for (const id of Object.keys(instructions)) if (!existingInstructions.has(id)) sourceMap[id] = { nodeId: controlId }
+        for (const diagnostic of diagnostics.slice(diagnosticStart)) diagnostic.source = { nodeId: controlId }
+        return entry
+      }
       case 'block': {
         if (control.output) {
           report({ severity: 'error', code: 'BLOCK_OUTPUT_NOT_IMPLEMENTED', message: 'Block output lowering is not implemented in this milestone.', source: { nodeId: control.id, fieldPath: 'output' } })
@@ -632,15 +713,18 @@ export function compileAutomation(
     throw new AutomationCompileError(diagnostics)
   }
 
+  const controlDefinitions = [...usedControls.values()].sort((a, b) => controlKey(a).localeCompare(controlKey(b)))
   return {
-    plan: { irVersion: 1, entry, instructions },
+    plan: { irVersion: 1, entry, instructions, ...(usedControls.size ? { sourceMap } : {}) },
     dependencyManifest: {
+      ...(usedControls.size ? { controls: controlDefinitions.map(({ id, version }) => ({ id, version })) } : {}),
       capabilities: [...dependencies.values()].sort((a, b) => (
         `${capabilityKey(a)}:${connectionBindingKey(a.connectionIds ?? (a.connectionId ? { default: a.connectionId } : {}))}`
           .localeCompare(`${capabilityKey(b)}:${connectionBindingKey(b.connectionIds ?? (b.connectionId ? { default: b.connectionId } : {}))}`)
       )),
     },
     contractSnapshot: {
+      ...(usedControls.size ? { controls: controlDefinitions.map(({ id, version, title, input }) => ({ id, version, title, inputSchema: schemaSnapshot(input) })) } : {}),
       capabilities: [...snapshots.values()].sort((a, b) => capabilityKey(a).localeCompare(capabilityKey(b))),
     },
     diagnostics,

@@ -15,7 +15,7 @@ import { createRuntimeEntries, loadConfig, type LoadedConfig, type RuntimeEntry 
 import { ConnectionService } from '@numen/connections'
 import { CredentialService } from '@numen/credentials'
 import { ResourceService } from '@numen/resources'
-import { CapabilityRegistry } from '@numen/core'
+import { CapabilityRegistry, ControlRegistry, coreControlsPlugin } from '@numen/core'
 import { DatabaseService } from '@numen/database'
 import { SchedulerService } from '@numen/scheduler'
 import { TriggerService } from '@numen/triggers'
@@ -54,6 +54,8 @@ export interface NumenApplication {
 const builtins = {
   database: DatabaseService,
   capabilities: CapabilityRegistry,
+  controls: ControlRegistry,
+  coreControls: coreControlsPlugin,
   credentials: CredentialService,
   resources: ResourceService,
   connections: ConnectionService,

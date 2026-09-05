@@ -98,8 +98,8 @@ export function CapabilityConnectionFields({
 
 interface CapabilityInputFieldsProps {
   nodeId: string
-  definition: CapabilityCatalogItem
-  control: CapabilitySource
+  definition: Pick<CapabilityCatalogItem, 'inputFields' | 'inputSchemaSupported'>
+  control: Pick<CapabilitySource, 'input'>
   problems: CompileDiagnostic[]
   canEdit: boolean
   source?: AutomationSource
@@ -112,9 +112,9 @@ interface CapabilityInputFieldsProps {
 
 export const CapabilityInputFields = defineSetupComponent<CapabilityInputFieldsProps>('CapabilityInputFields', ['nodeId', 'definition', 'control', 'problems', 'canEdit', 'source', 'variableCatalog', 'schemaUI', 'focusFieldPath', 'focusRequest', 'onChange'], props => () => {
   if (!props.definition.inputSchemaSupported) {
-    return <div class="inspector-schema-notice"><AlertCircle size={15} /><span>This Capability does not expose an object input schema supported by the core Inspector.</span></div>
+    return <div class="inspector-schema-notice"><AlertCircle size={15} /><span>This step does not expose an object input schema supported by the core Inspector.</span></div>
   }
-  if (!props.definition.inputFields.length) return <p class="inspector-summary">This Capability has no configurable inputs.</p>
+  if (!props.definition.inputFields.length) return <p class="inspector-summary">This step has no configurable inputs.</p>
   return props.definition.inputFields.map(field => {
     const expression = props.control.input[field.name]
     const problem = fieldProblem(props.problems, field.name)

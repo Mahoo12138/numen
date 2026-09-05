@@ -350,6 +350,7 @@ export interface AutomationDraftDocumentModel {
   insert(item: WorkbenchAutomationInsertItem): void
   selectNode(nodeId?: string): void
   setCapabilityConnection(nodeId: string, slotName: string, connectionId?: string): void
+  setExtensionInput(nodeId: string, fieldName: string, expression?: ValueExpr): void
   setCapabilityInput(nodeId: string, fieldName: string, expression?: ValueExpr): void
   setControlExpression(nodeId: string, field: 'condition' | 'items', expression: ValueExpr): void
   setWaitExpression(nodeId: string, field: 'durationMs' | 'until', expression: ValueExpr): void
@@ -460,6 +461,9 @@ export function useAutomationDraftDocument({
       command: { type: 'SET_CAPABILITY_CONNECTION', nodeId, slotName, ...(connectionId ? { connectionId } : {}) },
     })
   }
+  const setExtensionInput = (nodeId: string, fieldName: string, expression?: ValueExpr) => {
+    dispatch({ type: 'EDIT', command: { type: 'SET_EXTENSION_INPUT', nodeId, fieldName, ...(expression ? { expression } : {}) } })
+  }
   const setCapabilityInput = (nodeId: string, fieldName: string, expression?: ValueExpr) => {
     dispatch({
       type: 'EDIT',
@@ -518,6 +522,7 @@ export function useAutomationDraftDocument({
     selectNode,
     setCapabilityConnection,
     setCapabilityInput,
+    setExtensionInput,
     setControlExpression,
     setWaitExpression,
     undo,

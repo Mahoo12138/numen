@@ -68,6 +68,9 @@ function projectControl(
       ))
       for (const child of source.steps) projectControl(child, depth + 1, output, capabilityTitles)
       break
+    case 'extension':
+      output.push(step(source.id, 'extension', capabilityTitles.get(`control:${source.control.id}@${source.control.version}`) ?? 'Unknown Control', `Control · ${source.control.id}@${source.control.version}`, Boxes, depth))
+      break
     case 'capability':
       output.push(step(
         source.id,

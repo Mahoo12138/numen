@@ -104,7 +104,7 @@ export function projectWorkbenchRunDetail(
 }
 
 const flowStatusPriority: WorkbenchRunFlowStatus[] = [
-  'FAILED', 'CANCELLING', 'RUNNING', 'BLOCKED', 'WAITING', 'CANCELLED', 'COMPLETED', 'QUEUED', 'IDLE',
+  'FAILED', 'CANCELLING', 'RUNNING', 'BLOCKED', 'WAITING', 'CANCELLED', 'QUEUED', 'COMPLETED', 'IDLE',
 ]
 
 function projectRunFlow(
@@ -128,7 +128,17 @@ function projectRunFlow(
   const capabilityTitles = new Map(
     revision.contractSnapshot.capabilities.map(capability => [capabilityKey(capability), capability.title]),
   )
-  const byInstruction = new Map(summaries.map(summary => [summary.instructionId, summary]))
+  for (const control of revision.contractSnapshot.controls ?? []) capabilityTitles.set(`control:${control.id}@${control.version}`, control.title)
+  const byInstruction = new Map<string, RunInstructionExecutionSummary>()
+  for (const summary of summaries) {
+    const id = revision.compiledPlan.sourceMap?.[summary.instructionId]?.nodeId ?? summary.instructionId
+    const existing = byInstruction.get(id)
+    if (!existing) byInstruction.set(id, { ...summary, instructionId: id, statusCounts: { ...summary.statusCounts } })
+    else {
+      for (const status of Object.keys(summary.statusCounts) as Array<keyof typeof summary.statusCounts>) existing.statusCounts[status] += summary.statusCounts[status]
+      if (summary.latestUpdatedAt > existing.latestUpdatedAt) existing.latestUpdatedAt = summary.latestUpdatedAt
+    }
+  }
   const budget = { remaining: 250, truncated: false }
   const source = projectFlowNode(revision.source.flow, byInstruction, capabilityTitles, budget)!
   const root: WorkbenchRunFlowNode = {
@@ -193,6 +203,7 @@ function projectFlowNode(
 function flowNodeTitle(control: ControlSource, capabilityTitles: ReadonlyMap<string, string>): string {
   switch (control.type) {
     case 'block': return 'Sequence'
+    case 'extension': return capabilityTitles.get(`control:${control.control.id}@${control.control.version}`) ?? control.control.id
     case 'capability': return capabilityTitles.get(capabilityKey(control.capability)) ?? control.capability.id
     case 'if': return 'Condition'
     case 'wait': return 'Wait'
@@ -205,6 +216,7 @@ function flowNodeTitle(control: ControlSource, capabilityTitles: ReadonlyMap<str
 function flowNodeDetail(control: ControlSource): string {
   switch (control.type) {
     case 'block': return `${control.steps.length} ${control.steps.length === 1 ? 'step' : 'steps'}`
+    case 'extension': return `${control.control.id}@${control.control.version}`
     case 'capability': return `${capabilityKey(control.capability)} · ${Object.keys(control.connections ?? {}).length} connection bindings`
     case 'if': return control.else ? 'Then / Else' : 'Then branch'
     case 'wait': return control.until ? 'Until expression' : 'Duration expression'
@@ -222,8 +234,8 @@ function flowStatusFromSummary(summary: RunInstructionExecutionSummary): Workben
   if (counts.BLOCKED) return 'BLOCKED'
   if (counts.WAITING) return 'WAITING'
   if (counts.CANCELLED) return 'CANCELLED'
-  if (counts.COMPLETED) return 'COMPLETED'
   if (counts.RUNNABLE) return 'QUEUED'
+  if (counts.COMPLETED) return 'COMPLETED'
   return 'IDLE'
 }
 

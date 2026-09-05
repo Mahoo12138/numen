@@ -1,4 +1,5 @@
-import type { CapabilityDefinition, CapabilityStatus } from '@numen/core'
+import { Context } from 'cordis'
+import { ControlRegistry, type CapabilityDefinition, type CapabilityStatus } from '@numen/core'
 import z from 'schemastery'
 import { describe, expect, it } from 'vitest'
 import {
@@ -26,6 +27,25 @@ function definition(
 }
 
 describe('Automation insert catalog projection', () => {
+  it('projects only live plugin Controls and their input fields without compiler functions', async () => {
+    const root = new Context()
+    await root.plugin(ControlRegistry)
+    const dispose = root.controls.defineControl(root, {
+      kind: 'extension', id: 'test:pause', version: 1, title: 'Pause', description: 'Durable pause',
+      input: z.object({ milliseconds: z.number().min(0).default(1000) }),
+      lower: ({ nodeId, input }) => ({ type: 'wait', id: nodeId, durationMs: input.milliseconds! }),
+    })
+    const catalog = projectAutomationInsertCatalog([], [], root.controls.list())
+    expect(catalog.items).toEqual([expect.objectContaining({
+      kind: 'extension', control: { id: 'test:pause', version: 1 }, inputSchemaSupported: true,
+      inputFields: [expect.objectContaining({ name: 'milliseconds', type: 'number', min: 0, defaultValue: 1000 })],
+    })])
+    expect(catalog.items[0]).not.toHaveProperty('lower')
+    dispose()
+    expect(projectAutomationInsertCatalog([], [], root.controls.list()).items).toEqual([])
+    await root.fiber.dispose()
+  })
+
   it('combines core controls with sorted query/action metadata and excludes triggers', () => {
     const statuses: CapabilityStatus[] = [
       {

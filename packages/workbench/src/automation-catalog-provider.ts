@@ -1,5 +1,5 @@
 import type { ConsoleQueryDefinition } from '@numen/console'
-import { type CapabilityDefinition, type CapabilityStatus } from '@numen/core'
+import { coreControlDefinitions, type ControlDefinition, type CapabilityStatus } from '@numen/core'
 import type { Context } from 'cordis'
 import type Schema from 'schemastery'
 import z from 'schemastery'
@@ -17,14 +17,6 @@ import {
 } from './contracts.js'
 import { projectWorkbenchConnection } from './connection-projection.js'
 import { humanizeFieldName, projectObjectSchema, workbenchSchemaFieldSchema } from './schema-field-projection.js'
-
-const coreControls: ReadonlyArray<WorkbenchAutomationInsertItem> = [
-  { kind: 'control', control: 'wait', title: 'Wait', description: 'Pause for a literal duration or until a later expression.' },
-  { kind: 'control', control: 'if', title: 'If', description: 'Branch into structured then and optional else blocks.' },
-  { kind: 'control', control: 'parallel', title: 'Parallel', description: 'Run structured branches concurrently and join all results.' },
-  { kind: 'control', control: 'race', title: 'Race', description: 'Run branches concurrently and keep the first successful result.' },
-  { kind: 'control', control: 'foreach', title: 'For each', description: 'Iterate a structured body with bounded concurrency.' },
-]
 
 const capabilityRefSchema = z.object({
   id: z.string().required(),
@@ -58,6 +50,14 @@ const connectionOptionSchema = z.object({
 })
 
 const insertItemSchema = z.union([
+  z.object({
+    kind: z.const('extension').required(),
+    control: capabilityRefSchema.required(),
+    title: z.string().required(),
+    description: z.string().required(),
+    inputFields: z.array(workbenchSchemaFieldSchema).required(),
+    inputSchemaSupported: z.boolean().required(),
+  }),
   z.object({
     kind: z.const('control').required(),
     control: z.union(['wait', 'if', 'parallel', 'race', 'foreach']).required(),
@@ -133,7 +133,7 @@ export const workbenchAutomationVariableCatalogQuery: ConsoleQueryDefinition<
   }),
 }
 
-function projectInputSchema(definition: CapabilityDefinition): {
+function projectInputSchema(definition: { input: Schema }): {
   inputFields: WorkbenchAutomationInputField[]
   inputSchemaSupported: boolean
 } {
@@ -211,6 +211,7 @@ export function projectAutomationVariableCatalog(statuses: CapabilityStatus[]): 
 export function projectAutomationInsertCatalog(
   statuses: CapabilityStatus[],
   connections: WorkbenchAutomationConnectionOption[] = [],
+  definitions: readonly ControlDefinition[] = coreControlDefinitions,
 ): WorkbenchAutomationInsertCatalog {
   const capabilities = statuses
     .filter(status => status.definition.kind !== 'trigger')
@@ -239,7 +240,9 @@ export function projectAutomationInsertCatalog(
         : 0)
     ))
   return {
-    items: [...coreControls, ...capabilities],
+    items: [...definitions.map<WorkbenchAutomationInsertItem>(definition => definition.kind === 'core'
+      ? { kind: 'control', control: definition.control, title: definition.title, description: definition.description }
+      : { kind: 'extension', control: { id: definition.id, version: definition.version }, title: definition.title, description: definition.description, ...projectInputSchema(definition) }), ...capabilities],
     connections: [...connections].sort((left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id)),
   }
 }
@@ -261,7 +264,7 @@ export function workbenchAutomationCatalogProviderPlugin(ctx: Context): void {
           status: projected.status,
         }
       })
-      return projectAutomationInsertCatalog(ctx.capabilities.list(), connections)
+      return projectAutomationInsertCatalog(ctx.capabilities.list(), connections, ctx.controls.list())
     },
   })
   ctx.console.provideQuery(ctx, workbenchAutomationVariableCatalogQueryRef, {
@@ -271,6 +274,6 @@ export function workbenchAutomationCatalogProviderPlugin(ctx: Context): void {
   })
 }
 
-workbenchAutomationCatalogProviderPlugin.inject = ['workbench', 'console', 'capabilities', 'connections']
+workbenchAutomationCatalogProviderPlugin.inject = ['workbench', 'console', 'capabilities', 'connections', 'controls']
 
 export default workbenchAutomationCatalogProviderPlugin

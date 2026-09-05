@@ -1,6 +1,7 @@
+import { projectWorkbenchRunDetail } from '../src/run-detail-projection.js'
 import { AutomationService } from '@numen/automation'
 import { ConsoleProcedureUnavailableError, ConsoleService, type ConsoleRequestContext } from '@numen/console'
-import { CapabilityRegistry, type CapabilityDefinition } from '@numen/core'
+import { CapabilityRegistry, ControlRegistry, type CapabilityDefinition } from '@numen/core'
 import { DatabaseService } from '@numen/database'
 import { SchedulerService } from '@numen/scheduler'
 import { Context, type Logger } from 'cordis'
@@ -33,6 +34,57 @@ function request(): ConsoleRequestContext {
 }
 
 describe('Workbench Run detail Provider', () => {
+  it('aggregates generated instruction executions under the historical Control title after plugin unload', async () => {
+    const root = new Context()
+    const directory = await mkdtemp(join(tmpdir(), 'numen-control-detail-'))
+    directories.push(directory)
+    await root.plugin(DatabaseService, { path: ':memory:' })
+    await root.plugin(CapabilityRegistry)
+    await root.plugin(ControlRegistry)
+    const action: CapabilityDefinition = {
+      id: 'test:record', version: 1, kind: 'action', title: 'Record', input: z.object({}), output: z.object({}),
+      semantics: { sideEffect: false, idempotent: true, retrySafe: true },
+    }
+    root.capabilities.define(root, action)
+    root.capabilities.provide(root, action, { async invoke() { return {} } })
+    const dispose = root.controls.defineControl(root, {
+      kind: 'extension', id: 'test:twice', version: 1, title: 'Record twice', description: '', input: z.object({}),
+      lower: ({ nodeId }) => ({ type: 'block', id: nodeId, steps: ['first', 'second'].map(suffix => ({
+        type: 'capability', id: `${nodeId}.${suffix}`, capability: { id: action.id, version: 1 }, input: {},
+      })) }),
+    })
+    await root.plugin(AutomationService)
+    await root.plugin(ResourceService, { path: join(directory, 'resources') })
+    await root.plugin(SchedulerService, { autoDispatch: false })
+    await root.plugin(ConsoleService)
+    root.console.define(root, workbenchRunDetailQuery)
+    root.console.define(root, workbenchCancelRunAction)
+    root.console.define(root, workbenchRunsIndexQuery)
+    const provider = (ctx: Context) => workbenchRunsProviderPlugin(ctx)
+    provider.inject = ['console', 'automations', 'scheduler']
+    await root.plugin(provider)
+    const created = root.automations.create({ name: 'Twice', source: { triggers: [], flow: {
+      type: 'extension', id: 'twice', control: { id: 'test:twice', version: 1 }, input: {},
+    } } })
+    const revision = root.automations.publishDraft(created.automation.id, 1)
+    root.automations.activateRevision(created.automation.id, revision.id)
+    dispose()
+    const run = root.scheduler.startManual(created.automation.id)
+    await root.scheduler.dispatchUntilIdle()
+    const detail = await root.console.query(workbenchRunDetailQuery, { runId: run.id, executionLimit: 25, eventLimit: 100 }, request())
+    expect(detail.flow.root).toMatchObject({ executionCount: 2, status: 'COMPLETED', children: [{
+      id: 'twice', type: 'extension', title: 'Record twice', detail: 'test:twice@1', executionCount: 2, status: 'COMPLETED', children: [],
+    }] })
+    const inspection = root.scheduler.inspectRun(run.id)!
+    const pending = inspection.instructionExecutions.find(item => item.instructionId === 'twice.second')!
+    pending.statusCounts.COMPLETED = 0
+    pending.statusCounts.RUNNABLE = 1
+    const queued = projectWorkbenchRunDetail(run, 'Twice', revision, inspection,
+      root.scheduler.listExecutionDiagnosticsPage(run.id), root.scheduler.listRunEventsPage(run.id), () => '')
+    expect(queued.flow.root.children[0]).toMatchObject({ status: 'QUEUED', executionCount: 2 })
+    await root.fiber.dispose()
+  })
+
   it('projects bounded Execution diagnostics and semantic Journal events without raw values', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'numen-run-detail-'))
     directories.push(directory)

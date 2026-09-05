@@ -4,6 +4,7 @@ import type { WorkbenchAutomationInsertItem } from './contracts.js'
 export type AutomationSourceCommand =
   | { type: 'INSERT'; item: WorkbenchAutomationInsertItem }
   | { type: 'SET_CAPABILITY_CONNECTION'; nodeId: string; slotName: string; connectionId?: string }
+  | { type: 'SET_EXTENSION_INPUT'; nodeId: string; fieldName: string; expression?: ValueExpr }
   | { type: 'SET_CAPABILITY_INPUT'; nodeId: string; fieldName: string; expression?: ValueExpr }
   | { type: 'SET_CONTROL_EXPRESSION'; nodeId: string; field: 'condition' | 'items'; expression: ValueExpr }
   | { type: 'SET_WAIT_EXPRESSION'; nodeId: string; field: 'durationMs' | 'until'; expression: ValueExpr }
@@ -69,12 +70,13 @@ function createInsertControl(
   item: WorkbenchAutomationInsertItem,
   ids: Set<string>,
 ): ControlSource {
-  if (item.kind === 'capability') {
+  if (item.kind === 'capability' || item.kind === 'extension') {
     const input = Object.fromEntries((item.inputFields ?? []).flatMap(field => (
       'defaultValue' in field
         ? [[field.name, { type: 'literal' as const, value: field.defaultValue! }]]
         : []
     )))
+    if (item.kind === 'extension') return { type: 'extension', id: availableId(ids, 'control'), control: item.control, input }
     return {
       type: 'capability',
       id: availableId(ids, 'capability'),
@@ -230,15 +232,16 @@ function setWaitExpression(
   return result.changed ? { ...source, flow: result.control } : source
 }
 
-function setCapabilityInput(
+function setNodeInput(
   source: AutomationSource,
   nodeId: string,
   fieldName: string,
   expression: ValueExpr | undefined,
+  kind: 'capability' | 'extension' = 'capability',
 ): AutomationSource {
-  if (!fieldName) throw new TypeError('Capability input field name is required.')
+  if (!fieldName) throw new TypeError('Input field name is required.')
   const result = editControl(source.flow, nodeId, control => {
-    if (control.type !== 'capability') return control
+    if (control.type !== kind || (control.type !== 'capability' && control.type !== 'extension')) return control
     const current = control.input[fieldName]
     if (expression === undefined) {
       if (!(fieldName in control.input)) return control
@@ -286,8 +289,9 @@ export function applyAutomationSourceCommand(
     case 'SET_CAPABILITY_CONNECTION': return {
       source: setCapabilityConnection(source, command.nodeId, command.slotName, command.connectionId),
     }
+    case 'SET_EXTENSION_INPUT': return { source: setNodeInput(source, command.nodeId, command.fieldName, command.expression, 'extension') }
     case 'SET_CAPABILITY_INPUT': return {
-      source: setCapabilityInput(source, command.nodeId, command.fieldName, command.expression),
+      source: setNodeInput(source, command.nodeId, command.fieldName, command.expression),
     }
     case 'SET_CONTROL_EXPRESSION': return {
       source: setControlExpression(source, command.nodeId, command.field, command.expression),

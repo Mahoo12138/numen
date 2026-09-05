@@ -1,6 +1,7 @@
 import { AutomationService } from '@numen/automation'
 import {
   CapabilityRegistry,
+  ControlRegistry,
   type AutomationSource,
   type CapabilityDefinition,
   type NumenValue,
@@ -101,6 +102,30 @@ const linearSource: AutomationSource = {
 }
 
 describe('SchedulerService', () => {
+  it('executes a persisted extension Revision after its compiler plugin is unloaded', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'numen-control-run-'))
+    directories.push(directory)
+    const root = await createContext(join(directory, 'numen.db'), actionDefinition(), async input => input)
+    await root.plugin(ControlRegistry)
+    const dispose = root.controls.defineControl(root, {
+      kind: 'extension', id: 'test:record-control', version: 1, title: 'Record Control', description: '',
+      input: z.object({ value: z.string().required() }),
+      lower: ({ nodeId, input }) => ({ type: 'capability', id: nodeId, capability: { id: 'test:record', version: 1 }, input: { ...input } }),
+    })
+    const automationId = publish(root, { triggers: [], flow: {
+      type: 'extension', id: 'record', control: { id: 'test:record-control', version: 1 }, input: { value: { type: 'literal', value: 'retained' } },
+    } })
+    const revisionId = root.automations.get(automationId)!.activeRevisionId!
+    dispose()
+    expect(() => root.automations.publishDraft(automationId, 1)).toThrow('compilation failed')
+    expect(root.automations.getDraft(automationId)?.source.flow.type).toBe('extension')
+    const run = root.scheduler.startManual(automationId)
+    await root.scheduler.dispatchUntilIdle()
+    expect(root.scheduler.getRun(run.id)).toMatchObject({ revisionId, status: 'COMPLETED' })
+    expect(root.scheduler.inspectRun(run.id)?.instructionExecutions).toContainEqual(expect.objectContaining({ instructionId: 'record', statusCounts: expect.objectContaining({ COMPLETED: 1 }) }))
+    await root.fiber.dispose()
+  })
+
   it('pages recent Run summaries with deterministic keyset cursors and status counts', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'numen-scheduler-'))
     directories.push(directory)

@@ -49,6 +49,7 @@ export function workbenchInvalidationProviderPlugin(ctx: Context): void {
         queueMicrotask(flush)
       }
       const disposeAutomation = ctx.on('numen/automation-change', () => invalidate('home', 'automations'))
+      const disposeControl = ctx.on('numen/control-change', () => invalidate('automationCatalog'))
       const disposeCapability = ctx.on('numen/capability-change', () => invalidate('automationCatalog'))
       const disposeRun = ctx.on('numen/run-change', () => invalidate('home', 'runs'))
       const disposeConnection = ctx.on('numen/connection-change', () => invalidate('home', 'automationCatalog', 'connections', 'credentials'))
@@ -65,6 +66,7 @@ export function workbenchInvalidationProviderPlugin(ctx: Context): void {
         pending.clear()
         disposeAutomation()
         disposeCapability()
+        disposeControl()
         disposeRun()
         disposeCredential()
         disposeCredentialType()

@@ -69,7 +69,16 @@ export interface ForEachSource {
   concurrency?: number
 }
 
-export type ControlSource =
+export interface ControlRef { id: string; version: number }
+
+export interface ExtensionControlSource {
+  type: 'extension'
+  id: string
+  control: ControlRef
+  input: Record<string, ValueExpr>
+}
+
+export type CoreControlSource =
   | CapabilitySource
   | BlockSource
   | IfSource
@@ -77,6 +86,8 @@ export type ControlSource =
   | ParallelSource
   | RaceSource
   | ForEachSource
+
+export type ControlSource = CoreControlSource | ExtensionControlSource
 
 export interface TriggerSource {
   id: string
@@ -135,6 +146,8 @@ export interface CorePlan {
   entry: string
   instructions: Record<string, CoreInstruction>
   resources?: ResourceRef[]
+  /** Generated instruction IDs mapped to their authored extension node. */
+  sourceMap?: Record<string, SourceRef>
 }
 
 export interface Automation {
@@ -176,6 +189,7 @@ export interface CapabilityDependency extends CapabilityRef {
 }
 
 export interface DependencyManifest {
+  controls?: ControlRef[]
   capabilities: CapabilityDependency[]
 }
 
@@ -198,6 +212,7 @@ export interface ContractSnapshotCapability extends CapabilityRef {
 }
 
 export interface ContractSnapshot {
+  controls?: Array<ControlRef & { title: string; inputSchema: unknown }>
   capabilities: ContractSnapshotCapability[]
 }
 

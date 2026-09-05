@@ -195,9 +195,12 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Generation-fenced Automation activation and enable/disable Actions with distinct publish/activate/enable behavior
 - [x] Revision activation controls and desired-state UI with conflict reconciliation, Draft preservation, and abort-safe lifecycle
 
+- [x] Plugin-owned Control Registry, core catalog plugin, and live extension insertion/input editing
+- [x] Versioned extension Source lowering to Core IR with contract snapshots, Source mappings, and unload-safe historical execution
+
 ## Next
 
-1. Plugin-owned Control Registry
+1. Automation Draft conflict comparison and save-copy recovery
 
 ## Design Review
 
@@ -230,12 +233,14 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 
 - **Automation activation seam — pass:** AutomationService checks a shared activation generation inside a SQLite transaction for both Revision selection and enabled desired state. Workbench requires that generation on each Action and returns explicit conflicts and Revision ownership errors. Repeated current-state requests are no-ops; Publish never activates, Activate preserves enabled, and Disable preserves existing Runs. The Page keeps confirmed generations ahead of stale Queries, refreshes conflicts without automatic retries, and leaves local Draft state under its existing authoring owner. Production-browser QA covers autosave during enable, two-tab activation/disable conflicts, explicit retry, immutable Run revision retention, reload, and 1440px/390px layouts.
 
+- **Control Registry seam — pass:** Cordis Effects own core catalog and extension definitions, with live catalog invalidation on registration and unload. The compiler validates exact-version expression inputs, passes a frozen clone into synchronous lowering, bounds and namespaces generated core trees, and persists Control contracts plus instruction-to-Source mappings. Missing compilers block Publish while preserving Drafts; historical Runs execute persisted Core IR and retain snapshot titles. Workbench reuses the existing field and Draft owners for insertion, expression editing, autosave, and history. Tests cover lifecycle, invalid lower results, immutable Source, unload-safe execution, and generated Run status aggregation. Production-browser QA covers unload/re-registration, preserved inputs, publish diagnostics, reload, and 1440px/390px layouts.
+
 ## Verification Baseline
 
 ```text
 Typecheck: passing
 Build: passing
-Tests: 49 files, 195 tests passing
+Tests: 51 files, 211 tests passing
 CLI config validate: passing
 CLI doctor: passing
 SQLite schema migration: v10
@@ -252,12 +257,12 @@ pnpm dev
 
 ## Known Boundaries
 
-- The current compiler supports Block, Capability, If, timer Wait, Parallel, first-success Race, and bounded ForEach controls. Block output lowering is diagnosed as unsupported.
+- The current compiler supports Block, Capability, If, timer Wait, Parallel, first-success Race, bounded ForEach, and versioned plugin Extension Controls that lower to these core forms. Extension Source currently supports expression inputs as leaf nodes; authored child slots and output contracts remain planned. Block output lowering is diagnosed as unsupported.
 - Drafts may remain invalid; authoritative validation happens during Publish.
 - The current Scheduler executes the Core IR subset emitted by the compiler, including retry, timeout, cancellation, recovery, and structured concurrency.
 - Parallel, first-success Race, and bounded ForEach use durable Execution scopes with interruptible concurrent dispatch; Try/Finally control flow remains planned work.
 - Typed Console transports, browser sessions, Browser Cordis clients, frontend extension registries, atomic Entry generations, authenticated revision-fenced asset delivery, and Browser Entry reconciliation/rollback are operational. Generated bootstrap tokens and sessions rotate on restart; the CLI prints a fragment-only Workbench launch URL only with explicit `--print-launch-url` authorization.
-- The responsive Workbench shell, ten registered core Page routes, stable browser Route/Page reconciliation, a secret-free production bootstrap, and authenticated core Entry loading are operational through the default Runtime. Home, Automations, the keyset-paginated Runs index, bounded Run Flow/Timeline/Context detail with cancellation controls, and the desired/runtime-separated Connections index display live data and refresh through coalesced typed invalidations without replacing server truth in the browser. Automation authoring now supports registry-driven Capability/control insertion, plugin-owned Schema Literal renderers, unified Literal/Reference/Template/structured Call inputs, scope-aware typed Magic Variables, named Connection bindings, expression-backed Wait duration/until editing, bounded undo/redo, debounced full-document autosave, explicit conflict recovery, immutable Revision publish, explicit Revision activation and enable/disable controls, and source-linked diagnostics. Automation `input.*` and `vars.*` remain manually addressable because no declaration schema exists yet; a plugin-owned Control Registry and compare/save-copy conflict options remain planned.
+- The responsive Workbench shell, ten registered core Page routes, stable browser Route/Page reconciliation, a secret-free production bootstrap, and authenticated core Entry loading are operational through the default Runtime. Home, Automations, the keyset-paginated Runs index, bounded Run Flow/Timeline/Context detail with cancellation controls, and the desired/runtime-separated Connections index display live data and refresh through coalesced typed invalidations without replacing server truth in the browser. Automation authoring now supports registry-driven Capability/control insertion, plugin-owned Schema Literal renderers, unified Literal/Reference/Template/structured Call inputs, scope-aware typed Magic Variables, named Connection bindings, expression-backed Wait duration/until editing, bounded undo/redo, debounced full-document autosave, explicit conflict recovery, immutable Revision publish, explicit Revision activation and enable/disable controls, and source-linked diagnostics. Automation `input.*` and `vars.*` remain manually addressable because no declaration schema exists yet; compare/save-copy conflict options remain planned. Plugin-owned Control definitions now drive the live insert catalog and extension input fields.
 - Manual Runs and event Trigger subscriptions are supported. State Trigger transition detection, filtering, debounce, and throttle remain planned work.
 - Connection desired state, generation-fenced create/update/delete/enable Actions, Adapter Schema configuration UI, generation-fenced Runtime recreation, and metadata-only Credential selection are operational. Credential metadata, creation/rotation/deletion Actions and UI are operational; automatic reconnect policy remains planned work. Credential writes require an available type plugin and a configured runtime master key. Non-object secret contracts require a plugin-provided editor.
 - Credential payloads use authenticated encryption with environment-provided keys; key-ring migration and external vault providers remain planned work.

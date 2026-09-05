@@ -61,6 +61,22 @@ function loadedState(): AutomationDraftDocumentState {
 }
 
 describe('local Automation Draft document', () => {
+  it('inserts and edits extension inputs through document history without altering the versioned reference', () => {
+    const item: WorkbenchAutomationInsertItem = {
+      kind: 'extension', control: { id: 'test:pause', version: 2 }, title: 'Pause', description: '', inputSchemaSupported: true,
+      inputFields: [{ name: 'duration', label: 'Duration', type: 'number', schemaType: 'number', required: true, defaultValue: 10 }],
+    }
+    let state = reduceAutomationDraftDocument(loadedState(), { type: 'EDIT', command: { type: 'INSERT', item } })
+    const inserted = state.document!.source
+    expect(inserted.flow).toMatchObject({ steps: [{ type: 'extension', id: 'control-1', control: item.control, input: { duration: { type: 'literal', value: 10 } } }] })
+    state = reduceAutomationDraftDocument(state, { type: 'EDIT', command: { type: 'SET_EXTENSION_INPUT', nodeId: 'control-1', fieldName: 'duration', expression: { type: 'ref', path: 'input.duration' } } })
+    expect(state.document!.source.flow).toMatchObject({ steps: [{ control: item.control, input: { duration: { type: 'ref', path: 'input.duration' } } }] })
+    state = reduceAutomationDraftDocument(state, { type: 'UNDO' })
+    expect(state.document!.source).toEqual(inserted)
+    state = reduceAutomationDraftDocument(state, { type: 'REDO' })
+    expect(state.document!.source.flow).toMatchObject({ steps: [{ input: { duration: { type: 'ref' } } }] })
+  })
+
   it('appends stable wait ids and preserves a non-block flow by wrapping it', () => {
     const once = insert(source)
     const twice = insert(once)

@@ -34,6 +34,8 @@ describe('Numen runtime', () => {
       plugins: {
         database: { path: 'data/numen.db' },
         capabilities: {},
+        controls: {},
+        coreControls: {},
         credentials: {},
         resources: { path: 'data/resources' },
         connections: {},
@@ -174,6 +176,7 @@ describe('Numen runtime', () => {
     application.context.emit('numen/automation-change', 'synthetic-automation')
     await vi.waitFor(() => expect(invalidations).toEqual([{ scopes: ['home', 'automations', 'runs'] }]))
     invalidations.length = 0
+    application.context.emit('numen/control-change', { id: 'synthetic:control', version: 1 })
     application.context.emit('numen/capability-change', { id: 'synthetic:capability', version: 1 })
     await vi.waitFor(() => expect(invalidations).toEqual([{ scopes: ['automationCatalog'] }]))
     invalidations.length = 0

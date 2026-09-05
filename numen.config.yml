@@ -6,6 +6,8 @@ plugins:
   database:
     path: .numen/numen.db
   capabilities: {}
+  controls: {}
+  coreControls: {}
   credentials: {}
   resources:
     path: .numen/resources

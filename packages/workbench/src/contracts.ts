@@ -116,7 +116,7 @@ export type WorkbenchRunFlowStatus =
 
 export interface WorkbenchRunFlowNode {
   id: string
-  type: 'block' | 'capability' | 'if' | 'wait' | 'parallel' | 'race' | 'foreach'
+  type: 'extension' | 'block' | 'capability' | 'if' | 'wait' | 'parallel' | 'race' | 'foreach'
   title: string
   detail: string
   status: WorkbenchRunFlowStatus
@@ -478,6 +478,14 @@ export interface WorkbenchAutomationConnectionOption {
 }
 
 export type WorkbenchAutomationInsertItem =
+  | {
+    kind: 'extension'
+    control: { id: string; version: number }
+    title: string
+    description: string
+    inputFields: WorkbenchAutomationInputField[]
+    inputSchemaSupported: boolean
+  }
   | {
     kind: 'control'
     control: WorkbenchAutomationControlKind

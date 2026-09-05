@@ -47,23 +47,44 @@ Block 是：
 
 ## 3. Extension Control
 
-插件可通过 Cordis Effect 注册 Control Definition / Compiler：
+`ControlRegistry` 由 Runtime 的 `controls` 插件提供。`coreControls` 插件通过同一 Registry 注册 Wait、If、Parallel、Race、ForEach 的目录定义；这些核心语法的编译实现仍属于 Core IR 编译器。
 
-```text
-defineControl()
+扩展插件声明 `inject = ['controls']`，并通过 Cordis Effect 注册版本化定义：
+
+```ts
+ctx.controls.defineControl(ctx, {
+  kind: 'extension',
+  id: 'example:pause',
+  version: 1,
+  title: 'Pause',
+  description: 'A durable pause.',
+  input: z.object({ milliseconds: z.number().min(0).required() }),
+  lower: ({ nodeId, input }) => ({
+    type: 'wait',
+    id: nodeId,
+    durationMs: input.milliseconds!,
+  }),
+})
 ```
 
-Compiler 必须：
+Source 保存版本化引用和表达式，不保存编译函数：
 
-- deterministic
-- pure
-- no network
-- no credentials
-- no business side effects
+```json
+{
+  "type": "extension",
+  "id": "pause",
+  "control": { "id": "example:pause", "version": 1 },
+  "input": { "milliseconds": { "type": "literal", "value": 1000 } }
+}
+```
 
-Publish 时将高层 Control 降低为 Core IR。
+Publish 验证输入契约后，将冻结的表达式副本传给同步 `lower`。函数返回已有核心 Control 树，再由核心编译器生成 IR。返回树必须为 JSON 数据，根 ID 必须等于 `nodeId`，子 ID 必须以 `${nodeId}.` 开头；禁止嵌套扩展，最多 256 个 Control、20,000 个 JSON 值、64 层数据深度。非法返回或异常产生指向原 Source 节点的 `CONTROL_LOWER_FAILED`，不会暴露插件异常内容。核心编译诊断同样映射回原节点。
 
-历史 Revision 执行不需要原 Control Plugin 继续存在。
+Compiler 的插件契约要求确定性、纯计算、不访问网络或 Credential、不产生业务副作用。接口不提供 Context 或运行时服务；当前插件仍是可信进程内代码，这不是 JavaScript sandbox，也不会自动证明纯度。
+
+Revision 的 Dependency Manifest 和 Contract Snapshot 保存使用过的 Control 版本及输入契约，Core Plan 的 `sourceMap` 将生成指令关联到原 Source 节点。历史 Revision 直接执行持久化 Core IR，不需要原 Control Plugin 继续存在；其依赖的 Capability Provider 和 Connection 仍需满足运行条件。卸载编译插件会使新的 Publish 返回 `CONTROL_UNAVAILABLE`，Draft 保持原样。
+
+当前扩展 Source 是带表达式输入的叶节点，`lower` 可以生成结构化核心控制树。用户编排的命名 body/branch 插槽、扩展输出契约和对应 Magic Variable 输出目录尚未实现。
 
 ## 4. Core IR
 

@@ -115,6 +115,7 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
     insertCatalogState.status === 'READY'
       ? insertCatalogState.data.items.flatMap(item => item.kind === 'capability'
         ? [[`${item.capability.id}@${item.capability.version}`, item.title] as const]
+        : item.kind === 'extension' ? [[`control:${item.control.id}@${item.control.version}`, item.title] as const]
         : [])
       : [],
   ))
@@ -220,6 +221,7 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
         onClose={() => props.onInspectorOpenChange(false)}
         onCapabilityConnectionChange={authoring.setCapabilityConnection}
         onCapabilityInputChange={authoring.setCapabilityInput}
+        onExtensionInputChange={authoring.setExtensionInput}
         onControlExpressionChange={authoring.setControlExpression}
         onWaitExpressionChange={authoring.setWaitExpression}
         {...(props.schemaUI ? { schemaUI: props.schemaUI } : {})}

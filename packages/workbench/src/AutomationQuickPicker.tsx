@@ -29,6 +29,7 @@ const controlIcons = {
 
 function searchableText(item: WorkbenchAutomationInsertItem): string {
   if (item.kind === 'control') return `${item.title} ${item.description} ${item.control}`.toLowerCase()
+  if (item.kind === 'extension') return `${item.title} ${item.description} ${item.control.id}@${item.control.version}`.toLowerCase()
   return [
     item.title,
     item.description,
@@ -44,12 +45,12 @@ function PickerItem({ item, onInsert }: {
   onInsert(item: WorkbenchAutomationInsertItem): void
 }) {
   const Icon = item.kind === 'control' ? controlIcons[item.control] : Sparkles
-  const ref = item.kind === 'capability' ? `${item.capability.id}@${item.capability.version}` : item.control
+  const ref = item.kind === 'capability' ? `${item.capability.id}@${item.capability.version}` : item.kind === 'extension' ? `${item.control.id}@${item.control.version}` : item.control
   return (
     <button class="quick-picker-item" onClick={() => onInsert(item)} role="option" type="button">
       <span class="quick-picker-item-icon" data-kind={item.kind}><Icon size={16} /></span>
       <span class="quick-picker-item-copy">
-        <span><strong>{item.title}</strong><em>{item.kind === 'control' ? 'Control' : item.capabilityKind}</em></span>
+        <span><strong>{item.title}</strong><em>{item.kind === 'capability' ? item.capabilityKind : 'Control'}</em></span>
         <small>{item.description ?? ref}</small>
         <code>{ref}</code>
       </span>
@@ -98,7 +99,7 @@ export const AutomationQuickPicker = defineSetupComponent<AutomationQuickPickerP
   return () => {
     const state = props.state
     const live = !!state && state.status !== 'DISABLED'
-    const controls = filtered.value.filter(item => item.kind === 'control')
+    const controls = filtered.value.filter(item => item.kind !== 'capability')
     const capabilities = filtered.value.filter(item => item.kind === 'capability')
     if (!live) {
       return <button class="add-step-button" disabled={props.disabled ?? false} type="button"><Plus size={15} /> Add step</button>
@@ -143,7 +144,7 @@ export const AutomationQuickPicker = defineSetupComponent<AutomationQuickPickerP
             {state.status === 'READY' && controls.length ? (
               <section class="quick-picker-group">
                 <h3>Controls</h3>
-                {controls.map(item => <PickerItem item={item} key={`control:${item.kind === 'control' ? item.control : ''}`} onInsert={insert} />)}
+                {controls.map(item => <PickerItem item={item} key={`control:${item.kind === 'control' ? item.control : item.kind === 'extension' ? `${item.control.id}@${item.control.version}` : ''}`} onInsert={insert} />)}
               </section>
             ) : null}
             {state.status === 'READY' && capabilities.length ? (
