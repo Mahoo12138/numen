@@ -35,6 +35,18 @@ export class DraftConflictError extends Error {
   }
 }
 
+export class DraftCopyRequestConflictError extends Error {
+  override name = 'DraftCopyRequestConflictError'
+}
+
+export interface SaveDraftCopyInput {
+  automationId: string
+  requestId: string
+  name: string
+  source: AutomationSource
+  presentation: Record<string, NumenValue>
+}
+
 export interface CreateAutomationInput {
   name: string
   source?: AutomationSource
@@ -177,19 +189,49 @@ export class AutomationService extends Service {
     const source = input.source ?? defaultSource()
     const presentation = input.presentation ?? {}
 
-    this.ctx.database.transaction(() => {
-      this.ctx.database.db.prepare(`
-        INSERT INTO automations (
-          id, name, enabled, activation_generation, created_at, updated_at
-        ) VALUES (?, ?, 0, 0, ?, ?)
-      `).run(id, name, now, now)
-      this.ctx.database.db.prepare(`
-        INSERT INTO automation_drafts (
-          automation_id, source_json, presentation_json, version, updated_at
-        ) VALUES (?, ?, ?, 1, ?)
-      `).run(id, JSON.stringify(source), JSON.stringify(presentation), now)
-    })
+    this.ctx.database.transaction(() => this.insertAutomation(id, name, source, presentation, now))
     this.ctx.emit('numen/automation-change', id)
+    return { automation: this.get(id)!, draft: this.getDraft(id)! }
+  }
+
+  private insertAutomation(id: string, name: string, source: AutomationSource, presentation: Record<string, NumenValue>, now: string): void {
+    this.ctx.database.db.prepare(`
+      INSERT INTO automations (
+        id, name, enabled, activation_generation, created_at, updated_at
+      ) VALUES (?, ?, 0, 0, ?, ?)
+    `).run(id, name, now, now)
+    this.ctx.database.db.prepare(`
+      INSERT INTO automation_drafts (
+        automation_id, source_json, presentation_json, version, updated_at
+      ) VALUES (?, ?, ?, 1, ?)
+    `).run(id, JSON.stringify(source), JSON.stringify(presentation), now)
+  }
+
+  /** Preserve a local Draft as a disabled Automation; retries return the same durable copy. */
+  saveDraftCopy(input: SaveDraftCopyInput): { automation: Automation; draft: AutomationDraft } {
+    const name = input.name.trim()
+    if (!name || name.length > 200) throw new TypeError('copy name must contain 1 to 200 characters')
+    if (!/^[a-zA-Z0-9_-]{16,80}$/.test(input.requestId)) throw new TypeError('invalid copy request id')
+    const contentHash = createHash('sha256').update(canonicalize({ ...input, name })).digest('hex')
+    let created = false
+    const id = this.ctx.database.transaction(() => {
+      const previous = this.ctx.database.db.prepare(
+        'SELECT content_hash, automation_id FROM automation_draft_copy_requests WHERE request_id = ?',
+      ).get(input.requestId) as { content_hash: string; automation_id: string } | undefined
+      if (previous) {
+        if (previous.content_hash !== contentHash) throw new DraftCopyRequestConflictError('copy request already used with different content')
+        return previous.automation_id
+      }
+      if (!this.get(input.automationId)) throw new AutomationNotFoundError(`automation not found: ${input.automationId}`)
+      const copyId = `auto_${randomUUID().replaceAll('-', '')}`
+      this.insertAutomation(copyId, name, input.source, input.presentation, new Date().toISOString())
+      this.ctx.database.db.prepare(
+        'INSERT INTO automation_draft_copy_requests (request_id, content_hash, automation_id) VALUES (?, ?, ?)',
+      ).run(input.requestId, contentHash, copyId)
+      created = true
+      return copyId
+    })
+    if (created) this.ctx.emit('numen/automation-change', id)
     return { automation: this.get(id)!, draft: this.getDraft(id)! }
   }
 

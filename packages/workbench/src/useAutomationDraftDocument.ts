@@ -191,6 +191,7 @@ export function reduceAutomationDraftDocument(
       }
     case 'SERVER':
       if (state.selectedAutomationId !== action.automationId) return state
+      if (state.document && action.draft.version < state.document.version) return state
       if (state.savePhase !== 'UNAVAILABLE' && state.savePhase !== 'CLEAN' && state.savePhase !== 'RELOADING') return state
       const preserveHistory = state.document?.version === action.draft.version && state.savePhase === 'CLEAN'
       return {
@@ -321,6 +322,8 @@ export function reduceAutomationDraftDocument(
         problems: [],
       }
     case 'PUBLISH_FAILURE': {
+      const conflict = conflictFrom(action.error)
+      if (conflict) return { ...state, savePhase: 'CONFLICT', conflict, publishPending: false, pendingPublish: undefined, publishError: undefined, problems: [] }
       const problems = diagnosticsFrom(action.error)
       return {
         ...state,
@@ -422,7 +425,7 @@ export function useAutomationDraftDocument({
       },
       controller.signal,
     ).then(
-      result => dispatch({ type: 'SAVE_SUCCESS', result }),
+      result => { if (!controller.signal.aborted) dispatch({ type: 'SAVE_SUCCESS', result }) },
       error => {
         if (!controller.signal.aborted) dispatch({ type: 'SAVE_FAILURE', error })
       },
@@ -441,7 +444,7 @@ export function useAutomationDraftDocument({
       },
       controller.signal,
     ).then(
-      result => dispatch({ type: 'PUBLISH_SUCCESS', result }),
+      result => { if (!controller.signal.aborted) dispatch({ type: 'PUBLISH_SUCCESS', result }) },
       error => {
         if (!controller.signal.aborted) dispatch({ type: 'PUBLISH_FAILURE', error })
       },

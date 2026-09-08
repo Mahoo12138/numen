@@ -307,6 +307,19 @@ export const coreMigrations: readonly Migration[] = [
       `)
     },
   },
+  {
+    version: 11,
+    name: 'automation-draft-copy-requests',
+    up(database) {
+      database.exec(`
+        CREATE TABLE automation_draft_copy_requests (
+          request_id TEXT PRIMARY KEY,
+          content_hash TEXT NOT NULL,
+          automation_id TEXT NOT NULL REFERENCES automations(id) ON DELETE CASCADE
+        );
+      `)
+    },
+  },
 ]
 
 export function runMigrations(

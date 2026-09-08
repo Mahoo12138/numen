@@ -2,6 +2,7 @@ import {
   AutomationCompileError,
   AutomationNotFoundError,
   DraftConflictError,
+  DraftCopyRequestConflictError,
 } from '@numen/automation'
 import { ConsoleProcedureError, type ConsoleActionDefinition } from '@numen/console'
 import type { AutomationDraft, AutomationRevision, AutomationSource, NumenValue } from '@numen/core'
@@ -15,6 +16,9 @@ import {
 import {
   workbenchPublishAutomationDraftActionRef,
   workbenchSaveAutomationDraftActionRef,
+  workbenchSaveAutomationDraftCopyActionRef,
+  type WorkbenchSaveAutomationDraftCopyInput,
+  type WorkbenchSaveAutomationDraftCopyResult,
   type WorkbenchAutomationDraft,
   type WorkbenchAutomationRevisionSummary,
   type WorkbenchPublishAutomationDraftInput,
@@ -44,6 +48,9 @@ function projectRevision(revision: AutomationRevision): WorkbenchAutomationRevis
 }
 
 function raisePublicAutomationError(error: unknown): never {
+  if (error instanceof DraftCopyRequestConflictError) {
+    throw new ConsoleProcedureError(409, 'DRAFT_COPY_REQUEST_CONFLICT', 'This copy request was already used for different content.')
+  }
   if (error instanceof DraftConflictError) {
     throw new ConsoleProcedureError(409, 'DRAFT_VERSION_CONFLICT', 'The Automation Draft changed', {
       expectedVersion: error.expectedVersion,
@@ -98,7 +105,33 @@ export const workbenchPublishAutomationDraftAction: ConsoleActionDefinition<
   }),
 }
 
+export const workbenchSaveAutomationDraftCopyAction: ConsoleActionDefinition<
+  WorkbenchSaveAutomationDraftCopyInput,
+  WorkbenchSaveAutomationDraftCopyResult
+> = {
+  ...workbenchSaveAutomationDraftCopyActionRef,
+  kind: 'action',
+  title: 'Save Automation Draft copy',
+  description: 'Preserve a local Draft in a new disabled Automation, with durable retry deduplication.',
+  input: z.object({
+    automationId: automationIdSchema,
+    requestId: z.string().pattern(/^[a-zA-Z0-9_-]{16,80}$/).required(),
+    name: z.string().pattern(/\S/).max(200).required(),
+    source: z.any<AutomationSource>().required(),
+    presentation: z.any<Record<string, NumenValue>>().required(),
+  }),
+  output: z.object({ automationId: automationIdSchema, name: z.string().required() }),
+}
+
 export function workbenchAutomationAuthoringProviderPlugin(ctx: Context): void {
+  ctx.console.provideAction(ctx, workbenchSaveAutomationDraftCopyActionRef, {
+    action({ input }: { input: WorkbenchSaveAutomationDraftCopyInput }): WorkbenchSaveAutomationDraftCopyResult {
+      try {
+        const { automation } = ctx.automations.saveDraftCopy(input)
+        return { automationId: automation.id, name: automation.name }
+      } catch (error) { return raisePublicAutomationError(error) }
+    },
+  })
   ctx.console.provideAction(ctx, workbenchSaveAutomationDraftActionRef, {
     action({ input }: { input: WorkbenchSaveAutomationDraftInput }): WorkbenchSaveAutomationDraftResult {
       try {

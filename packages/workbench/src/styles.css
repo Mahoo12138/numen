@@ -879,3 +879,26 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .entity-title-actions .mobile-inspector-button { margin-left: auto; }
   .revision-list .revision-activate-button { justify-self: start; margin-top: 4px; }
 }
+
+/* Conflict review remains a bounded part of the Automation Page. */
+.draft-recovery { flex: 0 1 auto; min-height: 0; overflow: auto; max-height: 70vh; border-bottom: 1px solid var(--border, #d7ddea); }
+.draft-recovery-content { padding: 16px; color: #303a4b; background: #fff; font-size: 12px; line-height: 1.5; }
+.draft-recovery h2 { margin: 0; font-size: 15px; }
+.draft-recovery h3 { margin: 0 0 6px; font-size: 12px; }
+.draft-recovery p { margin: 6px 0 12px; }
+.draft-recovery button { padding: 6px 10px; border: 1px solid #c9d2e3; border-radius: 4px; background: white; cursor: pointer; font-size: 11px; }
+.draft-recovery button:disabled { opacity: .55; cursor: default; }
+.draft-recovery-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.draft-differences { max-height: 240px; overflow: auto; border: 1px solid #d7ddea; border-radius: 5px; }
+.draft-differences article { padding: 10px; border-bottom: 1px solid #e3e7ee; }
+.draft-differences h3 { overflow-wrap: anywhere; font-family: monospace; }
+.draft-difference-values, .draft-recovery-actions { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+.draft-difference-values pre { margin: 4px 0 0; padding: 8px; background: #f5f7fb; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; }
+.draft-recovery-actions { margin-top: 16px; }
+.draft-recovery-actions label { display: block; margin-bottom: 10px; }
+.draft-recovery-actions input { display: block; width: 100%; margin-top: 4px; padding: 7px; border: 1px solid #c9d2e3; border-radius: 4px; font: inherit; }
+@media (max-width: 600px) {
+  .draft-recovery { max-height: 75vh; }
+  .draft-difference-values, .draft-recovery-actions { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .draft-recovery-heading { flex-direction: column; }
+}

@@ -1,5 +1,6 @@
 import type { SourceRef } from '@numen/core'
-import { computed, h, inject, provide, ref, type ComputedRef, type InjectionKey } from 'vue'
+import { computed, h, inject, provide, ref, watch, type ComputedRef, type InjectionKey } from 'vue'
+import { DraftConflictRecovery } from './DraftConflictRecovery.js'
 import { AutomationEditor, type AutomationEditorProps } from './AutomationEditor.js'
 import { AutomationPanel, AutomationStatusBar } from './AutomationPanel.js'
 import { AutomationSidebar } from './AutomationSidebar.js'
@@ -33,6 +34,7 @@ export function useAutomationWorkspace(): ComputedRef<AutomationEditorProps> {
 }
 
 export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProps>('AutomationPageChrome', ['page', 'consoleClient', 'schemaUI', 'navigation', 'inspectorOpen', 'onInspectorOpenChange'], props => {
+  const confirmedAutomationId = ref<string>()
   const requestedAutomationId = ref('morning-brief')
   const activeTab = ref('Editor')
   const requestedStepId = ref('notification')
@@ -57,8 +59,15 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
   )
   const liveItems = computed(() => indexState.status === 'READY' ? indexState.data.items : [])
   const automationId = computed(() => props.consoleClient
-    ? (liveItems.value.some(item => item.id === requestedAutomationId.value) ? requestedAutomationId.value : liveItems.value[0]?.id)
+    ? ((requestedAutomationId.value === confirmedAutomationId.value || liveItems.value.some(item => item.id === requestedAutomationId.value)) ? requestedAutomationId.value : liveItems.value[0]?.id)
     : requestedAutomationId.value)
+  // Pin confirmed selections so index reordering or a failed refresh cannot discard local edits.
+  watch(automationId, id => {
+    if (id && props.consoleClient) {
+      requestedAutomationId.value = id
+      confirmedAutomationId.value = id
+    }
+  }, { immediate: true })
   const detailInput = computed<WorkbenchAutomationDetailQueryInput>(() => ({
     automationId: automationId.value ?? '',
   }))
@@ -157,6 +166,20 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
       onPublish: authoring.publish,
       onReloadDraft: authoring.reload,
       onRetrySave: authoring.retrySave,
+    } : {}),
+    ...(props.consoleClient && authoring.document && authoring.conflict ? {
+      conflictRecovery: h(DraftConflictRecovery, {
+        key: authoring.document.automationId,
+        client: props.consoleClient, document: authoring.document, conflict: authoring.conflict,
+        name: effectiveDetail.value?.automation.name ?? 'Automation',
+        onReload: authoring.reload,
+        onOpenCopy: (id: string) => {
+          confirmedAutomationId.value = id
+          requestedAutomationId.value = id
+          activeTab.value = 'Editor'
+          refreshIndex()
+        },
+      }),
     } : {}),
     ...(props.consoleClient && effectiveDetail.value ? {
       activation: activation.view(effectiveDetail.value.automation),

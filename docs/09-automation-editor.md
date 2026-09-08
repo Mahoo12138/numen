@@ -178,13 +178,15 @@ UI 必须区分 Saved 与 Published。
 
 ## 15. Draft Conflict
 
-optimistic version；多 Tab 修改发生冲突时：
+Autosave 和 Publish 都以 Draft version 做乐观并发检查。收到 `DRAFT_VERSION_CONFLICT` 后，保留当前标签页的完整本地 Source、presentation 与历史，暂停编辑和自动保存，提供 `Compare and recover`：
 
-- Reload
-- Compare
-- Save as copy / explicit overwrite
+- Compare 使用已有 Automation detail Query 读取服务器快照，单独保存以避免覆盖本地文档。按 JSON Pointer 比较 Source / presentation 的字段值，明确区分 Local / Server 与缺失字段；可刷新快照，不进行自动合并。
+- 比较最多展示 100 项差异、访问 20,000 个不相等的值，单项显示最多 2,000 字符；深度超过 64 层时显示该子树的摘要。被截断时提示限制，另存仍保留完整文档。
+- `Save local as copy` 把本地快照保存为用户命名的新 Automation。副本 Draft 从 v1 开始，保留 Source 和 presentation，不继承 Revision、baseRevisionId、enabled 或 activeRevisionId。
+- 副本保存请求使用固定 requestId。响应丢失后重试发送完全相同的请求，服务端持久化去重，进程重启后也不会重复创建。相同 requestId 改变内容会被拒绝。成功后显式选择 `Open saved copy`；列表失效或排序变化不会自动切换当前 Automation。
+- `Discard local and reload latest` 明确丢弃本标签页本地编辑和历史，再读取最新服务器 Draft；它可能比比较时的快照更新。
 
-V1 不做 CRDT 自动合并。
+V1 不做 CRDT 自动合并或强制覆盖。未另存的本地文档仍只存在于当前页面内存，关闭或刷新浏览器不会持久保留它。异步请求随组件卸载取消，迟到结果不能切换当前 Automation 或覆盖新文档。
 
 ## 16. Reconnect
 

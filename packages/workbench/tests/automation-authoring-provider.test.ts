@@ -13,6 +13,7 @@ import {
   workbenchAutomationAuthoringProviderPlugin,
   workbenchPublishAutomationDraftAction,
   workbenchSaveAutomationDraftAction,
+  workbenchSaveAutomationDraftCopyAction,
 } from '../src/automation-authoring-provider.js'
 
 const validSource: AutomationSource = {
@@ -46,11 +47,19 @@ describe('Automation authoring Provider', () => {
     await root.plugin(AutomationService)
     await root.plugin(ConsoleService)
     root.console.define(root, workbenchSaveAutomationDraftAction)
+    root.console.define(root, workbenchSaveAutomationDraftCopyAction)
     root.console.define(root, workbenchPublishAutomationDraftAction)
     const authoringProvider = (ctx: Context) => workbenchAutomationAuthoringProviderPlugin(ctx)
     authoringProvider.inject = ['console', 'automations']
     const provider = await root.plugin(authoringProvider)
     const created = root.automations.create({ name: 'Authoring test', source: validSource })
+
+    const copyInput = { automationId: created.automation.id, requestId: 'console-copy-request-01', name: 'Recovery copy', source: invalidSource, presentation: { local: true } }
+    const copy = await root.console.action(workbenchSaveAutomationDraftCopyAction, copyInput, request())
+    expect(root.automations.get(copy.automationId)).toMatchObject({ name: 'Recovery copy', enabled: false })
+    expect(root.automations.getDraft(copy.automationId)?.source).toEqual(invalidSource)
+    expect(await root.console.action(workbenchSaveAutomationDraftCopyAction, copyInput, request())).toEqual(copy)
+    await expect(root.console.action(workbenchSaveAutomationDraftCopyAction, { ...copyInput, name: 'Different' }, request())).rejects.toMatchObject({ status: 409, code: 'DRAFT_COPY_REQUEST_CONFLICT' })
 
     const saved = await root.console.action(workbenchSaveAutomationDraftAction, {
       automationId: created.automation.id,

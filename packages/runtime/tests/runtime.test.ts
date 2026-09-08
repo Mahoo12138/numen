@@ -85,6 +85,10 @@ describe('Numen runtime', () => {
         providerAvailable: true,
       }),
       expect.objectContaining({
+        definition: expect.objectContaining({ id: 'numen:automation-save-draft-copy', version: 1, kind: 'action' }),
+        providerAvailable: true,
+      }),
+      expect.objectContaining({
         definition: expect.objectContaining({ id: 'numen:automation-save-draft', version: 1, kind: 'action' }),
         providerAvailable: true,
       }),
@@ -683,7 +687,7 @@ describe('Numen runtime', () => {
     expect(await ready.json()).toMatchObject({
       status: 'ready',
       checks: {
-        database: { migrationVersion: 10 },
+        database: { migrationVersion: 11 },
         automations: { ready: true, count: 1 },
         connections: {
           ready: true,

@@ -561,6 +561,24 @@ export interface WorkbenchSaveAutomationDraftResult {
   draft: WorkbenchAutomationDraft
 }
 
+export const workbenchSaveAutomationDraftCopyActionRef = {
+  id: 'numen:automation-save-draft-copy',
+  version: 1,
+} as const satisfies ConsoleProcedureRef
+
+export interface WorkbenchSaveAutomationDraftCopyInput {
+  automationId: string
+  requestId: string
+  name: string
+  source: AutomationSource
+  presentation: Record<string, NumenValue>
+}
+
+export interface WorkbenchSaveAutomationDraftCopyResult {
+  automationId: string
+  name: string
+}
+
 export const workbenchPublishAutomationDraftActionRef = {
   id: 'numen:automation-publish-draft',
   version: 1,

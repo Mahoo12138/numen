@@ -61,6 +61,19 @@ function loadedState(): AutomationDraftDocumentState {
 }
 
 describe('local Automation Draft document', () => {
+  it('enters recovery on a publish version conflict and ignores older server Drafts after reload', () => {
+    let state = reduceAutomationDraftDocument(loadedState(), { type: 'PUBLISH_REQUEST' })
+    const local = state.document
+    state = reduceAutomationDraftDocument(state, { type: 'PUBLISH_FAILURE', error: {
+      code: 'DRAFT_VERSION_CONFLICT', details: { expectedVersion: 1, actualVersion: 3 },
+    } })
+    expect(state).toMatchObject({ savePhase: 'CONFLICT', publishPending: false, document: local })
+    state = reduceAutomationDraftDocument(state, { type: 'RELOAD' })
+    state = reduceAutomationDraftDocument(state, { type: 'SERVER', automationId: 'automation-1', draft: draft(3) })
+    const current = state
+    expect(reduceAutomationDraftDocument(state, { type: 'SERVER', automationId: 'automation-1', draft: draft(2) })).toBe(current)
+  })
+
   it('inserts and edits extension inputs through document history without altering the versioned reference', () => {
     const item: WorkbenchAutomationInsertItem = {
       kind: 'extension', control: { id: 'test:pause', version: 2 }, title: 'Pause', description: '', inputSchemaSupported: true,

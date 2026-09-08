@@ -5,6 +5,7 @@ import { Service, type Context } from 'cordis'
 import {
   workbenchPublishAutomationDraftAction,
   workbenchSaveAutomationDraftAction,
+  workbenchSaveAutomationDraftCopyAction,
 } from './automation-authoring-provider.js'
 import {
   workbenchAutomationInsertCatalogQuery,
@@ -27,6 +28,7 @@ export {
   workbenchAutomationAuthoringProviderPlugin,
   workbenchPublishAutomationDraftAction,
   workbenchSaveAutomationDraftAction,
+  workbenchSaveAutomationDraftCopyAction,
 } from './automation-authoring-provider.js'
 export {
   workbenchAutomationCatalogProviderPlugin,
@@ -83,6 +85,7 @@ export class WorkbenchRuntimeService extends Service {
     ctx.console.define(ctx, workbenchAutomationVariableCatalogQuery)
     ctx.console.define(ctx, workbenchPublishAutomationDraftAction)
     ctx.console.define(ctx, workbenchSaveAutomationDraftAction)
+    ctx.console.define(ctx, workbenchSaveAutomationDraftCopyAction)
     ctx.console.define(ctx, workbenchAutomationDetailQuery)
     ctx.console.define(ctx, workbenchAutomationsIndexQuery)
     ctx.console.define(ctx, workbenchCredentialsIndexQuery)

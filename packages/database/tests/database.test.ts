@@ -1,9 +1,10 @@
+import Database from 'better-sqlite3'
 import { Context } from 'cordis'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { DatabaseService, runMigrations } from '../src/index.js'
+import { DatabaseService, runMigrations, coreMigrations } from '../src/index.js'
 
 const temporaryDirectories: string[] = []
 
@@ -12,6 +13,20 @@ afterEach(async () => {
 })
 
 describe('DatabaseService', () => {
+  it('upgrades a populated v10 database without changing existing Drafts', () => {
+    const db = new Database(':memory:')
+    try {
+      runMigrations(db, coreMigrations.filter(migration => migration.version <= 10))
+      db.prepare('INSERT INTO automations (id, name, enabled, activation_generation, created_at, updated_at) VALUES (?, ?, 0, 0, ?, ?)').run('auto_existing', 'Existing', 'now', 'now')
+      db.prepare('INSERT INTO automation_drafts (automation_id, source_json, presentation_json, version, updated_at) VALUES (?, ?, ?, 3, ?)').run('auto_existing', '{"flow":{"type":"unknown"}}', '{"x":5}', 'now')
+      const before = db.prepare('SELECT * FROM automation_drafts').get()
+      expect(runMigrations(db)).toBe(1)
+      expect(db.prepare('SELECT * FROM automation_drafts').get()).toEqual(before)
+      expect(db.prepare('SELECT COUNT(*) AS count FROM automation_draft_copy_requests').get()).toEqual({ count: 0 })
+      expect(runMigrations(db)).toBe(0)
+    } finally { db.close() }
+  })
+
   it('creates the durable domain schema and is idempotent', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'numen-database-'))
     temporaryDirectories.push(directory)
@@ -23,6 +38,7 @@ describe('DatabaseService', () => {
       .pluck()
       .all() as string[]
     expect(tables).toContain('automations')
+    expect(tables).toContain('automation_draft_copy_requests')
     expect(tables).toContain('attempts')
     expect(tables).toContain('run_events')
     expect(tables).toContain('trigger_events')
@@ -32,7 +48,7 @@ describe('DatabaseService', () => {
     expect(tables).toContain('resource_owners')
     expect(tables).toContain('resource_leases')
     expect(tables).toContain('execution_iterations')
-    expect(root.database.health()).toMatchObject({ ready: true, migrationVersion: 10 })
+    expect(root.database.health()).toMatchObject({ ready: true, migrationVersion: 11 })
     expect(runMigrations(root.database.db)).toBe(0)
 
     await root.fiber.dispose()
@@ -43,7 +59,7 @@ describe('DatabaseService', () => {
     await root.plugin(DatabaseService, { path: ':memory:' })
 
     expect(() => runMigrations(root.database.db, [{
-      version: 11,
+      version: 12,
       name: 'broken',
       up(database) {
         database.exec('CREATE TABLE should_rollback (id TEXT);')

@@ -11,7 +11,7 @@ import {
   ZoomIn,
   ZoomOut,
 } from '@lucide/vue'
-import type { SetupContext } from 'vue'
+import type { SetupContext, VNodeChild } from 'vue'
 import { AutomationQuickPicker } from './AutomationQuickPicker.js'
 import type {
   WorkbenchAutomationDetail,
@@ -44,6 +44,7 @@ export interface AutomationEditorProps {
     saveError?: string
     publishError?: string
   }
+  conflictRecovery?: VNodeChild
   activation?: AutomationActivationView
   onActivateRevision?(revisionId: string): void
   onSetEnabled?(enabled: boolean): void
@@ -79,6 +80,7 @@ export function AutomationEditor({
   steps: projectedSteps,
   authoring,
   activation,
+  conflictRecovery,
   onActivateRevision,
   onSetEnabled,
   onStepChange,
@@ -163,7 +165,7 @@ export function AutomationEditor({
         </nav>
       </header>
       {activation?.error ? <section class="authoring-notice" data-tone="error" role="alert"><span>{activation.error}</span></section> : null}
-      {authoring?.conflict ? (
+      {authoring?.conflict ? (conflictRecovery ??
         <section class="authoring-notice" data-tone="conflict" role="alert">
           <span><strong>Draft changed elsewhere.</strong> Local version {authoring.conflict.expectedVersion} cannot overwrite server version {authoring.conflict.actualVersion}.</span>
           {onReloadDraft ? <button onClick={onReloadDraft} type="button">Reload server Draft</button> : null}

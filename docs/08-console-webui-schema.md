@@ -201,3 +201,9 @@ Secret edit 使用：keep / replace / clear，不回传旧值。
 Capability input 的 Schema 描述目标类型 `T`，Automation Editor 实际编辑 `ValueExpr<T>`。
 
 第三方 Renderer 只负责 Literal Mode；Expression/Template 由统一 Field Shell 处理，避免每个插件理解 AST。
+
+## Automation Draft copy recovery Action
+
+`numen:automation-save-draft-copy@1` 接收 `automationId`、`requestId`、`name`、完整 `source` 与 `presentation`，返回新 Automation 的 `automationId` 和 `name`。允许保存无法编译的本地 Draft；复制不是 Publish 或 Activate。
+
+AutomationService 在同一 SQLite 事务中创建禁用的 Automation、v1 Draft 和请求去重记录，提交后发送 `numen/automation-change`。requestId 重试返回同一副本；内容指纹不同则返回 `409 DRAFT_COPY_REQUEST_CONFLICT`。首次复制时原 Automation 不存在返回 `404 AUTOMATION_NOT_FOUND`。请求记录随副本删除级联清理。数据库 v11 只新增去重表，保留已有 Draft、Revision 和运行状态。
