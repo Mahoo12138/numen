@@ -204,11 +204,16 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Canvas subtree deletion and same-sequence movement with required-slot protection and stable selection
 - [x] Structural edit undo/redo, autosave integration, and protection against reusing still-referenced node IDs
 
+- [x] Compile-time step reference existence, execution order, and lexical scope diagnostics
+- [x] Loop/admission binding checks, lowered Extension expression validation, and source-linked publish errors
+
 ## Next
 
-1. Compile-time step reference existence, order, and scope diagnostics
+1. Automation input declarations and schema-driven manual Run inputs
 
 ## Design Review
+
+- **Reference validation seam — pass:** a compiler-owned semantic pass checks Source expressions after structural validation, using lexical Block availability and the already captured Extension lowering tree. Diagnostics retain authored field paths; generated errors map back to the Extension node. Invalid Drafts remain saveable, failed publishing preserves history and activation, and persisted Core IR is unchanged. Tests cover missing/self/forward references, branch and loop isolation, nested expressions, admission policy, dotted IDs, and plugin lowering. Production-browser QA verifies reorder/delete failures, diagnostic selection, recovery publication, unchanged active Revision, and 1440px/390px layouts; only expected 422 validation responses occur.
 
 - **Vue migration boundary — pass:** the Workbench rendering layer now uses Vue 3 components and Composition API state while the stable Page, Chrome, Schema Renderer, Console Query/Action, and Cordis Effect contracts remain unchanged. Stateful components are defined through one typed setup helper, so framework mechanics do not leak into domain projections or backend Providers.
 - **Frontend asset generation seam — pass:** immutable authenticated Entry URLs and Manifest ETags now include a process generation in addition to the registry revision. Runtime restarts cannot return `304` for a previous process's Manifest or mix an old Entry with the current Vue host, while stale-generation assets remain explicitly fenced.
@@ -250,7 +255,7 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 ```text
 Typecheck: passing
 Build: passing
-Tests: 54 files, 230 tests passing
+Tests: 55 files, 252 tests passing
 CLI config validate: passing
 CLI doctor: passing
 SQLite schema migration: v11
@@ -268,7 +273,7 @@ pnpm dev
 ## Known Boundaries
 
 - The current compiler supports Block, Capability, If, timer Wait, Parallel, first-success Race, bounded ForEach, and versioned plugin Extension Controls that lower to these core forms. Extension Source currently supports expression inputs as leaf nodes; authored child slots and output contracts remain planned. Block output lowering is diagnosed as unsupported.
-- Drafts may remain invalid; authoritative validation happens during Publish.
+- Drafts may remain invalid; authoritative validation happens during Publish. Step references must name earlier visible Capability outputs; branch/body outputs do not escape their lexical Block. Loop bindings are body-only and admission policy cannot read step outputs. Output property/type validation remains dynamic, dotted node IDs have no escaped reference syntax, and historical Revisions are not recompiled.
 - The current Scheduler executes the Core IR subset emitted by the compiler, including retry, timeout, cancellation, recovery, and structured concurrency.
 - Parallel, first-success Race, and bounded ForEach use durable Execution scopes with interruptible concurrent dispatch; Try/Finally control flow remains planned work.
 - Typed Console transports, browser sessions, Browser Cordis clients, frontend extension registries, atomic Entry generations, authenticated revision-fenced asset delivery, and Browser Entry reconciliation/rollback are operational. Generated bootstrap tokens and sessions rotate on restart; the CLI prints a fragment-only Workbench launch URL only with explicit `--print-launch-url` authorization.

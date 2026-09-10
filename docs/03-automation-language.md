@@ -185,3 +185,17 @@ Schemastery 用于：
 ## 10. 非确定性
 
 时间、随机数、外部查询等非确定操作必须通过显式 Instruction/Capability materialize，避免恢复时重新计算出不同结果。
+
+## Publish 时的引用可用性检查
+
+结构校验通过后，编译器检查所有 ValueExpr 中的 `steps.*` 与 `loop.*`，包括 Reference、Template、Array、Object 和 Call 参数。诊断带有 Source 节点及输入字段路径，由 Workbench 的 Problems、Canvas 和 Inspector 展示。
+
+- `steps.<id>` 只允许引用当前 Block 中更早的 Capability，以及外层 Block 中在进入当前控制结构前已可用的 Capability。自身、后续步骤、其他分支，以及已经退出的嵌套 Block、If、ForEach、Parallel 或 Race 内部输出不可引用。即使 Parallel 已汇合，其内部输出也不自动成为外层变量。
+- Wait、Block 和其他结构控制没有可供此语法读取的 Capability 输出契约；Extension Control 的公开输出契约仍未实现。
+- `policy.groupBy` 在流程开始前求值，不能引用步骤输出。`loop.item`、`loop.index` 仅在 ForEach body 中可用；嵌套 ForEach 的 items 可以读取外层 loop，body 则使用内层 loop。
+- 路径仍按点分段，`steps` 后第一个分段是输出字典键。带点的节点 ID 没有转义访问语法；如果只能匹配带点 ID，发布报告 `STEP_REFERENCE_UNADDRESSABLE`。存在同名前缀 Capability 时，继续按其输出属性解析，不改变 evaluator 语义。
+- Extension 的输入先按作者所在作用域检查；输入有效时，再检查本次 `lower` 生成的核心控制树，不重复调用插件。生成树的问题定位到原 Extension 节点。
+
+主要错误码为 `STEP_REFERENCE_MISSING`、`STEP_REFERENCE_NOT_READY`、`STEP_REFERENCE_OUT_OF_SCOPE`、`STEP_REFERENCE_NO_OUTPUT`、`STEP_REFERENCE_UNADDRESSABLE`、`LOOP_REFERENCE_OUT_OF_SCOPE` 和 `LOOP_REFERENCE_INVALID`。删除或重排导致的无效引用仍可保存为 Draft，必须修复后才能 Publish；失败不会新增 Revision 或改变 activation。
+
+此检查保证新发布 Source 的词法可用性，不验证任意输出属性是否存在或动态值类型，也不新增 `input`、`vars` 等根的声明机制。历史 Revision 直接运行已存储的 Core IR，不重新编译；Scheduler 的历史绑定行为保持不变。

@@ -23,6 +23,7 @@ import {
   type NumenValue,
   type ValueExpr,
 } from '@numen/core'
+import { validateSourceReferences } from './reference-validation.js'
 
 export interface CapabilityResolver {
   get(ref: CapabilityRef): CapabilityStatus | undefined
@@ -129,6 +130,7 @@ export function compileAutomation(
   controls?: ControlResolver,
 ): CompileResult {
   const diagnostics: CompileDiagnostic[] = []
+  const loweredControls = new Map<string, CoreControlSource>()
   const usedControls = new Map<string, ExtensionControlDefinition>()
   const sourceMap: Record<string, SourceRef> = {}
   const instructions: Record<string, CoreInstruction> = {}
@@ -452,6 +454,7 @@ export function compileAutomation(
           report({ severity: 'error', code: 'CONTROL_LOWER_FAILED', message: `Control ${controlKey(ref)} did not produce a valid core control tree.`, source: { nodeId: controlId } })
           return next
         }
+        loweredControls.set(controlId, lowered)
         usedControls.set(controlKey(ref), definition)
         const existingInstructions = new Set(Object.keys(instructions))
         const entry = compileControl(lowered, next, true)
@@ -712,6 +715,9 @@ export function compileAutomation(
   if (diagnostics.some(item => item.severity === 'error')) {
     throw new AutomationCompileError(diagnostics)
   }
+
+  const referenceDiagnostics = validateSourceReferences(source, loweredControls)
+  if (referenceDiagnostics.length) throw new AutomationCompileError([...diagnostics, ...referenceDiagnostics])
 
   const controlDefinitions = [...usedControls.values()].sort((a, b) => controlKey(a).localeCompare(controlKey(b)))
   return {

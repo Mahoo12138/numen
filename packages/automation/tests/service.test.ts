@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import z from 'schemastery'
 import { afterEach, describe, expect, it } from 'vitest'
-import { AutomationService, DraftConflictError, AutomationActivationConflictError, AutomationNotFoundError, AutomationRevisionNotFoundError } from '../src/index.js'
+import { AutomationService, AutomationCompileError, DraftConflictError, AutomationActivationConflictError, AutomationNotFoundError, AutomationRevisionNotFoundError } from '../src/index.js'
 
 const directories: string[] = []
 
@@ -135,6 +135,29 @@ describe('AutomationService', () => {
       expect(root.automations.getRevision(revision.id)).toEqual(revision)
       expect(root.automations.get(other.automation.id)).toMatchObject({ enabled: false, activationGeneration: 0 })
       expect(changes).toHaveLength(3)
+    } finally { await root.fiber.dispose() }
+  })
+
+  it('saves broken references as drafts but leaves published history and activation intact', async () => {
+    const root = await createContext(':memory:')
+    try {
+      const created = root.automations.create({ name: 'Reference edits', source })
+      const id = created.automation.id
+      const revision = root.automations.publishDraft(id, 1)
+      root.automations.activateRevision(id, revision.id)
+      root.automations.setEnabled(id, true)
+      const active = root.automations.get(id)
+      const broken = structuredClone(source)
+      if (broken.flow.type !== 'block' || broken.flow.steps[0]?.type !== 'capability') throw new Error('fixture')
+      broken.flow.steps[0].input.value = { type: 'ref', path: 'steps.deleted.value' }
+      const draft = root.automations.saveDraft({ automationId: id, expectedVersion: 1, source: broken })
+      expect(draft.source).toEqual(broken)
+      expect(() => root.automations.publishDraft(id, draft.version)).toThrow(AutomationCompileError)
+      expect(root.automations.get(id)).toEqual(active)
+      expect(root.automations.getRevision(revision.id)).toEqual(revision)
+      expect(root.automations.listSummaries()[0]?.revisionCount).toBe(1)
+      const fixed = root.automations.saveDraft({ automationId: id, expectedVersion: draft.version, source })
+      expect(root.automations.publishDraft(id, fixed.version).number).toBe(2)
     } finally { await root.fiber.dispose() }
   })
 
