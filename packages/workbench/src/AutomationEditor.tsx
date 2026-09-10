@@ -1,8 +1,11 @@
+import { automationStepEditOptions } from './automation-source-editing.js'
 import {
   AlignCenter,
   Copy,
   Expand,
-  MoreVertical,
+  ChevronDown,
+  ArrowUp,
+  ArrowDown,
   Plus,
   Redo2,
   Scissors,
@@ -52,6 +55,8 @@ export interface AutomationEditorProps {
   onTabChange(tab: string): void
   onOpenInspector(): void
   onAutomationChange?(id: string): void
+  onDeleteStep?(nodeId: string): void
+  onMoveStep?(nodeId: string, direction: 'up' | 'down'): void
   onInsert?(item: WorkbenchAutomationInsertItem): void
   onReloadInsertCatalog?(): void
   onUndo?(): void
@@ -88,6 +93,8 @@ export function AutomationEditor({
   onOpenInspector,
   onAutomationChange,
   onInsert,
+  onDeleteStep,
+  onMoveStep,
   onReloadInsertCatalog,
   onUndo,
   onRedo,
@@ -104,6 +111,9 @@ export function AutomationEditor({
     : undefined
   const automationName = detail?.automation.name ?? (live ? 'Automation' : previewAutomation.label)
   const steps = detail ? (projectedSteps ?? []) : automationSteps
+  const selectedNodeId = steps.find(step => step.id === activeStepId)?.sourceId
+  const editOptions = detail ? automationStepEditOptions(detail.draft.source, selectedNodeId) : undefined
+  const canEdit = !!authoring?.canEdit
   const latestRevision = detail?.revisions[0]
   const activeRevision = detail?.revisions.find(item => item.active)
   return (
@@ -205,9 +215,11 @@ export function AutomationEditor({
               <ToolbarButton disabled={authoring ? !authoring.canRedo : false} label="Redo" {...(onRedo ? { onClick: onRedo } : {})}><Redo2 size={16} /></ToolbarButton>
             </div>
             <div class="toolbar-group">
-              <ToolbarButton label="Cut"><Scissors size={16} /></ToolbarButton>
-              <ToolbarButton label="Copy"><Copy size={16} /></ToolbarButton>
-              <ToolbarButton label="Delete"><Trash2 size={16} /></ToolbarButton>
+              <ToolbarButton disabled label="Cut"><Scissors size={16} /></ToolbarButton>
+              <ToolbarButton disabled label="Copy"><Copy size={16} /></ToolbarButton>
+              <ToolbarButton disabled={!canEdit || !editOptions?.canDelete || !onDeleteStep} label="Delete" onClick={() => selectedNodeId && onDeleteStep?.(selectedNodeId)}><Trash2 size={16} /></ToolbarButton>
+              <ToolbarButton disabled={!canEdit || !editOptions?.canMoveUp || !onMoveStep} label="Move up" onClick={() => selectedNodeId && onMoveStep?.(selectedNodeId, 'up')}><ArrowUp size={16} /></ToolbarButton>
+              <ToolbarButton disabled={!canEdit || !editOptions?.canMoveDown || !onMoveStep} label="Move down" onClick={() => selectedNodeId && onMoveStep?.(selectedNodeId, 'down')}><ArrowDown size={16} /></ToolbarButton>
             </div>
             <div class="toolbar-group toolbar-spacer">
               <ToolbarButton label="Align steps"><AlignCenter size={16} /></ToolbarButton>
@@ -242,8 +254,14 @@ export function AutomationEditor({
                       {step.problemCount ? (
                         <span aria-label={`${step.problemCount} ${step.problemCount === 1 ? 'problem' : 'problems'}`} class="step-problem-badge">!</span>
                       ) : null}
-                      <MoreVertical aria-hidden="true" class="step-menu" size={18} />
+                      <ChevronDown aria-hidden="true" class="step-menu" size={18} />
                     </button>
+                    {selected && detail && step.sourceId ? <div class="step-edit-actions" role="group" aria-label={`Actions for ${step.label}`}>
+                      <button disabled={!canEdit || !editOptions?.canMoveUp || !onMoveStep} aria-label={`Move ${step.label} up`} onClick={() => onMoveStep?.(step.sourceId!, 'up')} type="button"><ArrowUp size={14} /> Move up</button>
+                      <button disabled={!canEdit || !editOptions?.canMoveDown || !onMoveStep} aria-label={`Move ${step.label} down`} onClick={() => onMoveStep?.(step.sourceId!, 'down')} type="button"><ArrowDown size={14} /> Move down</button>
+                      <button disabled={!canEdit || !editOptions?.canDelete || !onDeleteStep} aria-label={`Delete ${step.label}`} title="Delete this step and its contents. Undo restores it." onClick={() => onDeleteStep?.(step.sourceId!)} type="button"><Trash2 size={14} /> Delete</button>
+                      <p>{editOptions?.canDelete ? 'Move within this sequence. Delete includes nested steps; references are kept as written.' : 'This container or Trigger cannot be removed as a sequence step.'}</p>
+                    </div> : null}
                     {index < steps.length - 1 ? (
                       <div class="step-connector" aria-hidden="true"><span><Plus size={13} /></span></div>
                     ) : null}

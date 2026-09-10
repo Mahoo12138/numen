@@ -2,6 +2,8 @@ import type { AutomationSource, BlockSource, ControlSource, ValueExpr } from '@n
 import type { WorkbenchAutomationInsertItem } from './contracts.js'
 
 export type AutomationSourceCommand =
+  | { type: 'DELETE_STEP'; nodeId: string }
+  | { type: 'MOVE_STEP'; nodeId: string; direction: 'up' | 'down' }
   | { type: 'INSERT'; item: WorkbenchAutomationInsertItem }
   | { type: 'SET_CAPABILITY_CONNECTION'; nodeId: string; slotName: string; connectionId?: string }
   | { type: 'SET_EXTENSION_INPUT'; nodeId: string; fieldName: string; expression?: ValueExpr }
@@ -11,7 +13,7 @@ export type AutomationSourceCommand =
 
 export interface AutomationSourceCommandResult {
   source: AutomationSource
-  selectedNodeId?: string
+  selectedNodeId?: string | undefined
 }
 
 function collectControlIds(source: AutomationSource): Set<string> {
@@ -38,6 +40,22 @@ function collectControlIds(source: AutomationSource): Set<string> {
     }
   }
   visit(source.flow)
+  // References left after deletion must not silently bind to a newly inserted step with a reused ID.
+  const reservePath = (path: unknown): void => {
+    if (typeof path !== 'string' || !path.startsWith('steps.')) return
+    const segments = path.slice(6).split('.')
+    for (let count = 1; count <= segments.length; count += 1) ids.add(segments.slice(0, count).join('.'))
+  }
+  const reserveReferences = (value: unknown): void => {
+    if (!value || typeof value !== 'object') return
+    const record = value as Record<string, unknown>
+    if (record.type === 'ref') reservePath(record.path)
+    if (record.type === 'template' && Array.isArray(record.parts)) {
+      for (const part of record.parts) if (part && typeof part === 'object') reservePath(part.ref)
+    }
+    for (const child of Object.values(value)) reserveReferences(child)
+  }
+  reserveReferences(source)
   return ids
 }
 
@@ -279,12 +297,75 @@ function setCapabilityConnection(
   return result.changed ? { ...source, flow: result.control } : source
 }
 
+export interface AutomationStepEditOptions {
+  canDelete: boolean
+  canMoveUp: boolean
+  canMoveDown: boolean
+}
+
+function sequencePosition(source: AutomationSource, nodeId: string): { block: BlockSource; index: number } | undefined {
+  let position: { block: BlockSource; index: number } | undefined
+  // Find only Block.steps membership; branch/body slots keep their required identity.
+  const visit = (control: ControlSource): void => {
+    if (position) return
+    if (control.type === 'block') {
+      const index = control.steps.findIndex(child => child.id === nodeId)
+      if (index >= 0) { position = { block: control, index }; return }
+      control.steps.forEach(visit)
+    } else if (control.type === 'if') {
+      visit(control.then)
+      if (control.else) visit(control.else)
+    } else if (control.type === 'foreach') visit(control.body)
+    else if (control.type === 'parallel' || control.type === 'race') control.branches.forEach(visit)
+  }
+  visit(source.flow)
+  return position
+}
+
+/** Mandatory branch/body Blocks and Trigger declarations are not sequence steps. */
+export function automationStepEditOptions(source: AutomationSource, nodeId: string | undefined): AutomationStepEditOptions {
+  const position = nodeId ? sequencePosition(source, nodeId) : undefined
+  return {
+    canDelete: !!position || (source.flow.type !== 'block' && source.flow.id === nodeId),
+    canMoveUp: !!position && position.index > 0,
+    canMoveDown: !!position && position.index < position.block.steps.length - 1,
+  }
+}
+
+function editSequence(source: AutomationSource, nodeId: string, direction?: 'up' | 'down'): AutomationSourceCommandResult {
+  const position = sequencePosition(source, nodeId)
+  if (!position) {
+    if (!direction && source.flow.id === nodeId && source.flow.type !== 'block') {
+      return { source: { ...source, flow: { type: 'block', id: source.flow.id, steps: [] } }, selectedNodeId: undefined }
+    }
+    return { source }
+  }
+  const { block, index } = position
+  const steps = [...block.steps]
+  let selectedNodeId: string | undefined = nodeId
+  if (direction) {
+    const target = index + (direction === 'up' ? -1 : 1)
+    if (target < 0 || target >= steps.length) return { source }
+    const moved = steps[index]!
+    steps[index] = steps[target]!
+    steps[target] = moved
+  } else {
+    steps.splice(index, 1)
+    selectedNodeId = steps[index]?.id ?? steps[index - 1]?.id
+      ?? (block.id === source.flow.id ? undefined : block.id)
+  }
+  const result = editControl(source.flow, block.id, () => ({ ...block, steps }))
+  return { source: { ...source, flow: result.control }, selectedNodeId }
+}
+
 /** Applies one structured edit while preserving AutomationSource as the sole semantic truth. */
 export function applyAutomationSourceCommand(
   source: AutomationSource,
   command: AutomationSourceCommand,
 ): AutomationSourceCommandResult {
   switch (command.type) {
+    case 'DELETE_STEP': return editSequence(source, command.nodeId)
+    case 'MOVE_STEP': return editSequence(source, command.nodeId, command.direction)
     case 'INSERT': return insertItem(source, command.item)
     case 'SET_CAPABILITY_CONNECTION': return {
       source: setCapabilityConnection(source, command.nodeId, command.slotName, command.connectionId),

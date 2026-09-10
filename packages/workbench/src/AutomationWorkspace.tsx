@@ -160,6 +160,8 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
         ...(authoring.publishError ? { publishError: authoring.publishError } : {}),
       },
       onInsert: authoring.insert,
+      onDeleteStep: authoring.deleteStep,
+      onMoveStep: authoring.moveStep,
       onReloadInsertCatalog: reloadInsertCatalog,
       onUndo: authoring.undo,
       onRedo: authoring.redo,

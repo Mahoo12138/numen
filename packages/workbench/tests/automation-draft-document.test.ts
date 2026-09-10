@@ -61,6 +61,28 @@ function loadedState(): AutomationDraftDocumentState {
 }
 
 describe('local Automation Draft document', () => {
+  it('keeps deletion and sorting in full-document history and preserves edits made during autosave', () => {
+    let state = loadedState()
+    for (let i = 0; i < 3; i++) state = reduceAutomationDraftDocument(state, { type: 'EDIT', command: { type: 'INSERT', item: waitItem } })
+    state = reduceAutomationDraftDocument(state, { type: 'SAVE_REQUEST' })
+    const savedSource = state.document!.source
+    state = reduceAutomationDraftDocument(state, { type: 'EDIT', command: { type: 'MOVE_STEP', nodeId: 'wait-3', direction: 'up' } })
+    state = reduceAutomationDraftDocument(state, { type: 'EDIT', command: { type: 'DELETE_STEP', nodeId: 'wait-3' } })
+    expect(state.selectedNodeId).toBe('wait-2')
+    state = reduceAutomationDraftDocument(state, { type: 'SAVE_SUCCESS', result: { draft: draft(2, savedSource) } })
+    expect(state).toMatchObject({ savePhase: 'DIRTY', document: { version: 2, source: { flow: { steps: [{ id: 'wait-1' }, { id: 'wait-2' }] } } } })
+    state = reduceAutomationDraftDocument(state, { type: 'UNDO' })
+    expect(state.selectedNodeId).toBe('wait-3')
+    expect(state.document!.source.flow).toMatchObject({ steps: [{ id: 'wait-1' }, { id: 'wait-3' }, { id: 'wait-2' }] })
+    state = reduceAutomationDraftDocument(state, { type: 'REDO' })
+    for (const nodeId of ['wait-2', 'wait-1']) state = reduceAutomationDraftDocument(state, { type: 'EDIT', command: { type: 'DELETE_STEP', nodeId } })
+    expect(state.selectedNodeId).toBeUndefined()
+    expect(state.document!.source.flow).toMatchObject({ steps: [] })
+    state = reduceAutomationDraftDocument(state, { type: 'SAVE_REQUEST' })
+    state = reduceAutomationDraftDocument(state, { type: 'SAVE_FAILURE', error: { code: 'DRAFT_VERSION_CONFLICT', details: { expectedVersion: 2, actualVersion: 3 } } })
+    expect(reduceAutomationDraftDocument(state, { type: 'EDIT', command: { type: 'DELETE_STEP', nodeId: 'wait-1' } })).toBe(state)
+  })
+
   it('enters recovery on a publish version conflict and ignores older server Drafts after reload', () => {
     let state = reduceAutomationDraftDocument(loadedState(), { type: 'PUBLISH_REQUEST' })
     const local = state.document

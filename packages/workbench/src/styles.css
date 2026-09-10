@@ -902,3 +902,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .draft-difference-values, .draft-recovery-actions { grid-template-columns: minmax(0, 1fr); gap: 10px; }
   .draft-recovery-heading { flex-direction: column; }
 }
+
+.step-edit-actions { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 2px 4px; }
+.step-edit-actions button { display: inline-flex; align-items: center; gap: 5px; min-height: 32px; padding: 5px 8px; border: 1px solid var(--wb-border); border-radius: 4px; background: white; color: var(--wb-text); font-size: 11px; cursor: pointer; }
+.step-edit-actions button:disabled { opacity: .45; cursor: default; }
+.step-edit-actions p { flex-basis: 100%; margin: 2px 0 0; color: var(--wb-muted); font-size: 11px; line-height: 1.4; }

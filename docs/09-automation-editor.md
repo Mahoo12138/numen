@@ -37,6 +37,19 @@ If
 
 内部是 Block/If tree。
 
+### 当前 Canvas 结构编辑
+
+工具栏和选中步骤下方提供 Move up / Move down / Delete，均生成普通 Source command，复用完整文档 Undo/Redo 与乐观 autosave：
+
+- 排序仅交换同一 `Block.steps` 中的相邻成员。移动容器时整棵子树一起移动，保持 ID、表达式、Connection bindings 和执行策略。
+- 删除序列成员时删除其整棵子树。优先选中后一个兄弟节点，再选前一个；序列为空时选中可见的父 Block，根序列为空时清空选择。
+- 根 flow 不是 Block 时，删除它会生成保留根 ID 的空 Block，使 Source 继续保有合法 flow。根 Block 本身不作为可删除的 Canvas 行。
+- If 的 then/else、ForEach body、Parallel/Race branch Block 是结构插槽，不能当作序列成员独立删除或移动；它们内部的步骤可以编辑。Trigger 声明不属于这组命令。
+- 删除、排序不改变 presentation、已发布 Revision 或激活状态；Undo/Redo 恢复完整文档与选中节点。冲突恢复、重新加载和 Publish 期间禁用结构编辑。
+- 表达式引用不自动改写。新插入节点避开 Source 中仍被 `steps.*` 引用的 ID，避免删除后的旧引用静默指向新步骤。被删除或移到消费者之后的输出引用仍需用户检查；编译器对引用存在性、顺序和作用域的完整校验是下一模块。
+
+跨 Block 移动、拖拽排序、独立增删分支/Trigger 和剪切复制不在当前模块范围内。
+
 ## 4. Control Flow vs Data Flow
 
 - Control Flow：Canvas 结构/连线
@@ -143,7 +156,7 @@ Control/Renderer Plugin 缺失：
 
 - Source 原样保留
 - 显示 Unknown Control
-- 当前可查看节点身份，Source 和输入完整保留；恢复相同版本插件后继续编辑。移动/删除仍待 Canvas 结构编辑实现。
+- 当前可查看节点身份，Source 和输入完整保留；恢复相同版本插件后继续编辑。作为序列成员的 Unknown Control 已支持同序列排序和整节点删除，不依赖插件定义。
 - Publish 因 compile dependency missing 被阻止，并定位原 Source 节点
 - 已发布 Revision 的 Run Flow 使用契约快照标题和指令 Source Map 聚合执行状态，不依赖实时 Control Registry
 

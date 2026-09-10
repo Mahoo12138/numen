@@ -1,6 +1,6 @@
 # Numen Development Status
 
-> Last updated: 2026-09-08
+> Last updated: 2026-09-10
 >
 > Architecture baseline: V1 Draft in [`docs/`](docs/README.md)
 
@@ -201,9 +201,12 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Bounded local/server Draft comparison with explicit reload and named copy recovery
 - [x] Durable idempotent Draft copy Action, v11 migration, and stable selection during index invalidation
 
+- [x] Canvas subtree deletion and same-sequence movement with required-slot protection and stable selection
+- [x] Structural edit undo/redo, autosave integration, and protection against reusing still-referenced node IDs
+
 ## Next
 
-1. Automation Canvas step deletion and reordering
+1. Compile-time step reference existence, order, and scope diagnostics
 
 ## Design Review
 
@@ -240,12 +243,14 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 
 - **Draft conflict recovery seam — pass:** optimistic save and publish conflicts preserve the page-local document while a separate Query snapshot feeds a bounded JSON comparison. AutomationService owns transactional disabled-copy creation and durable request deduplication; retries after lost responses or process restarts cannot create duplicate copies. The browser keeps an immutable copy request, aborts disposed requests, ignores stale snapshots/results, and pins selection across index reordering. Explicit copy navigation and latest-server reload remain user actions. Tests cover original activation and Revision isolation, invalid Source preservation, v10-to-v11 migration, request mismatch, retry, comparison limits, and lifecycle cancellation. Production-browser QA covers two-tab conflicts, simulated lost response, deduplicated retry, copy navigation, reload, and 1440px/390px layouts.
 
+- **Canvas structural editing seam — pass:** one pure Source command locates Block membership, moves adjacent siblings or deletes a subtree, and computes valid selection without mutating node identity or mandatory control slots. The existing document owner retains complete undo/redo and edits made during autosave. Insert allocation reserves IDs still mentioned by surviving step references. Toolbar and selected-row actions share eligibility rules and remain disabled during conflicts and publishing. Tests cover nested control bodies, subtree identity, unknown extensions, no-op boundaries, root deletion, selection, history, and in-flight saves. Production-browser QA verifies nested sorting, delete/undo, empty-flow recovery, persisted order, unchanged Revision/activation/presentation, and 1440px/390px layouts.
+
 ## Verification Baseline
 
 ```text
 Typecheck: passing
 Build: passing
-Tests: 53 files, 220 tests passing
+Tests: 54 files, 230 tests passing
 CLI config validate: passing
 CLI doctor: passing
 SQLite schema migration: v11
@@ -267,7 +272,7 @@ pnpm dev
 - The current Scheduler executes the Core IR subset emitted by the compiler, including retry, timeout, cancellation, recovery, and structured concurrency.
 - Parallel, first-success Race, and bounded ForEach use durable Execution scopes with interruptible concurrent dispatch; Try/Finally control flow remains planned work.
 - Typed Console transports, browser sessions, Browser Cordis clients, frontend extension registries, atomic Entry generations, authenticated revision-fenced asset delivery, and Browser Entry reconciliation/rollback are operational. Generated bootstrap tokens and sessions rotate on restart; the CLI prints a fragment-only Workbench launch URL only with explicit `--print-launch-url` authorization.
-- The responsive Workbench shell, ten registered core Page routes, stable browser Route/Page reconciliation, a secret-free production bootstrap, and authenticated core Entry loading are operational through the default Runtime. Home, Automations, the keyset-paginated Runs index, bounded Run Flow/Timeline/Context detail with cancellation controls, and the desired/runtime-separated Connections index display live data and refresh through coalesced typed invalidations without replacing server truth in the browser. Automation authoring now supports registry-driven Capability/control insertion, plugin-owned Schema Literal renderers, unified Literal/Reference/Template/structured Call inputs, scope-aware typed Magic Variables, named Connection bindings, expression-backed Wait duration/until editing, bounded undo/redo, debounced full-document autosave, explicit conflict recovery, immutable Revision publish, explicit Revision activation and enable/disable controls, and source-linked diagnostics. Automation `input.*` and `vars.*` remain manually addressable because no declaration schema exists yet; conflict comparison and save-copy recovery are operational; force overwrite and automatic merging remain outside V1. Plugin-owned Control definitions now drive the live insert catalog and extension input fields.
+- The responsive Workbench shell, ten registered core Page routes, stable browser Route/Page reconciliation, a secret-free production bootstrap, and authenticated core Entry loading are operational through the default Runtime. Home, Automations, the keyset-paginated Runs index, bounded Run Flow/Timeline/Context detail with cancellation controls, and the desired/runtime-separated Connections index display live data and refresh through coalesced typed invalidations without replacing server truth in the browser. Automation authoring now supports registry-driven Capability/control insertion, plugin-owned Schema Literal renderers, unified Literal/Reference/Template/structured Call inputs, scope-aware typed Magic Variables, named Connection bindings, expression-backed Wait duration/until editing, same-sequence step movement and subtree deletion, bounded undo/redo, debounced full-document autosave, explicit conflict recovery, immutable Revision publish, explicit Revision activation and enable/disable controls, and source-linked diagnostics. Automation `input.*` and `vars.*` remain manually addressable because no declaration schema exists yet; conflict comparison and save-copy recovery are operational; force overwrite and automatic merging remain outside V1. Plugin-owned Control definitions now drive the live insert catalog and extension input fields.
 - Manual Runs and event Trigger subscriptions are supported. State Trigger transition detection, filtering, debounce, and throttle remain planned work.
 - Connection desired state, generation-fenced create/update/delete/enable Actions, Adapter Schema configuration UI, generation-fenced Runtime recreation, and metadata-only Credential selection are operational. Credential metadata, creation/rotation/deletion Actions and UI are operational; automatic reconnect policy remains planned work. Credential writes require an available type plugin and a configured runtime master key. Non-object secret contracts require a plugin-provided editor.
 - Credential payloads use authenticated encryption with environment-provided keys; key-ring migration and external vault providers remain planned work.

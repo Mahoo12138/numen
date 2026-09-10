@@ -222,7 +222,7 @@ export function reduceAutomationDraftDocument(
         { ...state.document, source: result.source },
         [...state.undoStack.slice(-(historyLimit - 1)), snapshot(state.document, state.selectedNodeId)],
         [],
-        result.selectedNodeId ?? state.selectedNodeId,
+        Object.hasOwn(result, 'selectedNodeId') ? result.selectedNodeId : state.selectedNodeId,
       )
     }
     case 'UNDO': {
@@ -350,6 +350,8 @@ export interface AutomationDraftDocumentModel {
   canPublish: boolean
   canUndo: boolean
   canRedo: boolean
+  deleteStep(nodeId: string): void
+  moveStep(nodeId: string, direction: 'up' | 'down'): void
   insert(item: WorkbenchAutomationInsertItem): void
   selectNode(nodeId?: string): void
   setCapabilityConnection(nodeId: string, slotName: string, connectionId?: string): void
@@ -521,6 +523,8 @@ export function useAutomationDraftDocument({
         && !state.value.publishPending
         && !!state.value.redoStack.length
     },
+    deleteStep: nodeId => dispatch({ type: 'EDIT', command: { type: 'DELETE_STEP', nodeId } }),
+    moveStep: (nodeId, direction) => dispatch({ type: 'EDIT', command: { type: 'MOVE_STEP', nodeId, direction } }),
     insert,
     selectNode,
     setCapabilityConnection,
