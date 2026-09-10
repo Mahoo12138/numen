@@ -4,13 +4,14 @@ import type { MagicVariableCandidate, MagicVariableGroup } from './automation-va
 import { defineSetupComponent } from './vue-component.js'
 
 const groupLabels: Record<MagicVariableGroup, string> = {
+  input: 'Automation inputs',
   trigger: 'Trigger',
   steps: 'Previous steps',
   loop: 'Loop',
   run: 'Run',
 }
 
-const groupOrder: MagicVariableGroup[] = ['trigger', 'steps', 'loop', 'run']
+const groupOrder: MagicVariableGroup[] = ['input', 'trigger', 'steps', 'loop', 'run']
 
 function searchableText(item: MagicVariableCandidate): string {
   return `${item.label} ${item.sourceLabel} ${item.path} ${item.valueType}`.toLowerCase()

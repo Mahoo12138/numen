@@ -14,6 +14,7 @@ export interface SchemaLiteralRendererProps {
   inputId: string
   invalid: boolean
   value?: NumenValue
+  onValidationChange?(invalid: boolean): void
   onCommit(value?: NumenValue): void
 }
 
@@ -113,12 +114,14 @@ function EnumLiteralEditor(props: SchemaLiteralRendererProps) {
   </select>
 }
 
-const JsonLiteralEditor = defineSetupComponent<SchemaLiteralRendererProps>('JsonLiteralEditor', ['canEdit', 'autofocus', 'controlId', 'describedBy', 'field', 'inputId', 'invalid', 'value', 'onCommit'], props => {
+const JsonLiteralEditor = defineSetupComponent<SchemaLiteralRendererProps>('JsonLiteralEditor', ['canEdit', 'autofocus', 'controlId', 'describedBy', 'field', 'inputId', 'invalid', 'value', 'onCommit', 'onValidationChange'], props => {
   const localError = ref<string>()
+  const draftText = ref<string>()
   const localProblemId = `${props.controlId}-input-${props.field.name}-json-problem`
-  watch(() => props.value, () => { localError.value = undefined })
+  watch(() => props.value, () => { localError.value = undefined; draftText.value = undefined; props.onValidationChange?.(false) })
   return () => {
-    const value = props.value === undefined ? '' : JSON.stringify(props.value, null, 2)
+    const storedValue = props.value === undefined ? '' : JSON.stringify(props.value, null, 2)
+    const value = draftText.value ?? storedValue
     return <>
     <textarea
       aria-describedby={[props.describedBy, localError.value ? localProblemId : undefined].filter(Boolean).join(' ') || undefined}
@@ -126,11 +129,13 @@ const JsonLiteralEditor = defineSetupComponent<SchemaLiteralRendererProps>('Json
       value={value}
       disabled={!props.canEdit}
       id={props.inputId}
-      key={`${props.controlId}:${props.field.name}:${value}`}
+      key={`${props.controlId}:${props.field.name}:${storedValue}`}
+      onInput={event => { draftText.value = (event.target as HTMLTextAreaElement).value; props.onValidationChange?.(true) }}
       onBlur={event => {
         const text = (event.target as HTMLInputElement).value.trim()
         if (!text && !props.field.required) {
           localError.value = undefined
+          props.onValidationChange?.(false)
           props.onCommit()
           return
         }
@@ -138,8 +143,10 @@ const JsonLiteralEditor = defineSetupComponent<SchemaLiteralRendererProps>('Json
           const next: unknown = JSON.parse(text)
           if (!isNumenValue(next)) throw new TypeError('Value must be JSON-compatible Numen data.')
           localError.value = undefined
+          props.onValidationChange?.(false)
           if (JSON.stringify(next) !== JSON.stringify(props.value)) props.onCommit(next)
         } catch (error) {
+          props.onValidationChange?.(true)
           localError.value = error instanceof Error ? error.message : 'Enter valid JSON.'
         }
       }}

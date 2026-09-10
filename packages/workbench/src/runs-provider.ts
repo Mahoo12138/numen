@@ -1,3 +1,4 @@
+import { provideManualRuns } from './manual-run-provider.js'
 import '@numen/automation'
 import '@numen/scheduler'
 import type { NumenValue } from '@numen/core'
@@ -219,6 +220,7 @@ export const workbenchRunDetailQuery: ConsoleQueryDefinition<Record<string, unkn
 }
 
 export function workbenchRunsProviderPlugin(ctx: Context): void {
+  provideManualRuns(ctx)
   ctx.console.provideQuery(ctx, workbenchRunsIndexQueryRef, {
     query({ input }: { input: WorkbenchRunsProviderInput }): WorkbenchRunsIndex {
       const page = ctx.scheduler.listRunSummariesPage(input.limit, input.cursor)

@@ -98,7 +98,16 @@ export interface TriggerSource {
   config: Record<string, NumenValue>
 }
 
+export interface AutomationInputDeclaration {
+  type: 'string' | 'number' | 'boolean' | 'object' | 'array'
+  title?: string
+  description?: string
+  required?: boolean
+  default?: NumenValue
+}
+
 export interface AutomationSource {
+  inputs?: Record<string, AutomationInputDeclaration>
   triggers: TriggerSource[]
   flow: ControlSource
   policy?: {

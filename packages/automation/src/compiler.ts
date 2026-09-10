@@ -1,6 +1,7 @@
 import type Schema from 'schemastery'
 import {
   capabilityKey,
+  validateAutomationInputDeclarations,
   controlKey,
   getCoreExpressionFunction,
   isNumenValue,
@@ -707,6 +708,15 @@ export function compileAutomation(
     report({ severity: 'error', code: 'POLICY_MAX_ACTIVE_INVALID', message: 'policy.maxActive must be a positive integer.', source: { fieldPath: 'policy.maxActive' } })
   }
   if (source.policy?.groupBy) validateExpression(source.policy.groupBy, '__policy', 'policy.groupBy')
+
+  const inputDiagnostics = validateAutomationInputDeclarations(source.inputs)
+  diagnostics.push(...inputDiagnostics)
+  // Event triggers supply trigger data, not manual parameters. Required inputs need defaults.
+  if (source.triggers.length && !inputDiagnostics.length) {
+    for (const [name, field] of Object.entries(source.inputs ?? {})) {
+      if (field.required && field.default === undefined) report({ severity: 'error', code: 'TRIGGER_INPUT_DEFAULT_REQUIRED', message: 'Required inputs need defaults when event triggers are configured.', source: { nodeId: '__inputs', fieldPath: `inputs.${name}.default` } })
+    }
+  }
 
   const completeId = '__complete'
   instructions[completeId] = { op: 'complete', id: completeId }

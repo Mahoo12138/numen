@@ -1,3 +1,4 @@
+import { workbenchManualRunFormQuery, workbenchStartManualRunAction } from '../src/manual-run-provider.js'
 import { projectWorkbenchRunDetail } from '../src/run-detail-projection.js'
 import { AutomationService } from '@numen/automation'
 import { ConsoleProcedureUnavailableError, ConsoleService, type ConsoleRequestContext } from '@numen/console'
@@ -58,6 +59,8 @@ describe('Workbench Run detail Provider', () => {
     await root.plugin(SchedulerService, { autoDispatch: false })
     await root.plugin(ConsoleService)
     root.console.define(root, workbenchRunDetailQuery)
+    root.console.define(root, workbenchManualRunFormQuery)
+    root.console.define(root, workbenchStartManualRunAction)
     root.console.define(root, workbenchCancelRunAction)
     root.console.define(root, workbenchRunsIndexQuery)
     const provider = (ctx: Context) => workbenchRunsProviderPlugin(ctx)
@@ -114,6 +117,8 @@ describe('Workbench Run detail Provider', () => {
     await root.plugin(SchedulerService, { autoDispatch: false })
     await root.plugin(ConsoleService)
     root.console.define(root, workbenchRunDetailQuery)
+    root.console.define(root, workbenchManualRunFormQuery)
+    root.console.define(root, workbenchStartManualRunAction)
     root.console.define(root, workbenchCancelRunAction)
     root.console.define(root, workbenchRunsIndexQuery)
     const providerPlugin = (ctx: Context) => workbenchRunsProviderPlugin(ctx)

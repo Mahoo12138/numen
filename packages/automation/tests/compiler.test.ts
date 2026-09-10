@@ -61,6 +61,27 @@ const source: AutomationSource = {
 }
 
 describe('automation compiler', () => {
+  it('validates declared inputs, requires trigger defaults, and preserves legacy input references', () => {
+    const candidate = structuredClone(source)
+    candidate.inputs = { message: { type: 'string', required: true } }
+    try { compileAutomation(candidate, resolver); throw Error('Expected rejection') } catch (error) {
+      expect(error).toBeInstanceOf(AutomationCompileError)
+      expect((error as AutomationCompileError).diagnostics).toContainEqual(expect.objectContaining({ code: 'TRIGGER_INPUT_DEFAULT_REQUIRED', source: { nodeId: '__inputs', fieldPath: 'inputs.message.default' } }))
+    }
+    candidate.inputs.message!.default = 'event'
+    expect(() => compileAutomation(candidate, resolver)).not.toThrow()
+    if (candidate.flow.type !== 'block' || candidate.flow.steps[0]?.type !== 'capability') throw Error('fixture')
+    candidate.flow.steps[0].input.message = { type: 'template', parts: [{ ref: 'input.undeclared' }] }
+    try { compileAutomation(candidate, resolver); throw Error('Expected rejection') } catch (error) {
+      expect(error).toBeInstanceOf(AutomationCompileError)
+      expect((error as AutomationCompileError).diagnostics).toContainEqual(expect.objectContaining({ code: 'INPUT_REFERENCE_MISSING', source: { nodeId: 'send-message', fieldPath: 'input.message.parts.0' } }))
+    }
+    delete candidate.inputs
+    expect(() => compileAutomation(candidate, resolver)).not.toThrow()
+    candidate.inputs = { broken: { type: 'number', default: 'oops' } }
+    expect(() => compileAutomation(candidate, resolver)).toThrow(AutomationCompileError)
+  })
+
   it('lowers structured source into deterministic Core IR and snapshots contracts', () => {
     const result = compileAutomation(source, resolver)
     expect(result.plan.entry).toBe('send-message')

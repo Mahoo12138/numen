@@ -1,3 +1,5 @@
+import { AutomationInputs } from './AutomationInputs.js'
+import { ManualRunForm } from './ManualRunForm.js'
 import type { SourceRef } from '@numen/core'
 import { computed, h, inject, provide, ref, watch, type ComputedRef, type InjectionKey } from 'vue'
 import { DraftConflictRecovery } from './DraftConflictRecovery.js'
@@ -169,6 +171,10 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
       onReloadDraft: authoring.reload,
       onRetrySave: authoring.retrySave,
     } : {}),
+    ...(props.consoleClient && authoring.document ? {
+      inputSettings: h(AutomationInputs, { inputs: authoring.document.source.inputs, canEdit: authoring.canEdit, problems: authoring.problems, onChange: authoring.setAutomationInputs, ...(props.schemaUI ? { schemaUI: props.schemaUI } : {}) }),
+      manualRunForm: h(ManualRunForm, { key: authoring.document.automationId, automationId: authoring.document.automationId, consoleClient: props.consoleClient, ...(props.schemaUI ? { schemaUI: props.schemaUI } : {}), ...(props.navigation ? { navigation: props.navigation } : {}) }),
+    } : {}),
     ...(props.consoleClient && authoring.document && authoring.conflict ? {
       conflictRecovery: h(DraftConflictRecovery, {
         key: authoring.document.automationId,
@@ -200,7 +206,7 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
       fieldFocus.value = undefined
       props.onInspectorOpenChange(true)
     },
-    onTabChange: tab => { activeTab.value = tab },
+    onTabChange: tab => { activeTab.value = tab; if (tab !== 'Editor') props.onInspectorOpenChange(false) },
     onReload: reloadDetail,
   }))
   provide(automationWorkspaceKey, workspace)
@@ -208,6 +214,7 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
   const selectProblem = (sourceRef: SourceRef) => {
     const nodeId = sourceRef.nodeId
     if (!nodeId) return
+    if (nodeId === '__inputs') { activeTab.value = 'Settings'; props.onInspectorOpenChange(false); return }
     const step = steps.value.find(item => item.sourceId === nodeId)
     if (!step) return
     authoring.selectNode(nodeId)

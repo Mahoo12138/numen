@@ -4,3 +4,5 @@ export * from './execution.js'
 export * from './expression.js'
 export * from './value.js'
 export * from './control.js'
+
+export * from './automation-inputs.js'

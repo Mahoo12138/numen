@@ -144,6 +144,8 @@ describe('Numen runtime', () => {
         definition: expect.objectContaining({ id: 'numen:home-overview', version: 1, kind: 'query' }),
         providerAvailable: true,
       }),
+      expect.objectContaining({ definition: expect.objectContaining({ id: 'numen:manual-run-form', version: 1, kind: 'query' }), providerAvailable: true }),
+      expect.objectContaining({ definition: expect.objectContaining({ id: 'numen:manual-run-start', version: 1, kind: 'action' }), providerAvailable: true }),
       expect.objectContaining({
         definition: expect.objectContaining({ id: 'numen:run-cancel', version: 1, kind: 'action' }),
         providerAvailable: true,

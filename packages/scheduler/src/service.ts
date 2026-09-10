@@ -1,6 +1,7 @@
 import '@numen/automation'
 import {
   capabilityKey,
+  resolveAutomationInputs,
   isNumenValue,
   isResourceRef,
   type Attempt,
@@ -21,6 +22,10 @@ import '@numen/resources'
 import { Service, type Context } from 'cordis'
 import { randomUUID } from 'node:crypto'
 import { evaluateExpression, type EvaluationBindings } from './evaluator.js'
+
+export class ManualRunRevisionConflictError extends Error {
+  constructor() { super('The active Revision changed. Reload the run form before submitting.'); this.name = 'ManualRunRevisionConflictError' }
+}
 
 export interface SchedulerConfig {
   autoDispatch?: boolean
@@ -305,10 +310,14 @@ export class SchedulerService extends Service {
     automationId: string,
     input: Record<string, NumenValue> = {},
     trigger: NumenValue = { type: 'manual' },
+    expectedRevisionId?: string,
   ): Run {
     const automation = this.ctx.automations.get(automationId)
     if (!automation) throw new Error(`automation not found: ${automationId}`)
     if (!automation.activeRevisionId) throw new Error(`automation has no active revision: ${automationId}`)
+    if (expectedRevisionId !== undefined && automation.activeRevisionId !== expectedRevisionId) throw new ManualRunRevisionConflictError()
+    const revision = this.ctx.automations.getRevision(automation.activeRevisionId)!
+    const resolvedInput = resolveAutomationInputs(revision.source, input)
     if (!isNumenValue(input) || !isNumenValue(trigger)) throw new TypeError('run input and trigger must be Numen values')
     const runId = id('run')
     const now = new Date().toISOString()
@@ -317,7 +326,7 @@ export class SchedulerService extends Service {
         INSERT INTO runs (
           id, automation_id, revision_id, status, trigger_json, input_json, created_at
         ) VALUES (?, ?, ?, 'QUEUED', ?, ?, ?)
-      `).run(runId, automationId, automation.activeRevisionId, JSON.stringify(trigger), JSON.stringify(input), now)
+      `).run(runId, automationId, automation.activeRevisionId, JSON.stringify(trigger), JSON.stringify(resolvedInput), now)
       this.appendEvent(runId, 'RunAccepted', { source: 'manual' }, now)
     })
     if (this.autoDispatch) this.kick()
@@ -365,13 +374,15 @@ export class SchedulerService extends Service {
         if (duplicate) return { status: 'duplicate', runId: duplicate.run_id }
       }
 
+      const revision = this.ctx.automations.getRevision(binding.revisionId)!
+      const resolvedInput = resolveAutomationInputs(revision.source, {})
       const runId = id('run')
       const eventRowId = id('trigger')
       this.ctx.database.db.prepare(`
         INSERT INTO runs (
           id, automation_id, revision_id, status, trigger_json, input_json, created_at
-        ) VALUES (?, ?, ?, 'QUEUED', ?, '{}', ?)
-      `).run(runId, binding.automationId, binding.revisionId, JSON.stringify(emission.data), acceptedAt)
+        ) VALUES (?, ?, ?, 'QUEUED', ?, ?, ?)
+      `).run(runId, binding.automationId, binding.revisionId, JSON.stringify(emission.data), JSON.stringify(resolvedInput), acceptedAt)
       this.ctx.database.db.prepare(`
         INSERT INTO trigger_events (
           id, automation_id, revision_id, activation_generation, trigger_id,

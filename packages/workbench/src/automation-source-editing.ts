@@ -2,6 +2,7 @@ import type { AutomationSource, BlockSource, ControlSource, ValueExpr } from '@n
 import type { WorkbenchAutomationInsertItem } from './contracts.js'
 
 export type AutomationSourceCommand =
+  | { type: 'SET_AUTOMATION_INPUTS'; inputs: AutomationSource['inputs'] }
   | { type: 'DELETE_STEP'; nodeId: string }
   | { type: 'MOVE_STEP'; nodeId: string; direction: 'up' | 'down' }
   | { type: 'INSERT'; item: WorkbenchAutomationInsertItem }
@@ -364,6 +365,10 @@ export function applyAutomationSourceCommand(
   command: AutomationSourceCommand,
 ): AutomationSourceCommandResult {
   switch (command.type) {
+    case 'SET_AUTOMATION_INPUTS': {
+      const { inputs: _inputs, ...rest } = source
+      return { source: command.inputs === undefined ? rest : { ...rest, inputs: structuredClone(command.inputs) } }
+    }
     case 'DELETE_STEP': return editSequence(source, command.nodeId)
     case 'MOVE_STEP': return editSequence(source, command.nodeId, command.direction)
     case 'INSERT': return insertItem(source, command.item)

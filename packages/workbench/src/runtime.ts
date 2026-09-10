@@ -1,3 +1,4 @@
+import { workbenchManualRunFormQuery, workbenchStartManualRunAction } from './manual-run-provider.js'
 import { workbenchActivateAutomationRevisionAction, workbenchSetAutomationEnabledAction } from './automation-activation-provider.js'
 import { workbenchCredentialsIndexQuery, workbenchCreateCredentialAction, workbenchRotateCredentialAction, workbenchDeleteCredentialAction } from './credentials-provider.js'
 import type { ConsoleFrontendEntry } from '@numen/console'
@@ -100,6 +101,8 @@ export class WorkbenchRuntimeService extends Service {
     ctx.console.define(ctx, workbenchHomeOverviewQuery)
     ctx.console.define(ctx, workbenchInvalidationSubscription)
     ctx.console.define(ctx, workbenchRunDetailQuery)
+    ctx.console.define(ctx, workbenchManualRunFormQuery)
+    ctx.console.define(ctx, workbenchStartManualRunAction)
     ctx.console.define(ctx, workbenchCancelRunAction)
     ctx.console.define(ctx, workbenchRunsIndexQuery)
     const entry: ConsoleFrontendEntry = {
@@ -124,3 +127,5 @@ export class WorkbenchRuntimeService extends Service {
 export const workbenchRuntimePlugin = WorkbenchRuntimeService
 
 export default workbenchRuntimePlugin
+
+export { workbenchManualRunFormQuery, workbenchStartManualRunAction } from './manual-run-provider.js'

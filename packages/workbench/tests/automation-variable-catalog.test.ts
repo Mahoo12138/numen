@@ -54,6 +54,17 @@ function capability(id: string) {
 }
 
 describe('scope-aware Automation variable projection', () => {
+  it('offers declared inputs with their type and title, without inventing nested properties', () => {
+    const source: AutomationSource = { triggers: [], flow: capability('target'), inputs: {
+      count: { type: 'number', title: 'Item count' }, message: { type: 'string' }, config: { type: 'object' },
+    } }
+    const numberField: WorkbenchAutomationInputField = { name: 'count', label: 'Count', type: 'number', schemaType: 'number', required: true }
+    const values = projectMagicVariables({ source, nodeId: 'target', field: numberField, catalog, mode: 'reference' })
+    expect(values.filter(item => item.group === 'input')).toEqual([expect.objectContaining({ path: 'input.count', label: 'Item count', valueType: 'number' })])
+    const text = projectMagicVariables({ source, nodeId: 'target', field: stringField, catalog, mode: 'reference' })
+    expect(text.find(item => item.path === 'input.count')).toMatchObject({ conversion: 'core:to-string' })
+  })
+
   it('includes trigger, ancestor, and same-branch prior outputs but excludes later and sibling-branch steps', () => {
     const source: AutomationSource = {
       triggers: [{ id: 'event', capability: { id: 'test:event', version: 1 }, config: {} }],

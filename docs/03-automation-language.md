@@ -198,4 +198,26 @@ Schemastery 用于：
 
 主要错误码为 `STEP_REFERENCE_MISSING`、`STEP_REFERENCE_NOT_READY`、`STEP_REFERENCE_OUT_OF_SCOPE`、`STEP_REFERENCE_NO_OUTPUT`、`STEP_REFERENCE_UNADDRESSABLE`、`LOOP_REFERENCE_OUT_OF_SCOPE` 和 `LOOP_REFERENCE_INVALID`。删除或重排导致的无效引用仍可保存为 Draft，必须修复后才能 Publish；失败不会新增 Revision 或改变 activation。
 
-此检查保证新发布 Source 的词法可用性，不验证任意输出属性是否存在或动态值类型，也不新增 `input`、`vars` 等根的声明机制。历史 Revision 直接运行已存储的 Core IR，不重新编译；Scheduler 的历史绑定行为保持不变。
+此检查保证新发布 Source 的词法可用性，不验证任意输出属性是否存在或动态值类型，其中 `input` 顶层名称在声明存在时按下节检查，`vars` 等根仍无声明机制。历史 Revision 直接运行已存储的 Core IR，不重新编译；Scheduler 的历史绑定行为保持不变。
+
+## Automation 输入声明
+
+Source 可通过 `inputs` 声明顶层参数。这是可序列化的有限契约，不包含插件函数或任意 JSON Schema：
+
+```json
+{
+  "inputs": {
+    "message": { "type": "string", "title": "Message", "required": true },
+    "count": { "type": "number", "default": 2 },
+    "options": { "type": "object", "description": "Additional options" }
+  },
+  "triggers": [],
+  "flow": { "type": "block", "id": "flow", "steps": [] }
+}
+```
+
+支持 `string`、`number`、`boolean`、`object`、`array`，可设置 `title`、`description`、`required`、`default`。最多 64 个参数，名称为 1–64 个字符，以字母、`_` 或 `$` 开头，后续允许字母、数字、`_`、`$`、`-`，保留原型相关名称不可使用。默认值必须符合声明类型，不进行字符串到数字等隐式转换。对象和数组只校验整体类型，嵌套属性契约、枚举和范围约束尚未实现。
+
+声明随 Source 保存在 immutable Revision 中并参与内容哈希。存在 `inputs` 时，编译器检查所有 `input.<name>` 引用的顶层名称；未声明名称产生 `INPUT_REFERENCE_MISSING`。省略 `inputs` 保持历史行为，可传入任意 JSON 对象参数；`inputs: {}` 则表示不接受参数。
+
+Scheduler 在创建手动 Run 前读取 Active Revision 的声明，拒绝缺失必填项、类型不符和额外参数，补齐默认值，并把结果冻结到 Run 的 `input_json`。显式的 `false`、`0` 和空字符串不会被默认值覆盖。改变 Draft 或激活新 Revision 不会修改已有 Run 的参数。事件触发也补齐声明的默认值；配置 Trigger 时，必填输入必须有默认值，否则 Publish 返回 `TRIGGER_INPUT_DEFAULT_REQUIRED`。

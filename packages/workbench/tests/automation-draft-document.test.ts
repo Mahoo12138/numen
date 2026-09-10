@@ -61,6 +61,21 @@ function loadedState(): AutomationDraftDocumentState {
 }
 
 describe('local Automation Draft document', () => {
+  it('keeps input declarations in full-document history through concurrent autosave', () => {
+    let state = loadedState()
+    state = reduceAutomationDraftDocument(state, { type: 'EDIT', command: { type: 'SET_AUTOMATION_INPUTS', inputs: { message: { type: 'string', required: true } } } })
+    state = reduceAutomationDraftDocument(state, { type: 'SAVE_REQUEST' })
+    const saved = state.document!.source
+    state = reduceAutomationDraftDocument(state, { type: 'EDIT', command: { type: 'SET_AUTOMATION_INPUTS', inputs: {} } })
+    state = reduceAutomationDraftDocument(state, { type: 'SAVE_SUCCESS', result: { draft: draft(2, saved) } })
+    expect(state).toMatchObject({ savePhase: 'DIRTY', document: { source: { inputs: {} } } })
+    state = reduceAutomationDraftDocument(state, { type: 'UNDO' })
+    expect(state.document!.source.inputs).toEqual({ message: { type: 'string', required: true } })
+    state = reduceAutomationDraftDocument(state, { type: 'REDO' })
+    expect(state.document!.source.inputs).toEqual({})
+    expect(state.document!.source.flow).toEqual(saved.flow)
+  })
+
   it('keeps deletion and sorting in full-document history and preserves edits made during autosave', () => {
     let state = loadedState()
     for (let i = 0; i < 3; i++) state = reduceAutomationDraftDocument(state, { type: 'EDIT', command: { type: 'INSERT', item: waitItem } })

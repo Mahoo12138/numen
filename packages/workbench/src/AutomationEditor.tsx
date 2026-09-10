@@ -47,6 +47,8 @@ export interface AutomationEditorProps {
     saveError?: string
     publishError?: string
   }
+  inputSettings?: VNodeChild
+  manualRunForm?: VNodeChild
   conflictRecovery?: VNodeChild
   activation?: AutomationActivationView
   onActivateRevision?(revisionId: string): void
@@ -86,6 +88,8 @@ export function AutomationEditor({
   authoring,
   activation,
   conflictRecovery,
+  inputSettings,
+  manualRunForm,
   onActivateRevision,
   onSetEnabled,
   onStepChange,
@@ -278,7 +282,7 @@ export function AutomationEditor({
             </div>
           </section>
         </>
-      ) : activeTab === 'Revisions' && detail ? (
+      ) : activeTab === 'Settings' && inputSettings ? inputSettings : activeTab === 'Runs' && manualRunForm ? manualRunForm : activeTab === 'Revisions' && detail ? (
         <section class="automation-revisions">
           <div class="runs-section-heading"><h2>Immutable revisions</h2><span>Newest first</span></div>
           <p class="activation-help">Activate a published Revision, then enable the Automation to accept Trigger events. Existing Runs keep their original Revision.</p>

@@ -44,6 +44,11 @@ export function validateSourceReferences(
       severity: 'error', code, message,
       source: env.authoredNodeId ? { nodeId: env.authoredNodeId } : location,
     })
+    if (path.startsWith('input.') && source.inputs !== undefined) {
+      const name = path.split('.')[1]!
+      if (!Object.hasOwn(source.inputs, name)) report('INPUT_REFERENCE_MISSING', `Input ${name} is not declared.`)
+      return
+    }
     if (path.startsWith('loop.')) {
       if (!env.inLoop) report('LOOP_REFERENCE_OUT_OF_SCOPE', `Reference ${path} is only available inside a ForEach body.`)
       else if (!['item', 'index'].includes(path.split('.')[1]!)) report('LOOP_REFERENCE_INVALID', `Unknown loop binding: ${path}. Use loop.item or loop.index.`)

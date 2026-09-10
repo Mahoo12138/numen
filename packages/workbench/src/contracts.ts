@@ -672,3 +672,18 @@ export interface WorkbenchSetAutomationEnabledInput {
 export interface WorkbenchAutomationActivationResult {
   automation: WorkbenchAutomationIdentity
 }
+
+export const workbenchManualRunFormQueryRef = { id: 'numen:manual-run-form', version: 1 } as const satisfies ConsoleProcedureRef
+export const workbenchStartManualRunActionRef = { id: 'numen:manual-run-start', version: 1 } as const satisfies ConsoleProcedureRef
+export interface WorkbenchManualRunForm {
+  automationId: string
+  revisionId: string
+  revisionNumber: number
+  inputs?: NonNullable<AutomationSource['inputs']>
+}
+export interface WorkbenchStartManualRunInput {
+  automationId: string
+  expectedRevisionId: string
+  input: Record<string, NumenValue>
+}
+export interface WorkbenchStartManualRunResult { runId: string }

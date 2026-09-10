@@ -937,6 +937,7 @@ describe('SchedulerService', () => {
     directories.push(directory)
     const root = await createContext(join(directory, 'numen.db'), actionDefinition(), async input => input)
     const source: AutomationSource = {
+      inputs: { prefix: { type: 'string', required: true, default: 'event-default' } },
       triggers: [{
         id: 'event',
         capability: { id: 'test:event', version: 1 },
@@ -967,6 +968,7 @@ describe('SchedulerService', () => {
       subject: 'subject-1',
       checkpoint: { cursor: 1 },
     })
+    expect(root.scheduler.getRun(accepted.runId!)?.input).toEqual({ prefix: 'event-default' })
     expect(accepted).toMatchObject({ status: 'accepted', runId: expect.any(String) })
     expect(root.scheduler.acceptTrigger(binding, {
       data: { value: 'ignored duplicate' },

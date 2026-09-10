@@ -6,7 +6,7 @@ import type {
   WorkbenchAutomationVariableValueType,
 } from './contracts.js'
 
-export type MagicVariableGroup = 'trigger' | 'steps' | 'loop' | 'run'
+export type MagicVariableGroup = 'input' | 'trigger' | 'steps' | 'loop' | 'run'
 export type MagicVariableCompatibility = 'direct' | 'conversion'
 
 export interface MagicVariableCandidate {
@@ -206,6 +206,10 @@ export function projectMagicVariables(options: ProjectMagicVariablesOptions): Ma
   if (!scope) return []
   const definitions = definitionMap(options.catalog)
   return [
+    ...Object.entries(options.source.inputs ?? {}).flatMap(([name, field]) => {
+      const projected = candidate(options.field, options.mode, { path: `input.${name}`, label: field.title || name, sourceLabel: 'Automation inputs', group: 'input', valueType: field.type, ...(field.description ? { description: field.description } : {}) })
+      return projected ? [projected] : []
+    }),
     ...triggerCandidates(options, definitions),
     ...stepCandidates(options, definitions, scope),
     ...contextCandidates(options, scope.inLoop),

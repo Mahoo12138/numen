@@ -237,3 +237,13 @@ FAILED
 ```
 
 Panel 提供 Timeline / Context / Logs。
+
+## Automation 输入和手动运行
+
+Settings 的 Automation inputs 表单编辑 Draft 的输入名称、类型、标签、说明、必填和默认值。修改通过 `SET_AUTOMATION_INPUTS` 命令进入完整文档历史，复用 Undo/Redo、自动保存和冲突保护。删除最后一个声明保留空契约；Allow undeclared inputs 明确移除契约。输入声明问题可从 Problems 跳到 Settings。Magic Variables 根据本地 Draft 的声明提供 `input.*` 选项及类型转换，不依赖运行状态。
+
+Runs 页通过 `numen:manual-run-form@1` Query 读取 Active Revision 的契约，复用 Schema Literal Renderers 生成参数表单。旧 Revision 没有声明时使用 JSON 对象输入。表单冻结加载时的 Revision ID；`numen:manual-run-start@1` Action 提交时由 Scheduler 核对 `expectedRevisionId`。版本改变返回 409 并保留已填值，用户显式 Reload parameters 后查看新契约。422 校验失败不会创建 Run，有效提交可通过 View Run 打开现有运行详情。
+
+手动运行不要求启用 Trigger 订阅，但必须先发布并激活 Revision。草稿或尚未激活的新 Revision 不影响运行表单。表单卸载会中止客户端请求，过期响应不会更新页面；这不撤销服务端可能已接受的 Run。无法确认提交结果时不自动重试，提示先检查 Runs。手动提交目前没有持久化幂等请求 ID，重复提交表示创建另一个 Run。
+
+JSON 编辑器保留未提交文本并上报本地格式状态；无效 JSON 会阻止手动运行提交。参数值回调不透传成原生 DOM `change` 监听器，避免把 Event 对象当成参数。
