@@ -933,3 +933,22 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .automation-input-metadata { grid-template-columns: minmax(0, 1fr) 100px; }
   .automation-input-metadata .automation-input-checkbox { grid-column: 1 / -1; }
 }
+
+.automation-runs { padding: 24px 28px; overflow: auto; min-height: 0; }
+.automation-run-launcher { margin-bottom: 24px; border: 1px solid var(--wb-border); border-radius: 6px; }
+.automation-run-launcher > summary { padding: 14px 16px; cursor: pointer; color: var(--wb-accent); font-weight: 600; }
+.automation-run-launcher .automation-manual-run { padding: 8px 16px 20px; }
+.automation-run-heading { display: flex; justify-content: space-between; align-items: start; gap: 16px; }
+.automation-run-heading h2 { margin: 0 0 8px; font-size: 16px; }
+.automation-run-heading p, .automation-run-totals { color: var(--wb-muted); font-size: 11px; line-height: 1.6; }
+.automation-runs .secondary-button { margin: 0; padding-inline: 12px; width: auto; }
+.automation-run-filter { display: flex; align-items: center; gap: 10px; margin: 16px 0; font-size: 12px; }
+.automation-run-filter select { padding: 7px 10px; border: 1px solid var(--wb-border-strong); border-radius: 4px; background: white; color: var(--wb-text); }
+.automation-runs .runs-table { min-width: 720px; }
+.automation-runs .runs-table td:first-child { max-width: 290px; }
+.automation-runs .run-detail-link strong, .automation-runs .run-detail-link small { overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 680px) { .automation-runs { padding: 18px 16px; } }
+@media (max-width: 680px) {
+  .automation-runs .runs-table td:first-child { max-width: 214px; }
+  .automation-runs .run-detail-link { max-width: 190px; }
+}

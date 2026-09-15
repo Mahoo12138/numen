@@ -1,6 +1,6 @@
 # Numen Development Status
 
-> Last updated: 2026-09-10
+> Last updated: 2026-09-16
 >
 > Architecture baseline: V1 Draft in [`docs/`](docs/README.md)
 
@@ -211,11 +211,16 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Schema-driven Settings and manual Run forms, typed input Magic Variables, and revision-fenced acceptance
 - [x] Durable resolved manual/trigger inputs, legacy open-input compatibility, and JSON editor validation state
 
+- [x] Automation-scoped Run history across Revisions with status filters, scoped keyset cursors, and live refresh
+- [x] Bounded SQL page aggregation, filtered pagination reset, and integrated manual Run launcher
+
 ## Next
 
-1. Automation-scoped Run history with status filters and keyset pagination
+1. Durable manual Run submission idempotency and uncertain-response recovery
 
 ## Design Review
+
+- **Automation Run history seam — pass:** the Scheduler owns parameterized Automation/status filtering and selects a bounded keyset page before Execution/Attempt aggregation. The existing Console Query adds optional filters and binds continuation cursors to them, preserving global clients. The Page owns only filter/cursor history, reuses abort-safe query invalidation, keeps the manual launcher in place, and navigates to immutable Run detail. Tests cover cross-Automation and cross-Revision isolation, tied timestamps, insertion during pagination, totals, invalid cursors, and filter resets. Production-browser QA at 1440px/390px verifies next/previous, empty filters, Automation switching, live/manual acceptance updates, detail navigation, and responsive table scrolling without console errors.
 
 - **Automation inputs seam — pass:** a serializable Core declaration contract owns type/default/required validation. Compiler diagnostics and input-variable projection use the same Source names; the Scheduler resolves parameters from the active immutable Revision before acceptance and persists defaults for manual and event-triggered Runs. Workbench Settings uses full-document commands, while the manual form pins a queried Revision and submits through typed Console procedures with explicit conflict reload and abort-safe lifecycle. Browser QA at 1440px/390px verifies declaration editing, publish versus activation separation, required/default/JSON validation, execution completion, and stale-form fencing; the JSON editor preserves temporary text and prevents native change events from entering value callbacks.
 
@@ -261,7 +266,7 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 ```text
 Typecheck: passing
 Build: passing
-Tests: 57 files, 276 tests passing
+Tests: 58 files, 278 tests passing
 CLI config validate: passing
 CLI doctor: passing
 SQLite schema migration: v11
@@ -283,7 +288,7 @@ pnpm dev
 - The current Scheduler executes the Core IR subset emitted by the compiler, including retry, timeout, cancellation, recovery, and structured concurrency.
 - Parallel, first-success Race, and bounded ForEach use durable Execution scopes with interruptible concurrent dispatch; Try/Finally control flow remains planned work.
 - Typed Console transports, browser sessions, Browser Cordis clients, frontend extension registries, atomic Entry generations, authenticated revision-fenced asset delivery, and Browser Entry reconciliation/rollback are operational. Generated bootstrap tokens and sessions rotate on restart; the CLI prints a fragment-only Workbench launch URL only with explicit `--print-launch-url` authorization.
-- The responsive Workbench shell, ten registered core Page routes, stable browser Route/Page reconciliation, a secret-free production bootstrap, and authenticated core Entry loading are operational through the default Runtime. Home, Automations, the keyset-paginated Runs index, bounded Run Flow/Timeline/Context detail with cancellation controls, and the desired/runtime-separated Connections index display live data and refresh through coalesced typed invalidations without replacing server truth in the browser. Automation authoring now supports registry-driven Capability/control insertion, plugin-owned Schema Literal renderers, unified Literal/Reference/Template/structured Call inputs, scope-aware typed Magic Variables, named Connection bindings, expression-backed Wait duration/until editing, same-sequence step movement and subtree deletion, bounded undo/redo, debounced full-document autosave, explicit conflict recovery, immutable Revision publish, explicit Revision activation and enable/disable controls, and source-linked diagnostics. Automation `input.*` has optional typed declarations with defaults and a Settings editor; the Runs tab has a Revision-bound manual parameter form. `vars.*` remains manually addressable without a declaration schema; conflict comparison and save-copy recovery are operational; force overwrite and automatic merging remain outside V1. Plugin-owned Control definitions now drive the live insert catalog and extension input fields.
+- The responsive Workbench shell, ten registered core Page routes, stable browser Route/Page reconciliation, a secret-free production bootstrap, and authenticated core Entry loading are operational through the default Runtime. Home, Automations, the keyset-paginated Runs index, bounded Run Flow/Timeline/Context detail with cancellation controls, and the desired/runtime-separated Connections index display live data and refresh through coalesced typed invalidations without replacing server truth in the browser. Automation authoring now supports registry-driven Capability/control insertion, plugin-owned Schema Literal renderers, unified Literal/Reference/Template/structured Call inputs, scope-aware typed Magic Variables, named Connection bindings, expression-backed Wait duration/until editing, same-sequence step movement and subtree deletion, bounded undo/redo, debounced full-document autosave, explicit conflict recovery, immutable Revision publish, explicit Revision activation and enable/disable controls, and source-linked diagnostics. Automation `input.*` has optional typed declarations with defaults and a Settings editor; the Runs tab has a Revision-bound manual parameter form and Automation-scoped history with status filters, keyset pagination, and live updates. `vars.*` remains manually addressable without a declaration schema; conflict comparison and save-copy recovery are operational; force overwrite and automatic merging remain outside V1. Plugin-owned Control definitions now drive the live insert catalog and extension input fields.
 - Manual Runs accept declared parameters from the active Revision (even with Trigger subscriptions disabled), and event Trigger subscriptions are supported. Declarations support five top-level value types; nested schema constraints, enums, and manual-request idempotency remain outside this module. Omitted declarations preserve legacy open input objects. State Trigger transition detection, filtering, debounce, and throttle remain planned work.
 - Connection desired state, generation-fenced create/update/delete/enable Actions, Adapter Schema configuration UI, generation-fenced Runtime recreation, and metadata-only Credential selection are operational. Credential metadata, creation/rotation/deletion Actions and UI are operational; automatic reconnect policy remains planned work. Credential writes require an available type plugin and a configured runtime master key. Non-object secret contracts require a plugin-provided editor.
 - Credential payloads use authenticated encryption with environment-provided keys; key-ring migration and external vault providers remain planned work.

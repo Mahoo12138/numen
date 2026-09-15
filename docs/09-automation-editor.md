@@ -247,3 +247,13 @@ Runs 页通过 `numen:manual-run-form@1` Query 读取 Active Revision 的契约�
 手动运行不要求启用 Trigger 订阅，但必须先发布并激活 Revision。草稿或尚未激活的新 Revision 不影响运行表单。表单卸载会中止客户端请求，过期响应不会更新页面；这不撤销服务端可能已接受的 Run。无法确认提交结果时不自动重试，提示先检查 Runs。手动提交目前没有持久化幂等请求 ID，重复提交表示创建另一个 Run。
 
 JSON 编辑器保留未提交文本并上报本地格式状态；无效 JSON 会阻止手动运行提交。参数值回调不透传成原生 DOM `change` 监听器，避免把 Event 对象当成参数。
+
+## Automation 运行历史
+
+Automation 的 Runs 页展示该 Automation 所有 Revision 的运行记录，并保留可展开的手动运行表单。可按 Queued、Running、Completed、Failed、Cancelling、Cancelled 筛选，点击记录打开已有 Run 详情。状态统计始终表示当前 Automation 的全部记录，不随状态筛选缩小；记录包含其冻结的 Revision ID。
+
+`numen:runs-index@1` 增加可选的 `automationId`、`status` 参数，省略时保持全局列表行为。不存在的 Automation 返回 404。Scheduler 在 SQL 中筛选并按 `(created_at DESC, id DESC)` 取最多 20 条页面记录（底层接口最多 50 条），再汇总该页 Execution/Attempt 数量。相同时间戳使用 ID 排序，避免不稳定翻页；游标绑定 Automation 和状态，跨筛选条件使用会返回 `RUN_CURSOR_SCOPE_MISMATCH`。
+
+Previous/Next 保存当前筛选下的游标路径。切换状态或 Automation 会从第一页开始，Latest runs 回到当前状态的第一页并刷新。Run invalidation 更新当前页及统计，手动接受 Run 后也会刷新；页面不把新记录插入正在浏览的旧页。列表是实时视图而非数据库快照：状态变化可能使记录进入或离开筛选结果，用户可回到第一页查看最新状态。列表卸载时查询和订阅随 Vue scope 清理。
+
+手机端编号列截断展示，状态保留在首屏，其余列可横向滚动查看。加载、查询失败、无运行记录和筛选为空分别展示明确状态。

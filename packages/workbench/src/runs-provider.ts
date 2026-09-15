@@ -1,3 +1,4 @@
+import { automationIdSchema } from './automation-schemas.js'
 import { provideManualRuns } from './manual-run-provider.js'
 import '@numen/automation'
 import '@numen/scheduler'
@@ -7,7 +8,7 @@ import {
   type ConsoleActionDefinition,
   type ConsoleQueryDefinition,
 } from '@numen/console'
-import type { ExecutionListCursor, RunListCursor } from '@numen/scheduler'
+import type { ExecutionListCursor, RunListCursor, RunListFilters } from '@numen/scheduler'
 import type { Context } from 'cordis'
 import z from 'schemastery'
 import {
@@ -41,8 +42,8 @@ function keysetCursorInput(label: string) {
       if (value === undefined) return
       try {
         const cursor = JSON.parse(Buffer.from(value, 'base64url').toString('utf8')) as Partial<RunListCursor>
-        if (!cursor.createdAt || !cursor.id || encodeCursor(cursor as RunListCursor) !== value) throw new Error()
-        return { createdAt: cursor.createdAt, id: cursor.id }
+        if (typeof cursor.createdAt !== 'string' || !cursor.createdAt || typeof cursor.id !== 'string' || !cursor.id || encodeCursor(cursor as RunListCursor) !== value) throw new Error()
+        return cursor as RunListCursor
       } catch {
         throw new z.ValidationError(`invalid ${label} cursor`, {})
       }
@@ -54,9 +55,9 @@ function keysetCursorInput(label: string) {
 const runCursorInput = keysetCursorInput('Runs')
 const executionCursorInput = keysetCursorInput('Execution diagnostics')
 
-interface WorkbenchRunsProviderInput {
+interface WorkbenchRunsProviderInput extends RunListFilters {
   limit: number
-  cursor: RunListCursor | undefined
+  cursor: (RunListCursor & RunListFilters) | undefined
 }
 
 interface WorkbenchRunDetailProviderInput {
@@ -107,6 +108,8 @@ export const workbenchRunsIndexQuery: ConsoleQueryDefinition<Record<string, unkn
   input: z.object({
     limit: z.number().step(1).min(1).max(50).required(),
     cursor: runCursorInput,
+    automationId: automationIdSchema.required(false),
+    status: runStatus.required(false),
   }),
   output: z.object({
     summary: z.object({
@@ -223,8 +226,13 @@ export function workbenchRunsProviderPlugin(ctx: Context): void {
   provideManualRuns(ctx)
   ctx.console.provideQuery(ctx, workbenchRunsIndexQueryRef, {
     query({ input }: { input: WorkbenchRunsProviderInput }): WorkbenchRunsIndex {
-      const page = ctx.scheduler.listRunSummariesPage(input.limit, input.cursor)
-      const counts = ctx.scheduler.getRunStatusCounts()
+      if (input.automationId && !ctx.automations.get(input.automationId)) throw new ConsoleProcedureError(404, 'AUTOMATION_NOT_FOUND', 'The Automation was not found.')
+      const filters: RunListFilters = { ...(input.automationId ? { automationId: input.automationId } : {}), ...(input.status ? { status: input.status } : {}) }
+      if (input.cursor && (input.cursor.automationId !== filters.automationId || input.cursor.status !== filters.status)) {
+        throw new ConsoleProcedureError(400, 'RUN_CURSOR_SCOPE_MISMATCH', 'The cursor belongs to another Automation or status filter.')
+      }
+      const page = ctx.scheduler.listRunSummariesPage(input.limit, input.cursor, filters)
+      const counts = ctx.scheduler.getRunStatusCounts(input.automationId)
       const automationNames = new Map(ctx.automations.list().map(automation => [automation.id, automation.name]))
       return {
         summary: {
@@ -247,7 +255,7 @@ export function workbenchRunsProviderPlugin(ctx: Context): void {
           executionCount: run.executionCount,
           attemptCount: run.attemptCount,
         })),
-        ...(page.nextCursor ? { nextCursor: encodeCursor(page.nextCursor) } : {}),
+        ...(page.nextCursor ? { nextCursor: encodeCursor({ ...page.nextCursor, ...filters }) } : {}),
       }
     },
   })

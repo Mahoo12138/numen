@@ -48,6 +48,11 @@ export interface RunListCursor {
   id: string
 }
 
+export interface RunListFilters {
+  automationId?: string
+  status?: Run['status']
+}
+
 export interface RunSummary extends Run {
   executionCount: number
   attemptCount: number
@@ -492,24 +497,32 @@ export class SchedulerService extends Service {
     `).all(limit) as RunRow[]).map(mapRun)
   }
 
-  listRunSummariesPage(limit = 20, cursor?: RunListCursor): RunSummaryPage {
+  listRunSummariesPage(limit = 20, cursor?: RunListCursor, filters: RunListFilters = {}): RunSummaryPage {
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50) {
       throw new TypeError('run summary page limit must be an integer between 1 and 50')
     }
     if (cursor && (!cursor.createdAt || !cursor.id)) throw new TypeError('run summary cursor is invalid')
+    if (filters.automationId !== undefined && (typeof filters.automationId !== 'string' || !filters.automationId)) throw new TypeError('automation filter is invalid')
+    if (filters.status !== undefined && !['QUEUED', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLING', 'CANCELLED'].includes(filters.status)) throw new TypeError('run status filter is invalid')
+    const conditions: string[] = []
+    const parameters: Array<string | number> = []
+    if (filters.automationId) { conditions.push('automation_id = ?'); parameters.push(filters.automationId) }
+    if (filters.status) { conditions.push('status = ?'); parameters.push(filters.status) }
+    if (cursor) { conditions.push('(created_at < ? OR (created_at = ? AND id < ?))'); parameters.push(cursor.createdAt, cursor.createdAt, cursor.id) }
+    // Select the bounded page before aggregating potentially large Execution and Attempt histories.
     const rows = this.ctx.database.db.prepare(`
-      SELECT runs.*, COUNT(DISTINCT executions.id) AS execution_count,
+      WITH page AS (
+        SELECT * FROM runs ${conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''}
+        ORDER BY created_at DESC, id DESC LIMIT ?
+      )
+      SELECT page.*, COUNT(DISTINCT executions.id) AS execution_count,
         COUNT(attempts.id) AS attempt_count
-      FROM runs
-      LEFT JOIN executions ON executions.run_id = runs.id
+      FROM page
+      LEFT JOIN executions ON executions.run_id = page.id
       LEFT JOIN attempts ON attempts.execution_id = executions.id
-      ${cursor ? 'WHERE runs.created_at < ? OR (runs.created_at = ? AND runs.id < ?)' : ''}
-      GROUP BY runs.id
-      ORDER BY runs.created_at DESC, runs.id DESC
-      LIMIT ?
-    `).all(...(cursor
-      ? [cursor.createdAt, cursor.createdAt, cursor.id, limit + 1]
-      : [limit + 1])) as RunSummaryRow[]
+      GROUP BY page.id
+      ORDER BY page.created_at DESC, page.id DESC
+    `).all(...parameters, limit + 1) as RunSummaryRow[]
     const hasMore = rows.length > limit
     const items = rows.slice(0, limit).map(row => ({
       ...mapRun(row),
@@ -523,7 +536,7 @@ export class SchedulerService extends Service {
     }
   }
 
-  getRunStatusCounts(): RunStatusCounts {
+  getRunStatusCounts(automationId?: string): RunStatusCounts {
     const counts: RunStatusCounts = {
       QUEUED: 0,
       RUNNING: 0,
@@ -533,8 +546,8 @@ export class SchedulerService extends Service {
       CANCELLED: 0,
     }
     const rows = this.ctx.database.db.prepare(`
-      SELECT status, COUNT(*) AS count FROM runs GROUP BY status
-    `).all() as Array<{ status: Run['status']; count: number }>
+      SELECT status, COUNT(*) AS count FROM runs ${automationId ? 'WHERE automation_id = ?' : ''} GROUP BY status
+    `).all(...(automationId ? [automationId] : [])) as Array<{ status: Run['status']; count: number }>
     for (const row of rows) counts[row.status] = row.count
     return counts
   }

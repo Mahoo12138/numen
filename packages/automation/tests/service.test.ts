@@ -152,8 +152,10 @@ describe('AutomationService', () => {
       broken.flow.steps[0].input.value = { type: 'ref', path: 'steps.deleted.value' }
       const draft = root.automations.saveDraft({ automationId: id, expectedVersion: 1, source: broken })
       expect(draft.source).toEqual(broken)
+      const beforePublish = root.automations.get(id)
+      expect(beforePublish).toMatchObject({ activeRevisionId: active?.activeRevisionId, enabled: active?.enabled, activationGeneration: active?.activationGeneration })
       expect(() => root.automations.publishDraft(id, draft.version)).toThrow(AutomationCompileError)
-      expect(root.automations.get(id)).toEqual(active)
+      expect(root.automations.get(id)).toEqual(beforePublish)
       expect(root.automations.getRevision(revision.id)).toEqual(revision)
       expect(root.automations.listSummaries()[0]?.revisionCount).toBe(1)
       const fixed = root.automations.saveDraft({ automationId: id, expectedVersion: draft.version, source })

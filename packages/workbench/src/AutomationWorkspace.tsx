@@ -1,5 +1,5 @@
 import { AutomationInputs } from './AutomationInputs.js'
-import { ManualRunForm } from './ManualRunForm.js'
+import { AutomationRuns } from './AutomationRuns.js'
 import type { SourceRef } from '@numen/core'
 import { computed, h, inject, provide, ref, watch, type ComputedRef, type InjectionKey } from 'vue'
 import { DraftConflictRecovery } from './DraftConflictRecovery.js'
@@ -173,7 +173,7 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
     } : {}),
     ...(props.consoleClient && authoring.document ? {
       inputSettings: h(AutomationInputs, { inputs: authoring.document.source.inputs, canEdit: authoring.canEdit, problems: authoring.problems, onChange: authoring.setAutomationInputs, ...(props.schemaUI ? { schemaUI: props.schemaUI } : {}) }),
-      manualRunForm: h(ManualRunForm, { key: authoring.document.automationId, automationId: authoring.document.automationId, consoleClient: props.consoleClient, ...(props.schemaUI ? { schemaUI: props.schemaUI } : {}), ...(props.navigation ? { navigation: props.navigation } : {}) }),
+      manualRunForm: h(AutomationRuns, { key: authoring.document.automationId, automationId: authoring.document.automationId, consoleClient: props.consoleClient, ...(props.schemaUI ? { schemaUI: props.schemaUI } : {}), ...(props.navigation ? { navigation: props.navigation } : {}) }),
     } : {}),
     ...(props.consoleClient && authoring.document && authoring.conflict ? {
       conflictRecovery: h(DraftConflictRecovery, {

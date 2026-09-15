@@ -66,6 +66,8 @@ export const workbenchRunsIndexQueryRef = {
 export type WorkbenchRunsCursor = string
 
 export interface WorkbenchRunsQueryInput {
+  automationId?: string
+  status?: WorkbenchRunStatus
   limit: number
   cursor?: WorkbenchRunsCursor
 }
