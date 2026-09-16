@@ -49,12 +49,13 @@
 | [13-engineering-operations.md](13-engineering-operations.md) | 数据迁移、备份、升级、测试、部署、SDK 工程约定 |
 | [14-v1-scope-open-questions.md](14-v1-scope-open-questions.md) | V1 边界、明确不做、后续开放问题 |
 | [15-reference-repositories.md](15-reference-repositories.md) | 开发参考仓库、源码阅读路线、Cordis/Koishi/Shigma/Satori/VS Code 对照图 |
+| [16-outbound-http-proxy.md](16-outbound-http-proxy.md) | 宿主级出站 HTTP、代理、取消、错误与 Integration 约束 |
 
 ## 推荐阅读顺序
 
 若准备直接开始编码：
 
-`00 → 15 → 01 → 03 → 04 → 06 → 07 → 08 → 09 → 13 → 14`
+`00 → 15 → 01 → 03 → 04 → 16 → 06 → 07 → 08 → 09 → 13 → 14`
 
 若准备做前端：
 
@@ -62,4 +63,4 @@
 
 若准备写第三方插件：
 
-`15 → 01 → 02 → 04 → 08 → 13`
+`15 → 01 → 02 → 04 → 16 → 08 → 13`
