@@ -51,6 +51,31 @@ numen restore
 
 或文档化冷备方案。
 
+### 2.1 Docker 冷备
+
+当前 MVP 使用 SQLite，因此备份以停止写入后的整个数据目录为一致性边界：
+
+```bash
+mkdir -p backups
+docker compose stop numen
+docker compose cp numen:/var/lib/numen ./backups/numen-data
+docker compose start numen
+```
+
+备份完成后必须确认服务恢复健康：
+
+```bash
+curl --fail http://127.0.0.1:5140/api/ready
+```
+
+`.env` 中的 `NUMEN_MASTER_KEY` 必须通过独立的 secret backup 保存，不能和普通
+support bundle 一起分发。只恢复数据库而没有恢复原 Master Key，会使已有 Credential
+无法解密。
+
+恢复必须在 Numen 停止时进行，并以空的新数据卷或已明确归档的旧数据卷为目标；不要
+把两个时间点的 `numen.db` 与 `resources/` 混合。恢复后先执行 readiness 和一次手动
+Run，再重新开放自动 Trigger。
+
 ## 3. Numen Core Upgrade / Rollback
 
 Package Installer 管插件；App Core 升级是另一条路径。
@@ -63,6 +88,13 @@ Package Installer 管插件；App Core 升级是另一条路径。
 - DB backup checkpoint
 
 程序文件 rollback 与 DB migration rollback 是不同问题；如果 DB 已进行不可逆 migration，不能假装降二进制即可回退。
+
+Docker 部署的最小升级流程：
+
+1. 记录当前 Git revision / image digest，并完成冷备。
+2. 拉取目标 revision，执行 `docker compose build --pull`。
+3. 执行 `docker compose up -d`，等待 `/api/ready` 返回 200。
+4. 检查最近一次定时 Run；失败时保留数据卷和日志，不自动回滚数据库。
 
 ## 4. 插件 SDK
 
@@ -214,6 +246,52 @@ Master Key 推荐来自：
 - future Vault provider
 
 Docker 只是一种 Host 包装，不改变应用内部 Runtime 模型。
+
+### 10.1 Compose first-run
+
+仓库根目录的 `Dockerfile` 使用 Node 24 LTS 构建 Runtime 与 Workbench，`compose.yml`
+运行单个 Numen 进程。容器内固定路径为：
+
+```text
+/etc/numen/numen.config.yml   # image-owned deployment config
+/var/lib/numen/numen.db       # named volume
+/var/lib/numen/resources/     # named volume
+```
+
+首次部署：
+
+```bash
+docker build -t numen:local .
+cp .env.example .env
+docker run --rm numen:local key generate
+# 将输出写入 .env 的 NUMEN_MASTER_KEY
+docker compose up --build -d
+docker compose logs numen
+```
+
+启动日志中的 Workbench URL 含有 fragment-only bootstrap token，应按 secret 处理，
+不要粘贴到工单或共享日志。Compose 默认只绑定 `127.0.0.1`；远程访问应通过具备 TLS
+与访问控制的反向代理或 SSH tunnel，不应直接把 5140 暴露到公网。
+
+首启后可以用以下命令验证：
+
+```bash
+curl --fail http://127.0.0.1:5140/api/health
+curl --fail http://127.0.0.1:5140/api/ready
+docker compose exec numen node packages/cli/dist/bin.js doctor \
+  --config /etc/numen/numen.config.yml
+```
+
+`NUMEN_HTTP_PROXY` 是所有 Integration 出站请求的统一代理入口；支持 HTTP(S) URL，
+安装了 `httpSocks` 时也支持 SOCKS URL。容器访问宿主机代理时可以使用
+`host.docker.internal`；Compose 已把该名称映射到宿主机 gateway。
+
+### 10.2 生产约束
+
+- 同一个 SQLite 数据卷只运行一个 Numen 实例。
+- Master Key 必须是 Base64 编码的 32 字节随机值，生成后保持稳定。
+- `/api/health` 用于进程存活；`/api/ready` 用于接流量与升级验证。
+- 修改容器内配置应构建新 image，或显式挂载一份受版本控制的完整配置；不要在运行中编辑 image 文件。
 
 ## 11. Filesystem Safety
 

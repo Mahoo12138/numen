@@ -1,6 +1,6 @@
 # Numen Development Status
 
-> Last updated: 2026-09-16
+> Last updated: 2026-09-17
 >
 > Architecture baseline: V1 Draft in [`docs/`](docs/README.md)
 
@@ -220,10 +220,12 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Built-in bounded `http:request` Action with text/JSON bodies, projected responses, secret-header redaction, scheme fencing, and full-stream timeout
 - [x] Built-in network-free `demo:echo` Capability and end-to-end local Automation demo
 - [x] Built-in `schedule:cron` Trigger with five-field cron, IANA timezone evaluation, deterministic deduplication, and restart resubscription
+- [x] First-run Docker/Compose deployment with generated Master Key, loopback-only Workbench, persistent SQLite/Resources volume, readiness health check, and shared proxy environment
+- [x] Documented cold backup, restore constraints, and forward-only container upgrade runbook
 
 ## Next
 
-1. Complete the first-run and Docker deployment loop
+1. Complete the fresh-install Cron → Echo MVP dogfood E2E, including Run inspection and container recreation
 
 ## Design Review
 
@@ -240,6 +242,8 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - **Echo Demo seam — pass:** the built-in demo defines one local typed Capability with no Credential, Connection, proxy, or network dependency. Its integration test executes publish → manual Run → Scheduler and verifies the persisted output. This proves the plugin/Capability user path, but deliberately does not count as a real external Integration.
 
 - **Schedule Trigger seam — pass:** the built-in `schedule:cron` Trigger owns only its next ephemeral timer; active Revision/generation ownership, durable acceptance, deduplication, and Run creation remain in TriggerService/Scheduler. Five-field expressions support lists, ranges, and steps, evaluate against an IANA timezone, and emit a deterministic eventId from the scheduled instant. Restart recreates the subscription from durable enabled/active Automation state and schedules the next future occurrence; it does not synthesize missed runs.
+
+- **First-run deployment seam — pass:** the production image builds the Node Runtime, native SQLite binding, and Workbench assets together, runs as a non-root user, requires an explicit Credential Master Key, exposes readiness as its health check, and keeps all mutable state in one named volume. Compose publishes only to host loopback and passes the existing global proxy environment. A real container smoke test reached migration v13 with all three built-in Capabilities available, then removed and recreated the container against the same volume while preserving the database inode and returning to healthy readiness.
 
 - **Automation inputs seam — pass:** a serializable Core declaration contract owns type/default/required validation. Compiler diagnostics and input-variable projection use the same Source names; the Scheduler resolves parameters from the active immutable Revision before acceptance and persists defaults for manual and event-triggered Runs. Workbench Settings uses full-document commands, while the manual form pins a queried Revision and submits through typed Console procedures with explicit conflict reload and abort-safe lifecycle. Browser QA at 1440px/390px verifies declaration editing, publish versus activation separation, required/default/JSON validation, execution completion, and stale-form fencing; the JSON editor preserves temporary text and prevents native change events from entering value callbacks.
 
@@ -285,9 +289,10 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 ```text
 Typecheck: passing
 Build: passing
-Tests: 63 files, 288 tests passing
+Tests: 63 files, 290 tests passing
 CLI config validate: passing
 CLI doctor: passing
+Docker image build/start/health/recreate: passing
 SQLite schema migration: v13
 ```
 
