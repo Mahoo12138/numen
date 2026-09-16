@@ -25,6 +25,11 @@ it('reports the default Console service as a safe-mode builtin', async () => {
 
     expect(result).toBe(0)
     expect(JSON.parse(output[0]!)).toMatchObject({
+      credentialMasterKey: {
+        environment: 'NUMEN_MASTER_KEY',
+        configured: false,
+        valid: true,
+      },
       plugins: [
         { key: 'console', package: 'cordis:console', enabled: true, builtin: true },
         { key: 'consoleEntries', package: 'cordis:consoleEntries', enabled: true, builtin: true },
@@ -36,6 +41,51 @@ it('reports the default Console service as a safe-mode builtin', async () => {
       ],
     })
   } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
+it('generates a 256-bit credential master key', async () => {
+  const output: string[] = []
+  const result = await runCli(['key', 'generate'], {
+    out: message => output.push(message),
+    error: message => output.push(message),
+  })
+
+  expect(result).toBe(0)
+  expect(output).toHaveLength(1)
+  expect(Buffer.from(output[0]!, 'base64')).toHaveLength(32)
+})
+
+it('reports an invalid configured credential master key', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'numen-cli-key-'))
+  const environment = 'NUMEN_TEST_INVALID_MASTER_KEY'
+  process.env[environment] = Buffer.alloc(16).toString('base64')
+  try {
+    const configPath = join(directory, 'numen.config.yml')
+    await writeConfig(configPath, {
+      version: 1,
+      dataDir: 'data',
+      plugins: {
+        credentials: { masterKeyEnv: environment },
+      },
+    })
+    const output: string[] = []
+    const result = await runCli(['doctor', '--config', configPath], {
+      out: message => output.push(message),
+      error: message => output.push(message),
+    })
+
+    expect(result).toBe(1)
+    expect(JSON.parse(output[0]!)).toMatchObject({
+      credentialMasterKey: {
+        environment,
+        configured: true,
+        valid: false,
+      },
+    })
+  } finally {
+    delete process.env[environment]
     await rm(directory, { recursive: true, force: true })
   }
 })

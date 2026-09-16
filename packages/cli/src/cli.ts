@@ -1,5 +1,6 @@
 import { createRuntimeEntries, loadConfig } from '@numen/config'
 import { runtimeBuiltinNames, startRuntime } from '@numen/runtime'
+import { randomBytes } from 'node:crypto'
 import { access } from 'node:fs/promises'
 import { constants } from 'node:fs'
 import { parseArgs } from 'node:util'
@@ -8,6 +9,7 @@ const help = `Numen personal automation runtime
 
 Usage:
   numen start [--config <file>] [--safe] [--print-launch-url]
+  numen key generate
   numen config validate [--config <file>]
   numen doctor [--config <file>]
   numen --help
@@ -54,6 +56,11 @@ export async function runCli(argv = process.argv.slice(2), io = defaultIo): Prom
   }
 
   const command = positionals[0]
+  if (command === 'key' && positionals[1] === 'generate') {
+    io.out(randomBytes(32).toString('base64'))
+    return 0
+  }
+
   if (command === 'config' && positionals[1] === 'validate') {
     const loaded = await loadConfig(values.config)
     createRuntimeEntries(loaded.config, runtimeBuiltinNames)
@@ -74,9 +81,22 @@ export async function runCli(argv = process.argv.slice(2), io = defaultIo): Prom
     } catch {
       writable = false
     }
+    const credentialEntry = entries.find(entry => entry.name === 'cordis:credentials')
+    const configuredEnvironment = credentialEntry?.config.masterKeyEnv
+    const masterKeyEnvironment = typeof configuredEnvironment === 'string'
+      ? configuredEnvironment
+      : 'NUMEN_MASTER_KEY'
+    const encodedMasterKey = process.env[masterKeyEnvironment]
+    const masterKeyConfigured = !!encodedMasterKey
+    const masterKeyValid = !encodedMasterKey || Buffer.from(encodedMasterKey, 'base64').length === 32
     io.out(JSON.stringify({
       config: loaded.filename,
       configDirectoryWritable: writable,
+      credentialMasterKey: {
+        environment: masterKeyEnvironment,
+        configured: masterKeyConfigured,
+        valid: masterKeyValid,
+      },
       node: process.version,
       safeMode: values.safe,
       plugins: entries.map(entry => ({
@@ -86,7 +106,7 @@ export async function runCli(argv = process.argv.slice(2), io = defaultIo): Prom
         builtin: entry.builtin,
       })),
     }, null, 2))
-    return writable ? 0 : 1
+    return writable && masterKeyValid ? 0 : 1
   }
 
   if (command === 'start') {
