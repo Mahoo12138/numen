@@ -281,6 +281,9 @@ export interface WorkbenchConnectionAdapter {
   id: string
   version: number
   title: string
+  typeId: string
+  typeVersion: number
+  typeTitle: string
   providerAvailable: boolean
   configFields: WorkbenchSchemaField[]
   configSchemaSupported: boolean
@@ -472,6 +475,8 @@ export interface WorkbenchAutomationConnectionSlot {
 export interface WorkbenchAutomationConnectionOption {
   id: string
   name: string
+  typeId: string
+  typeVersion: number
   adapterId: string
   adapterVersion: number
   enabled: boolean
@@ -685,6 +690,7 @@ export interface WorkbenchManualRunForm {
 }
 export interface WorkbenchStartManualRunInput {
   automationId: string
+  requestId: string
   expectedRevisionId: string
   input: Record<string, NumenValue>
 }

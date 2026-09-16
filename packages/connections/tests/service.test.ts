@@ -8,7 +8,9 @@ import { randomBytes } from 'node:crypto'
 import z from 'schemastery'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  ConnectionBindingError,
   ConnectionConflictError,
+  ConnectionRuntimeUnavailableError,
   ConnectionService,
   type ConnectionAdapterDefinition,
 } from '../src/index.js'
@@ -20,10 +22,13 @@ afterEach(async () => {
   delete process.env[masterKeyEnv]
 })
 
+const connectionType = { id: 'test:http-client', version: 1, title: 'HTTP Client' }
+
 const adapter: ConnectionAdapterDefinition = {
   id: 'test:http',
   version: 1,
   title: 'HTTP',
+  type: connectionType,
   config: z.object({ baseUrl: z.string().required() }),
 }
 
@@ -41,9 +46,10 @@ async function createContext(path: string, defineAdapter = true): Promise<Contex
   await root.plugin(DatabaseService, { path })
   await root.plugin(CredentialService, { keyId: 'connection-test', masterKeyEnv })
   await root.plugin(ConnectionService)
+  root.connections.defineType(root, connectionType)
   if (defineAdapter) {
     root.connections.defineAdapter(root, adapter)
-    root.connections.provideAdapter(root, adapter, { async open() {} })
+    root.connections.provideAdapter(root, adapter, { async open() { return { value: {} } } })
   }
   return root
 }
@@ -97,15 +103,22 @@ describe('ConnectionService', () => {
     expect(restarted.connections.health()).toMatchObject({ total: 1, enabled: 1, unavailable: 1 })
     restarted.connections.defineAdapter(restarted, adapter)
     expect(restarted.connections.get(created.id)?.adapterAvailable).toBe(false)
-    restarted.connections.provideAdapter(restarted, adapter, { async open() {} })
+    restarted.connections.provideAdapter(restarted, adapter, { async open() { return { value: {} } } })
     expect(restarted.connections.get(created.id)?.adapterAvailable).toBe(true)
     await restarted.fiber.dispose()
   })
 
   it('tracks adapter definitions through Cordis effects', async () => {
     const root = await createContext(':memory:', false)
+    root.database.db.prepare(`
+      INSERT INTO connections (
+        id, name, type_id, type_version, adapter_id, adapter_version,
+        config_json, enabled, generation, created_at, updated_at
+      ) VALUES ('conn_legacy', 'Legacy', '', 1, ?, ?, ?, 0, 1, 'now', 'now')
+    `).run(adapter.id, adapter.version, JSON.stringify({ baseUrl: 'https://legacy.example.test' }))
     const dispose = root.connections.defineAdapter(root, adapter)
     expect(root.connections.listAdapters()).toHaveLength(1)
+    expect(root.connections.get('conn_legacy')?.type).toEqual({ id: connectionType.id, version: connectionType.version })
     expect(() => root.connections.defineAdapter(root, adapter)).toThrow('already defined')
     dispose()
     expect(root.connections.listAdapters()).toHaveLength(0)
@@ -118,7 +131,7 @@ describe('ConnectionService', () => {
     const removableAdapter = { ...adapter, id: 'test:removable' }
     root.connections.defineAdapter(root, removableAdapter)
     root.connections.provideAdapter(root, removableAdapter, {
-      async open() { return { close: () => { closes += 1 } } },
+      async open() { return { value: {}, close: () => { closes += 1 } } },
     })
     const created = root.connections.create({
       name: 'Temporary API',
@@ -150,6 +163,7 @@ describe('ConnectionService', () => {
       async open({ connection }) {
         opens.push(connection.generation)
         return {
+          value: { generation: connection.generation },
           close() {
             closes += 1
           },
@@ -162,8 +176,14 @@ describe('ConnectionService', () => {
       config: { baseUrl: 'https://example.test' },
       enabled: true,
     })
+    expect(() => root.connections.resolveRuntimes({ account: created.id }, [{ name: 'account', required: true, accepts: [connectionType.id] }]))
+      .toThrow(ConnectionRuntimeUnavailableError)
     await root.connections.reconcile()
     expect(root.connections.getRuntimeState(created.id)).toMatchObject({ status: 'READY', generation: 1 })
+    expect(root.connections.resolveRuntimes({ account: created.id }, [{ name: 'account', required: true, accepts: [connectionType.id] }]))
+      .toEqual({ account: { generation: 1 } })
+    expect(() => root.connections.resolveRuntimes({ account: created.id }, [{ name: 'account', required: true, accepts: ['other:type'] }]))
+      .toThrow(ConnectionBindingError)
     expect(runtimeStatuses).toEqual(['STARTING', 'READY'])
 
     const updated = root.connections.update({
@@ -215,7 +235,7 @@ describe('ConnectionService', () => {
   it('fences a late runtime opened for an obsolete generation', async () => {
     const root = await createContext(':memory:', false)
     root.connections.defineAdapter(root, adapter)
-    let releaseFirst: ((runtime: { close(): void }) => void) | undefined
+    let releaseFirst: ((runtime: { value: object; close(): void }) => void) | undefined
     let markStarted: (() => void) | undefined
     const started = new Promise<void>(resolve => {
       markStarted = resolve
@@ -229,7 +249,7 @@ describe('ConnectionService', () => {
             releaseFirst = resolve
           })
         }
-        return {}
+        return { value: {} }
       },
     })
     const created = root.connections.create({
@@ -248,7 +268,7 @@ describe('ConnectionService', () => {
     await root.connections.reconcile()
     expect(root.connections.getRuntimeState(created.id)).toMatchObject({ status: 'READY', generation: 2 })
 
-    releaseFirst?.({ close: () => { staleCloses += 1 } })
+    releaseFirst?.({ value: {}, close: () => { staleCloses += 1 } })
     await firstReconcile
     expect(staleCloses).toBe(1)
     expect(root.connections.getRuntimeState(created.id)).toMatchObject({ status: 'READY', generation: 2 })
@@ -274,7 +294,7 @@ describe('ConnectionService', () => {
           version: credential.secretVersion,
           token: credential.value.token as string,
         })
-        return { close: () => { closes += 1 } }
+        return { value: { token: credential.value.token }, close: () => { closes += 1 } }
       },
     })
     const credential = root.credentials.create('API token', credentialType, { token: 'first' })

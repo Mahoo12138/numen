@@ -52,6 +52,8 @@ Capability Contract 描述：
 ```text
 Credential
    ↓
+Connection Type
+   ↓
 Adapter
    ↓
 Connection
@@ -62,11 +64,38 @@ Automation
 ```
 
 - Credential：秘密身份材料
-- Adapter：如何连接
+- Connection Type：Capability 可依赖的稳定 Runtime 协议
+- Adapter：如何建立该协议的具体 Runtime
 - Connection：具体持久连接实例
 - Capability：连接提供的能力
 
-### 2.1 Connection 持久与运行时分离
+Capability 的 connection slot 通过 Connection Type ID（可选固定版本）声明兼容性，不依赖具体 Adapter。Adapter Definition 必须声明其实现的 Connection Type。
+
+### 2.1 Cross-plugin Runtime ABI
+
+Adapter Provider 打开 Connection 时返回由 ConnectionService 独占生命周期的包装：
+
+```ts
+interface ConnectionRuntime<T> {
+  value: T
+  close?(): void | Promise<void>
+}
+```
+
+`close` 不暴露给 Capability。Scheduler 和 TriggerService 将持久的 named Connection bindings 交给 ConnectionService；后者统一验证 Connection 存在、Type 兼容且 Runtime 为 `READY`，然后只把 `value` 注入 Provider：
+
+```ts
+interface CapabilityInvocation<Input, Connections> {
+  input: Input
+  connections: Connections
+  signal: AbortSignal
+  idempotencyKey?: string
+}
+```
+
+因此 Provider 使用 `invocation.connections.account`，不接收 Connection ID，也不回查 ConnectionService、CredentialService 或 Adapter Provider。Runtime 不可用时 Scheduler 在创建 Attempt 之前进入 `CONNECTION_UNAVAILABLE` 阻塞态，READY 后再恢复。
+
+### 2.2 Connection 持久与运行时分离
 
 Durable：
 
@@ -85,7 +114,7 @@ socket/session/timer/heartbeat
 
 每个 Runtime 绑定 Cordis child Fiber/Effect lifecycle。
 
-### 2.2 Connection State
+### 2.3 Connection State
 
 建议：
 
@@ -101,6 +130,8 @@ STOPPING
 并区分：desired / availability / health / readiness。
 
 Config/Credential 变化使用 stop-and-recreate + generation fencing。
+
+网络型 Adapter 和 Provider 统一依赖宿主的 `ctx.http`，不得各自建立代理或 HTTP client 配置。出站网络 interface、代理优先级、取消与错误约束见 [16-outbound-http-proxy.md](16-outbound-http-proxy.md)。
 
 ## 3. Credential
 

@@ -39,15 +39,22 @@ describe('manual Run contract and acceptance', () => {
       root.automations.activateRevision(automation.id, first.id)
       const form = await root.console.query(workbenchManualRunFormQuery, { automationId: automation.id }, request())
       expect(form).toMatchObject({ revisionId: first.id, inputs: source.inputs })
-      const submit = (input: unknown, revisionId = first.id) => root.console.action(workbenchStartManualRunAction, { automationId: automation.id, expectedRevisionId: revisionId, input: input as never }, request())
+      let requestNumber = 0
+      const submit = (input: unknown, revisionId = first.id, requestId = `manual-provider-${String(++requestNumber).padStart(4, '0')}`) => root.console.action(workbenchStartManualRunAction, {
+        automationId: automation.id, requestId, expectedRevisionId: revisionId, input: input as never,
+      }, request())
       for (const invalid of [{}, { message: 1 }, { message: 'ok', unknown: 'hidden' }, []]) await expect(submit(invalid)).rejects.toMatchObject({ status: 422, code: 'AUTOMATION_INPUT_INVALID' })
       expect(root.scheduler.listRuns()).toHaveLength(0)
       const changed = structuredClone(source)
       changed.inputs!.count!.default = 9
       root.automations.saveDraft({ automationId: automation.id, expectedVersion: 1, source: changed })
       const second = root.automations.publishDraft(automation.id, 2)
-      const result = await submit({ message: 'hello' })
+      const acceptedRequestId = 'manual-provider-accepted'
+      const result = await submit({ message: 'hello' }, first.id, acceptedRequestId)
       expect(root.scheduler.getRun(result.runId)).toMatchObject({ revisionId: first.id, input: { message: 'hello', count: 2 } })
+      expect(await submit({ message: 'hello' }, first.id, acceptedRequestId)).toEqual(result)
+      await expect(submit({ message: 'different' }, first.id, acceptedRequestId)).rejects.toMatchObject({ status: 409, code: 'MANUAL_RUN_REQUEST_CONFLICT' })
+      expect(root.scheduler.listRuns()).toHaveLength(1)
       await root.scheduler.dispatchUntilIdle()
       expect(root.scheduler.getRun(result.runId)?.status).toBe('COMPLETED')
       expect(seen).toEqual([{ message: 'hello' }])

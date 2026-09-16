@@ -1,4 +1,5 @@
 import '@numen/automation'
+import '@numen/connections'
 import {
   capabilityKey,
   isNumenValue,
@@ -42,7 +43,7 @@ function subscriptionKey(automationId: string, triggerId: string): string {
 }
 
 export class TriggerService extends Service {
-  static inject = ['automations', 'capabilities', 'scheduler']
+  static inject = ['automations', 'capabilities', 'connections', 'scheduler']
 
   private ready = false
   private desiredSubscriptions = 0
@@ -56,6 +57,14 @@ export class TriggerService extends Service {
   async *[Service.init]() {
     this.ctx.on('numen/automation-change', () => this.reconcile())
     this.ctx.on('numen/capability-change', () => this.reconcile())
+    this.ctx.on('numen/connection-runtime-change', connectionId => {
+      for (const [key, subscription] of this.active) {
+        if (!Object.values(subscription.binding.connectionIds).includes(connectionId)) continue
+        this.disposeSubscription(subscription)
+        this.active.delete(key)
+      }
+      this.reconcile()
+    })
     this.ready = true
     this.reconcile()
     yield () => {
@@ -150,8 +159,13 @@ export class TriggerService extends Service {
 
   private activateSubscription(subscription: DesiredSubscription & { provider: TriggerProvider }): ActiveSubscription {
     const controller = new AbortController()
+    const connections = this.ctx.connections.resolveRuntimes(
+      subscription.binding.connectionIds,
+      subscription.definition.connections ?? [],
+    )
     const dispose = subscription.provider.activate({
       binding: subscription.binding,
+      connections,
       signal: controller.signal,
       emit: async (emission: TriggerEmission) => {
         if (controller.signal.aborted) return { status: 'stale' }

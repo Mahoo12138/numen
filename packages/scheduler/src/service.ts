@@ -1,4 +1,5 @@
 import '@numen/automation'
+import { ConnectionBindingError, ConnectionRuntimeUnavailableError, type ConnectionService } from '@numen/connections'
 import {
   capabilityKey,
   resolveAutomationInputs,
@@ -20,11 +21,15 @@ import {
 import '@numen/database'
 import '@numen/resources'
 import { Service, type Context } from 'cordis'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { evaluateExpression, type EvaluationBindings } from './evaluator.js'
 
 export class ManualRunRevisionConflictError extends Error {
   constructor() { super('The active Revision changed. Reload the run form before submitting.'); this.name = 'ManualRunRevisionConflictError' }
+}
+
+export class ManualRunRequestConflictError extends Error {
+  constructor() { super('The manual Run request ID was already used with different content.'); this.name = 'ManualRunRequestConflictError' }
 }
 
 export interface SchedulerConfig {
@@ -186,6 +191,13 @@ function parseJson<T>(source: string): T {
   return JSON.parse(source) as T
 }
 
+function canonicalize(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value)
+  if (Array.isArray(value)) return `[${value.map(canonicalize).join(',')}]`
+  const object = value as Record<string, unknown>
+  return `{${Object.keys(object).sort().map(key => `${JSON.stringify(key)}:${canonicalize(object[key])}`).join(',')}}`
+}
+
 function mapRun(row: RunRow): Run {
   return {
     id: row.id,
@@ -301,6 +313,7 @@ export class SchedulerService extends Service {
     let timer: NodeJS.Timeout | undefined
     if (this.autoDispatch) {
       this.ctx.on('numen/capability-change', () => this.kick())
+      if (this.connectionService()) this.ctx.on('numen/connection-runtime-change', () => this.kick())
       timer = setInterval(() => this.kick(), this.sweepIntervalMs)
       timer.unref()
       queueMicrotask(() => this.kick())
@@ -316,25 +329,50 @@ export class SchedulerService extends Service {
     input: Record<string, NumenValue> = {},
     trigger: NumenValue = { type: 'manual' },
     expectedRevisionId?: string,
+    requestId?: string,
   ): Run {
-    const automation = this.ctx.automations.get(automationId)
-    if (!automation) throw new Error(`automation not found: ${automationId}`)
-    if (!automation.activeRevisionId) throw new Error(`automation has no active revision: ${automationId}`)
-    if (expectedRevisionId !== undefined && automation.activeRevisionId !== expectedRevisionId) throw new ManualRunRevisionConflictError()
-    const revision = this.ctx.automations.getRevision(automation.activeRevisionId)!
-    const resolvedInput = resolveAutomationInputs(revision.source, input)
     if (!isNumenValue(input) || !isNumenValue(trigger)) throw new TypeError('run input and trigger must be Numen values')
-    const runId = id('run')
-    const now = new Date().toISOString()
-    this.ctx.database.transaction(() => {
+    if (requestId !== undefined && !/^[a-zA-Z0-9_-]{16,80}$/.test(requestId)) throw new TypeError('invalid manual Run request id')
+    const contentHash = requestId === undefined ? undefined : createHash('sha256').update(canonicalize({
+      automationId,
+      ...(expectedRevisionId === undefined ? {} : { expectedRevisionId }),
+      input,
+      trigger,
+    })).digest('hex')
+    let created = false
+    const runId = this.ctx.database.transaction(() => {
+      if (requestId !== undefined) {
+        const previous = this.ctx.database.db.prepare(
+          'SELECT content_hash, run_id FROM manual_run_requests WHERE request_id = ?',
+        ).get(requestId) as { content_hash: string; run_id: string } | undefined
+        if (previous) {
+          if (previous.content_hash !== contentHash) throw new ManualRunRequestConflictError()
+          return previous.run_id
+        }
+      }
+      const automation = this.ctx.automations.get(automationId)
+      if (!automation) throw new Error(`automation not found: ${automationId}`)
+      if (!automation.activeRevisionId) throw new Error(`automation has no active revision: ${automationId}`)
+      if (expectedRevisionId !== undefined && automation.activeRevisionId !== expectedRevisionId) throw new ManualRunRevisionConflictError()
+      const revision = this.ctx.automations.getRevision(automation.activeRevisionId)!
+      const resolvedInput = resolveAutomationInputs(revision.source, input)
+      const acceptedRunId = id('run')
+      const now = new Date().toISOString()
       this.ctx.database.db.prepare(`
         INSERT INTO runs (
           id, automation_id, revision_id, status, trigger_json, input_json, created_at
         ) VALUES (?, ?, ?, 'QUEUED', ?, ?, ?)
-      `).run(runId, automationId, automation.activeRevisionId, JSON.stringify(trigger), JSON.stringify(resolvedInput), now)
-      this.appendEvent(runId, 'RunAccepted', { source: 'manual' }, now)
+      `).run(acceptedRunId, automationId, automation.activeRevisionId, JSON.stringify(trigger), JSON.stringify(resolvedInput), now)
+      if (requestId !== undefined) {
+        this.ctx.database.db.prepare(`
+          INSERT INTO manual_run_requests (request_id, content_hash, run_id) VALUES (?, ?, ?)
+        `).run(requestId, contentHash, acceptedRunId)
+      }
+      this.appendEvent(acceptedRunId, 'RunAccepted', { source: 'manual' }, now)
+      created = true
+      return acceptedRunId
     })
-    if (this.autoDispatch) this.kick()
+    if (created && this.autoDispatch) this.kick()
     return this.getRun(runId)!
   }
 
@@ -963,6 +1001,22 @@ export class SchedulerService extends Service {
     const evaluatedInput = evaluateExpression(instruction.input, bindings)
     const resolvedInput = status.definition.input(evaluatedInput)
     if (!isNumenValue(resolvedInput)) throw new Error('capability input normalized to a non-Numen value')
+    const connectionIds = instruction.connections ?? (instruction.connection ? { default: instruction.connection } : {})
+    let connections: Record<string, unknown>
+    try {
+      const connectionService = this.connectionService()
+      if (!connectionService && Object.keys(connectionIds).length) throw new ConnectionBindingError('ConnectionService is unavailable')
+      connections = connectionService?.resolveRuntimes(connectionIds, contract.connections ?? []) ?? {}
+    } catch (error) {
+      if (error instanceof ConnectionRuntimeUnavailableError || error instanceof ConnectionBindingError) {
+        this.blockExecution(execution, 'CONNECTION_UNAVAILABLE', {
+          capability: capabilityKey(instruction.capability),
+          error: error.message,
+        })
+        return
+      }
+      throw error
+    }
 
     const attemptId = id('attempt')
     let attemptNumber = 0
@@ -995,7 +1049,7 @@ export class SchedulerService extends Service {
     try {
       const output = await this.invokeWithGuards(() => provider.invoke({
           input: resolvedInput,
-          connectionIds: instruction.connections ?? (instruction.connection ? { default: instruction.connection } : {}),
+          connections,
           signal: controller.signal,
           idempotencyKey: attemptId,
         }), controller, timeoutMs)
@@ -1283,20 +1337,34 @@ export class SchedulerService extends Service {
   private reconcileBlockedExecutions(): number {
     const rows = this.ctx.database.db.prepare(`
       SELECT * FROM executions
-      WHERE status = 'BLOCKED' AND blocked_reason = 'PROVIDER_UNAVAILABLE'
+      WHERE status = 'BLOCKED' AND blocked_reason IN ('PROVIDER_UNAVAILABLE', 'CONNECTION_UNAVAILABLE')
       ORDER BY updated_at, id
     `).all() as ExecutionRow[]
     let count = 0
     for (const row of rows) {
       const execution = mapExecution(row)
-      const { instruction } = this.getRevisionForExecution(execution)
+      const { revision, instruction } = this.getRevisionForExecution(execution)
       if (instruction.op !== 'invoke' || !this.ctx.capabilities.resolveProvider(instruction.capability)) continue
+      if (row.blocked_reason === 'CONNECTION_UNAVAILABLE') {
+        const contract = revision.contractSnapshot.capabilities.find(item => capabilityKey(item) === capabilityKey(instruction.capability))
+        if (!contract) continue
+        try {
+          const connectionService = this.connectionService()
+          if (!connectionService) continue
+          connectionService.resolveRuntimes(
+            instruction.connections ?? (instruction.connection ? { default: instruction.connection } : {}),
+            contract.connections ?? [],
+          )
+        } catch {
+          continue
+        }
+      }
       const now = new Date().toISOString()
       const changed = this.ctx.database.transaction(() => {
         const result = this.ctx.database.db.prepare(`
           UPDATE executions SET status = 'RUNNABLE', blocked_reason = NULL, updated_at = ?
-          WHERE id = ? AND status = 'BLOCKED' AND blocked_reason = 'PROVIDER_UNAVAILABLE'
-        `).run(now, execution.id)
+          WHERE id = ? AND status = 'BLOCKED' AND blocked_reason = ?
+        `).run(now, execution.id, row.blocked_reason)
         if (!result.changes) return false
         this.appendEvent(execution.runId, 'ExecutionUnblocked', { executionId: execution.id }, now)
         return true
@@ -1304,6 +1372,10 @@ export class SchedulerService extends Service {
       if (changed) count += 1
     }
     return count
+  }
+
+  private connectionService(): ConnectionService | undefined {
+    return this.ctx.get('connections') as ConnectionService | undefined
   }
 
   private propagateCancellation(runId: string, reason: CancellationReason): boolean {

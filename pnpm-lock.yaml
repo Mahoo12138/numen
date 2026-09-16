@@ -205,6 +205,9 @@ importers:
       '@numen/automation':
         specifier: workspace:*
         version: link:../automation
+      '@numen/connections':
+        specifier: workspace:*
+        version: link:../connections
       '@numen/core':
         specifier: workspace:*
         version: link:../core
@@ -218,6 +221,9 @@ importers:
         specifier: ^4.0.0-rc.8
         version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
     devDependencies:
+      '@numen/credentials':
+        specifier: workspace:*
+        version: link:../credentials
       schemastery:
         specifier: ^3.18.0
         version: 3.18.0
@@ -227,6 +233,9 @@ importers:
       '@numen/automation':
         specifier: workspace:*
         version: link:../automation
+      '@numen/connections':
+        specifier: workspace:*
+        version: link:../connections
       '@numen/core':
         specifier: workspace:*
         version: link:../core
@@ -237,6 +246,9 @@ importers:
         specifier: ^4.0.0-rc.8
         version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
     devDependencies:
+      '@numen/credentials':
+        specifier: workspace:*
+        version: link:../credentials
       '@numen/database':
         specifier: workspace:*
         version: link:../database

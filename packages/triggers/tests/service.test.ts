@@ -5,6 +5,8 @@ import {
   type TriggerActivation,
 } from '@numen/core'
 import { DatabaseService } from '@numen/database'
+import { ConnectionService } from '@numen/connections'
+import { CredentialService } from '@numen/credentials'
 import { ResourceService } from '@numen/resources'
 import { SchedulerService } from '@numen/scheduler'
 import { Context } from 'cordis'
@@ -32,14 +34,27 @@ const definition: CapabilityDefinition = {
   connections: [{ name: 'account', required: false, accepts: [] }],
 }
 
-const source: AutomationSource = {
+const source = (connectionId: string): AutomationSource => ({
   triggers: [{
     id: 'event',
     capability: { id: 'test:event', version: 1 },
-    connections: { account: 'conn-trigger' },
+    connections: { account: connectionId },
     config: { channel: 'updates' },
   }],
   flow: { type: 'block', id: 'flow', steps: [] },
+})
+
+async function createReadyConnection(root: Context): Promise<string> {
+  await root.plugin(CredentialService)
+  await root.plugin(ConnectionService)
+  const type = { id: 'test:event-client', version: 1, title: 'Event Client' }
+  const adapter = { id: 'test:event-adapter', version: 1, title: 'Event Adapter', type, config: z.object({}) }
+  root.connections.defineType(root, type)
+  root.connections.defineAdapter(root, adapter)
+  root.connections.provideAdapter(root, adapter, { async open() { return { value: { channel: 'updates' } } } })
+  const connection = root.connections.create({ name: 'Event account', adapter, config: {}, enabled: true })
+  await root.connections.reconcile()
+  return connection.id
 }
 
 describe('TriggerService', () => {
@@ -48,6 +63,7 @@ describe('TriggerService', () => {
     directories.push(directory)
     const root = new Context()
     await root.plugin(DatabaseService, { path: join(directory, 'numen.db') })
+    const connectionId = await createReadyConnection(root)
     await root.plugin(CapabilityRegistry)
     root.capabilities.define(root, definition)
     const activations: TriggerActivation[] = []
@@ -65,7 +81,7 @@ describe('TriggerService', () => {
     await root.plugin(SchedulerService, { autoDispatch: false })
     await root.plugin(TriggerService)
 
-    const created = root.automations.create({ name: 'Triggered automation', source })
+    const created = root.automations.create({ name: 'Triggered automation', source: source(connectionId) })
     const revision = root.automations.publishDraft(created.automation.id, 1)
     root.automations.activateRevision(created.automation.id, revision.id)
     expect(root.triggers.health()).toMatchObject({ desiredSubscriptions: 0, activeSubscriptions: 0 })
@@ -82,8 +98,9 @@ describe('TriggerService', () => {
       activationGeneration: enabled.activationGeneration,
       triggerId: 'event',
       config: { channel: 'updates' },
-      connectionIds: { account: 'conn-trigger' },
+      connectionIds: { account: connectionId },
     })
+    expect(activations[0]?.connections).toEqual({ account: { channel: 'updates' } })
 
     const accepted = await activations[0]!.emit({ data: { value: 'first' }, eventId: 'event-1' })
     expect(accepted).toMatchObject({ status: 'accepted', runId: expect.any(String) })
@@ -115,13 +132,14 @@ describe('TriggerService', () => {
     directories.push(directory)
     const root = new Context()
     await root.plugin(DatabaseService, { path: ':memory:' })
+    const connectionId = await createReadyConnection(root)
     await root.plugin(CapabilityRegistry)
     root.capabilities.define(root, definition)
     await root.plugin(AutomationService)
     await root.plugin(ResourceService, { path: join(directory, 'resources') })
     await root.plugin(SchedulerService, { autoDispatch: false })
     await root.plugin(TriggerService)
-    const created = root.automations.create({ name: 'Late provider', source })
+    const created = root.automations.create({ name: 'Late provider', source: source(connectionId) })
     const revision = root.automations.publishDraft(created.automation.id, 1)
     root.automations.activateRevision(created.automation.id, revision.id)
     root.automations.setEnabled(created.automation.id, true)

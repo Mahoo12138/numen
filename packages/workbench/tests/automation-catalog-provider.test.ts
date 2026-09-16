@@ -71,6 +71,8 @@ describe('Automation insert catalog projection', () => {
     const catalog = projectAutomationInsertCatalog(statuses, [{
       id: 'conn-mail',
       name: 'Mail account',
+      typeId: 'mail:adapter',
+      typeVersion: 1,
       adapterId: 'mail:adapter',
       adapterVersion: 1,
       enabled: true,

@@ -35,8 +35,8 @@ function compatibleConnections(
 ): WorkbenchAutomationConnectionOption[] {
   if (!slot.accepts.length) return connections
   return connections.filter(connection => (
-    slot.accepts.includes(connection.adapterId)
-    || slot.accepts.includes(`${connection.adapterId}@${connection.adapterVersion}`)
+    slot.accepts.includes(connection.typeId)
+    || slot.accepts.includes(`${connection.typeId}@${connection.typeVersion}`)
   ))
 }
 
@@ -87,7 +87,7 @@ export function CapabilityConnectionFields({
         </label>
         <p class="inspector-field-help">
           {options.length
-            ? `Accepts ${slot.accepts.length ? slot.accepts.join(', ') : 'any Connection Adapter'}.`
+            ? `Accepts ${slot.accepts.length ? slot.accepts.join(', ') : 'any Connection Type'}.`
             : `No compatible Connections configured${slot.accepts.length ? ` for ${slot.accepts.join(', ')}` : ''}.`}
         </p>
         {problem ? <p class="inspector-field-error" id={problemId}>{problem.message}</p> : null}

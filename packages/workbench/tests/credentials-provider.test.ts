@@ -58,7 +58,9 @@ describe('Workbench Credential Provider', () => {
     await expect(root.console.action(workbenchRotateCredentialAction, {
       credentialId: created.credential.id, expectedSecretVersion: 1, secret: { token: 'valid-stale' },
     }, request())).rejects.toMatchObject({ status: 409, code: 'CREDENTIAL_VERSION_CONFLICT', details: { actualSecretVersion: 2 } })
-    const adapter = { id: 'test:api', version: 1, title: 'API', config: z.object({}), credentialType: definition.id }
+    const connectionType = { id: 'test:api-client', version: 1, title: 'API Client' }
+    const adapter = { id: 'test:api', version: 1, title: 'API', type: connectionType, config: z.object({}), credentialType: definition.id }
+    root.connections.defineType(root, connectionType)
     root.connections.defineAdapter(root, adapter)
     const connection = root.connections.create({ name: 'Bound', adapter, config: {}, credentialId: created.credential.id })
     await expect(root.console.action(workbenchDeleteCredentialAction, {

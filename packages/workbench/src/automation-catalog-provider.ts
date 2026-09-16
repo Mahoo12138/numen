@@ -42,6 +42,8 @@ const connectionStatusSchema = z.union([
 const connectionOptionSchema = z.object({
   id: z.string().required(),
   name: z.string().required(),
+  typeId: z.string().required(),
+  typeVersion: z.number().required(),
   adapterId: z.string().required(),
   adapterVersion: z.number().required(),
   enabled: z.boolean().required(),
@@ -257,6 +259,8 @@ export function workbenchAutomationCatalogProviderPlugin(ctx: Context): void {
         return {
           id: projected.id,
           name: projected.name,
+          typeId: connection.type.id,
+          typeVersion: connection.type.version,
           adapterId: projected.adapterId,
           adapterVersion: projected.adapterVersion,
           enabled: projected.enabled,

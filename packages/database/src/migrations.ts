@@ -320,6 +320,31 @@ export const coreMigrations: readonly Migration[] = [
       `)
     },
   },
+  {
+    version: 12,
+    name: 'manual-run-requests',
+    up(database) {
+      database.exec(`
+        CREATE TABLE manual_run_requests (
+          request_id TEXT PRIMARY KEY,
+          content_hash TEXT NOT NULL,
+          run_id TEXT NOT NULL UNIQUE REFERENCES runs(id) ON DELETE CASCADE
+        );
+      `)
+    },
+  },
+  {
+    version: 13,
+    name: 'connection-types',
+    up(database) {
+      database.exec(`
+        ALTER TABLE connections ADD COLUMN type_id TEXT NOT NULL DEFAULT '';
+        ALTER TABLE connections ADD COLUMN type_version INTEGER NOT NULL DEFAULT 1;
+        CREATE INDEX connections_type_idx
+          ON connections(type_id, type_version, enabled);
+      `)
+    },
+  },
 ]
 
 export function runMigrations(

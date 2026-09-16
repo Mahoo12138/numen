@@ -16,11 +16,13 @@
   },
   "dependencies": {
     "@numen/automation": "workspace:*",
+    "@numen/connections": "workspace:*",
     "@numen/core": "workspace:*",
     "@numen/database": "workspace:*",
     "@numen/resources": "workspace:*"
   },
   "devDependencies": {
+    "@numen/credentials": "workspace:*",
     "schemastery": "^3.18.0"
   }
 }

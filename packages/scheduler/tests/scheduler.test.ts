@@ -7,6 +7,8 @@ import {
   type NumenValue,
 } from '@numen/core'
 import { DatabaseService } from '@numen/database'
+import { ConnectionService } from '@numen/connections'
+import { CredentialService } from '@numen/credentials'
 import { ResourceService } from '@numen/resources'
 import { Context } from 'cordis'
 import { mkdtemp, rm } from 'node:fs/promises'
@@ -14,7 +16,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import z from 'schemastery'
 import { afterEach, describe, expect, it } from 'vitest'
-import { SchedulerService } from '../src/index.js'
+import { ManualRunRequestConflictError, SchedulerService } from '../src/index.js'
 
 const directories: string[] = []
 
@@ -47,7 +49,7 @@ const triggerDefinition: CapabilityDefinition = {
 async function createContext(
   databasePath: string,
   definition = actionDefinition(),
-  invoke?: (input: NumenValue, signal: AbortSignal, connectionIds: Record<string, string>) => Promise<NumenValue>,
+  invoke?: (input: NumenValue, signal: AbortSignal, connections: Record<string, unknown>) => Promise<NumenValue>,
 ): Promise<Context> {
   const root = new Context()
   await root.plugin(DatabaseService, { path: databasePath })
@@ -56,8 +58,8 @@ async function createContext(
   root.capabilities.define(root, triggerDefinition)
   if (invoke) {
     root.capabilities.provide(root, definition, {
-      async invoke({ input, signal, connectionIds }) {
-        return invoke(input, signal, connectionIds)
+      async invoke({ input, signal, connections }) {
+        return invoke(input, signal, connections)
       },
     })
   }
@@ -102,6 +104,34 @@ const linearSource: AutomationSource = {
 }
 
 describe('SchedulerService', () => {
+  it('durably deduplicates manual Run submissions and rejects request ID reuse with different content', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'numen-manual-request-'))
+    directories.push(directory)
+    const databasePath = join(directory, 'numen.db')
+    let root = await createContext(databasePath)
+    const automationId = publish(root, { inputs: { message: { type: 'string', required: true } }, triggers: [], flow: { type: 'block', id: 'flow', steps: [] } })
+    const revisionId = root.automations.get(automationId)!.activeRevisionId!
+    const requestId = 'manual-request-000001'
+    const first = root.scheduler.startManual(automationId, { message: 'hello' }, { type: 'manual' }, revisionId, requestId)
+    const retry = root.scheduler.startManual(automationId, { message: 'hello' }, { type: 'manual' }, revisionId, requestId)
+    expect(retry.id).toBe(first.id)
+    expect(root.scheduler.listRuns()).toHaveLength(1)
+    expect(() => root.scheduler.startManual(automationId, { message: 'different' }, { type: 'manual' }, revisionId, requestId))
+      .toThrow(ManualRunRequestConflictError)
+    expect(() => root.scheduler.startManual(automationId, { message: 'hello' }, { type: 'manual' }, revisionId, 'short'))
+      .toThrow('request id')
+
+    const nextRevision = root.automations.publishDraft(automationId, 1)
+    root.automations.activateRevision(automationId, nextRevision.id)
+    await root.fiber.dispose()
+    root = await createContext(databasePath)
+    const recovered = root.scheduler.startManual(automationId, { message: 'hello' }, { type: 'manual' }, revisionId, requestId)
+    expect(recovered.id).toBe(first.id)
+    expect(root.scheduler.listRuns()).toHaveLength(1)
+    expect(root.database.db.prepare('SELECT request_id, run_id FROM manual_run_requests').all()).toEqual([{ request_id: requestId, run_id: first.id }])
+    await root.fiber.dispose()
+  })
+
   it('executes a persisted extension Revision after its compiler plugin is unloaded', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'numen-control-run-'))
     directories.push(directory)
@@ -250,20 +280,27 @@ describe('SchedulerService', () => {
     directories.push(directory)
     const connected = {
       ...actionDefinition(),
-      connections: [{ name: 'account', required: true, accepts: [] }],
+      connections: [{ name: 'account', required: true, accepts: ['test:account-client'] }],
     }
-    let observed: Record<string, string> | undefined
-    const root = await createContext(join(directory, 'numen.db'), connected, async (input, _signal, connectionIds) => {
-      observed = connectionIds
+    let observed: Record<string, unknown> | undefined
+    const root = await createContext(join(directory, 'numen.db'), connected, async (input, _signal, connections) => {
+      observed = connections
       return input
     })
+    await root.plugin(CredentialService)
+    await root.plugin(ConnectionService)
+    const connectionType = { id: 'test:account-client', version: 1, title: 'Account Client' }
+    const adapter = { id: 'test:account-adapter', version: 1, title: 'Account Adapter', type: connectionType, config: z.object({}) }
+    root.connections.defineType(root, connectionType)
+    root.connections.defineAdapter(root, adapter)
+    const connection = root.connections.create({ name: 'Primary account', adapter, config: {}, enabled: true })
     const automationId = publish(root, {
       triggers: [],
       flow: {
         type: 'capability',
         id: 'record',
         capability: { id: connected.id, version: connected.version },
-        connections: { account: 'conn-account' },
+        connections: { account: connection.id },
         input: { value: { type: 'literal', value: 'bound' } },
       },
     })
@@ -271,8 +308,15 @@ describe('SchedulerService', () => {
     const run = root.scheduler.startManual(automationId)
     await root.scheduler.dispatchUntilIdle()
 
+    expect(root.scheduler.getRun(run.id)?.status).toBe('RUNNING')
+    expect(root.scheduler.listExecutions(run.id)[0]).toMatchObject({ status: 'BLOCKED', blockedReason: 'CONNECTION_UNAVAILABLE' })
+    expect(root.scheduler.listAttempts(run.id)).toHaveLength(0)
+    root.connections.provideAdapter(root, adapter, { async open() { return { value: { account: 'primary' } } } })
+    await root.connections.reconcile()
+    await root.scheduler.dispatchUntilIdle()
+
     expect(root.scheduler.getRun(run.id)?.status).toBe('COMPLETED')
-    expect(observed).toEqual({ account: 'conn-account' })
+    expect(observed).toEqual({ account: { account: 'primary' } })
     await root.fiber.dispose()
   })
 

@@ -43,14 +43,17 @@ describe('Workbench Connections Provider', () => {
     const providerPlugin = (ctx: Context) => workbenchConnectionsProviderPlugin(ctx)
     providerPlugin.inject = ['console', 'connections', 'credentials']
     const provider = await root.plugin(providerPlugin)
+    const connectionType = { id: 'test:http-client', version: 1, title: 'HTTP Client' }
     const adapter = {
       id: 'test:http',
       version: 1,
       title: 'HTTP Adapter',
+      type: connectionType,
       config: z.object({ baseUrl: z.string().description('Remote endpoint').required() }),
     }
+    root.connections.defineType(root, connectionType)
     root.connections.defineAdapter(root, adapter)
-    root.connections.provideAdapter(root, adapter, { async open() {} })
+    root.connections.provideAdapter(root, adapter, { async open() { return { value: {} } } })
     const created = root.connections.create({ name: 'Primary API', adapter, config: { baseUrl: 'https://one.example.test' } })
 
     expect(await root.console.query(workbenchConnectionsIndexQuery, {}, request())).toMatchObject({

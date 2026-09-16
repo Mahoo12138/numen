@@ -108,7 +108,9 @@ describe('CredentialService', () => {
     const root = await createContext(':memory:', randomBytes(32).toString('base64'))
     await root.plugin(ConnectionService)
     const credential = root.credentials.create('Bound token', type, { token: 'secret' })
-    const adapter = { id: 'test:api', version: 1, title: 'API', credentialType: type.id, config: z.object({}) }
+    const connectionType = { id: 'test:api-client', version: 1, title: 'API Client' }
+    const adapter = { id: 'test:api', version: 1, title: 'API', type: connectionType, credentialType: type.id, config: z.object({}) }
+    root.connections.defineType(root, connectionType)
     root.connections.defineAdapter(root, adapter)
     const connection = root.connections.create({ name: 'API', adapter, credentialId: credential.id, config: {} })
     expect(root.credentials.get(credential.id)?.connectionCount).toBe(1)

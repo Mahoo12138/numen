@@ -26,6 +26,9 @@ const adapter: WorkbenchConnectionAdapter = {
   id: 'test:http',
   version: 1,
   title: 'HTTP Adapter',
+  typeId: 'test:http-client',
+  typeVersion: 1,
+  typeTitle: 'HTTP Client',
   providerAvailable: true,
   configSchemaSupported: true,
   configFields: [{

@@ -229,9 +229,9 @@ describe('automation compiler', () => {
     }
     const connectionResolver = {
       get(connectionId: string) {
-        if (connectionId === 'conn-mail') return { id: connectionId, adapter: { id: 'mail:adapter', version: 1 } }
-        if (connectionId === 'conn-audit') return { id: connectionId, adapter: { id: 'audit:adapter', version: 2 } }
-        if (connectionId === 'conn-wrong') return { id: connectionId, adapter: { id: 'chat:adapter', version: 1 } }
+        if (connectionId === 'conn-mail') return { id: connectionId, type: { id: 'mail:adapter', version: 1 }, adapter: { id: 'mail:transport', version: 1 } }
+        if (connectionId === 'conn-audit') return { id: connectionId, type: { id: 'audit:adapter', version: 2 }, adapter: { id: 'audit:transport', version: 1 } }
+        if (connectionId === 'conn-wrong') return { id: connectionId, type: { id: 'chat:adapter', version: 1 }, adapter: { id: 'chat:transport', version: 1 } }
       },
     }
     const connectedSource: AutomationSource = {

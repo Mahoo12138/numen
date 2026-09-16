@@ -11,13 +11,30 @@ export interface ConnectionAdapterRef {
   version: number
 }
 
-export interface ConnectionAdapterDefinition<Config = Record<string, NumenValue>> extends ConnectionAdapterRef {
-  title: string
-  config: Schema<Config>
-  credentialType?: string
+export interface ConnectionTypeRef {
+  id: string
+  version: number
 }
 
-export interface ConnectionRuntime {
+/** Stable protocol implemented by one or more Connection Adapters. */
+export interface ConnectionTypeDefinition<Runtime = unknown> extends ConnectionTypeRef {
+  title: string
+  /** Compile-time marker only; Runtime values never enter durable state. */
+  readonly runtime?: Runtime
+}
+
+export interface ConnectionAdapterDefinition<Config = Record<string, NumenValue>, Runtime = unknown> extends ConnectionAdapterRef {
+  title: string
+  type: ConnectionTypeRef
+  config: Schema<Config>
+  credentialType?: string
+  /** Compile-time marker tying Provider output to the implemented Connection Type. */
+  readonly runtime?: Runtime
+}
+
+/** Lifecycle wrapper owned exclusively by ConnectionService. */
+export interface ConnectionRuntime<Runtime = unknown> {
+  value: Runtime
   close?(): void | Promise<void>
 }
 
@@ -27,8 +44,8 @@ export interface ConnectionAdapterOpenContext {
   credential?: CredentialSecretSnapshot
 }
 
-export interface ConnectionAdapterProvider {
-  open(context: ConnectionAdapterOpenContext): Promise<ConnectionRuntime | void>
+export interface ConnectionAdapterProvider<Runtime = unknown> {
+  open(context: ConnectionAdapterOpenContext): Promise<ConnectionRuntime<Runtime>>
 }
 
 export type ConnectionRuntimeStatus = 'STOPPED' | 'STARTING' | 'READY' | 'ERROR' | 'STOPPING'
@@ -43,6 +60,7 @@ export interface ConnectionRuntimeState {
 export interface Connection {
   id: string
   name: string
+  type: ConnectionTypeRef
   adapter: ConnectionAdapterRef
   config: Record<string, NumenValue>
   credentialId?: string
@@ -100,6 +118,8 @@ interface ConnectionRow {
   name: string
   adapter_id: string
   adapter_version: number
+  type_id: string
+  type_version: number
   config_json: string
   credential_id: string | null
   enabled: number
@@ -120,6 +140,21 @@ export class ConnectionConflictError extends Error {
   }
 }
 
+export class ConnectionBindingError extends Error {
+  override name = 'ConnectionBindingError'
+}
+
+export class ConnectionRuntimeUnavailableError extends Error {
+  override name = 'ConnectionRuntimeUnavailableError'
+
+  constructor(
+    public readonly connectionId: string,
+    public readonly status: ConnectionRuntimeStatus,
+  ) {
+    super(`connection runtime is not ready: ${connectionId} (${status})`)
+  }
+}
+
 declare module 'cordis' {
   interface Context {
     connections: ConnectionService
@@ -128,6 +163,7 @@ declare module 'cordis' {
   interface Events {
     'numen/connection-change'(connectionId: string): void
     'numen/connection-runtime-change'(connectionId: string): void
+    'numen/connection-type-change'(ref: ConnectionTypeRef): void
   }
 }
 
@@ -135,6 +171,14 @@ const adapterIdPattern = /^[a-z0-9][a-z0-9_.-]*:[a-z0-9][a-z0-9_.-]*$/
 
 function adapterKey(ref: ConnectionAdapterRef): string {
   return `${ref.id}@${ref.version}`
+}
+
+export function connectionTypeKey(ref: ConnectionTypeRef): string {
+  return `${ref.id}@${ref.version}`
+}
+
+function acceptsConnectionType(accepts: string[], ref: ConnectionTypeRef): boolean {
+  return !accepts.length || accepts.includes(ref.id) || accepts.includes(connectionTypeKey(ref))
 }
 
 function assertConfig(value: unknown): asserts value is Record<string, NumenValue> {
@@ -147,6 +191,7 @@ export class ConnectionService extends Service {
   static inject = ['database', 'credentials']
 
   private ready = false
+  private readonly types = new Map<string, ConnectionTypeDefinition>()
   private readonly adapters = new Map<string, AdapterEntry>()
   private readonly runtimes = new Map<string, ActiveRuntime>()
 
@@ -163,18 +208,52 @@ export class ConnectionService extends Service {
       this.ready = false
       await Promise.all([...this.runtimes.values()].map(runtime => this.stopRuntime(runtime)))
       this.adapters.clear()
+      this.types.clear()
     }
   }
 
-  defineAdapter(owner: Context, definition: ConnectionAdapterDefinition): () => void {
+  defineType<Runtime>(owner: Context, definition: ConnectionTypeDefinition<Runtime>): () => void {
+    if (!adapterIdPattern.test(definition.id)) throw new TypeError(`invalid connection type id: ${definition.id}`)
+    if (!Number.isSafeInteger(definition.version) || definition.version < 1) {
+      throw new TypeError(`invalid connection type version: ${definition.version}`)
+    }
+    const key = connectionTypeKey(definition)
+    if (this.types.has(key)) throw new Error(`connection type already defined: ${key}`)
+    return owner.effect(() => {
+      this.types.set(key, definition)
+      this.ctx.emit('numen/connection-type-change', definition)
+      this.emitTypeConnections(definition)
+      return () => {
+        this.types.delete(key)
+        this.ctx.emit('numen/connection-type-change', definition)
+        this.emitTypeConnections(definition)
+      }
+    }, `connections.defineType(${JSON.stringify(key)})`)
+  }
+
+  getType(ref: ConnectionTypeRef): ConnectionTypeDefinition | undefined {
+    return this.types.get(connectionTypeKey(ref))
+  }
+
+  listTypes(): ConnectionTypeDefinition[] {
+    return [...this.types.values()].sort((a, b) => connectionTypeKey(a).localeCompare(connectionTypeKey(b)))
+  }
+
+  defineAdapter<Config, Runtime>(owner: Context, definition: ConnectionAdapterDefinition<Config, Runtime>): () => void {
     if (!adapterIdPattern.test(definition.id)) throw new TypeError(`invalid adapter id: ${definition.id}`)
     if (!Number.isSafeInteger(definition.version) || definition.version < 1) {
       throw new TypeError(`invalid adapter version: ${definition.version}`)
     }
+    if (!this.getType(definition.type)) throw new Error(`connection type not found: ${connectionTypeKey(definition.type)}`)
     const key = adapterKey(definition)
     if (this.adapters.has(key)) throw new Error(`connection adapter already defined: ${key}`)
     return owner.effect(() => {
-      this.adapters.set(key, { definition })
+      // v12 Connections acquire their explicit Type the first time their Adapter is loaded after migration.
+      this.ctx.database.db.prepare(`
+        UPDATE connections SET type_id = ?, type_version = ?
+        WHERE adapter_id = ? AND adapter_version = ? AND type_id = ''
+      `).run(definition.type.id, definition.type.version, definition.id, definition.version)
+      this.adapters.set(key, { definition: definition as ConnectionAdapterDefinition })
       this.emitAdapterConnections(definition)
       return () => {
         this.adapters.delete(key)
@@ -191,6 +270,7 @@ export class ConnectionService extends Service {
     const key = adapterKey(ref)
     const entry = this.adapters.get(key)
     if (!entry) throw new Error(`connection adapter not found: ${key}`)
+    if (!this.getType(entry.definition.type)) throw new Error(`connection type not found: ${connectionTypeKey(entry.definition.type)}`)
     if (entry.provider) throw new Error(`connection adapter provider already registered: ${key}`)
     return owner.effect(() => {
       entry.provider = provider
@@ -226,12 +306,14 @@ export class ConnectionService extends Service {
     const now = new Date().toISOString()
     this.ctx.database.db.prepare(`
       INSERT INTO connections (
-        id, name, adapter_id, adapter_version, config_json, credential_id,
-        enabled, generation, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+        id, name, type_id, type_version, adapter_id, adapter_version,
+        config_json, credential_id, enabled, generation, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
     `).run(
       connectionId,
       name,
+      definition.type.id,
+      definition.type.version,
       input.adapter.id,
       input.adapter.version,
       JSON.stringify(config),
@@ -327,6 +409,35 @@ export class ConnectionService extends Service {
     }
   }
 
+  /** Resolve durable bindings to READY Runtime values without exposing lifecycle handles. */
+  resolveRuntimes(
+    connectionIds: Record<string, string>,
+    slots?: Array<{ name: string; required: boolean; accepts: string[] }>,
+  ): Record<string, unknown> {
+    const declared = new Map((slots ?? []).map(slot => [slot.name, slot]))
+    for (const name of Object.keys(connectionIds)) {
+      if (slots && !declared.has(name)) throw new ConnectionBindingError(`unknown connection slot: ${name}`)
+    }
+    const resolved: Record<string, unknown> = {}
+    for (const slot of slots ?? []) {
+      if (slot.required && !connectionIds[slot.name]) throw new ConnectionBindingError(`required connection slot is not bound: ${slot.name}`)
+    }
+    for (const [name, connectionId] of Object.entries(connectionIds)) {
+      const connection = this.get(connectionId)
+      if (!connection) throw new ConnectionBindingError(`connection not found: ${connectionId}`)
+      const slot = declared.get(name)
+      if (slot && !acceptsConnectionType(slot.accepts, connection.type)) {
+        throw new ConnectionBindingError(`connection ${connectionId} has incompatible type ${connectionTypeKey(connection.type)} for slot ${name}`)
+      }
+      const active = this.runtimes.get(connectionId)
+      if (!active || active.status !== 'READY' || !active.runtime) {
+        throw new ConnectionRuntimeUnavailableError(connectionId, active?.status ?? 'STOPPED')
+      }
+      resolved[name] = active.runtime.value
+    }
+    return resolved
+  }
+
   async reconcile(): Promise<void> {
     const connections = new Map(this.list().map(connection => [connection.id, connection]))
     const stops: Promise<void>[] = []
@@ -336,6 +447,7 @@ export class ConnectionService extends Service {
       if (
         !connection?.enabled
         || !provider
+        || !this.getType(connection.type)
         || provider !== runtime.provider
         || connection.generation !== runtime.generation
       ) {
@@ -348,7 +460,7 @@ export class ConnectionService extends Service {
     for (const connection of connections.values()) {
       if (!connection.enabled || this.runtimes.has(connection.id)) continue
       const provider = this.resolveAdapterProvider(connection.adapter)
-      if (provider) starts.push(this.openRuntime(connection, provider))
+      if (provider && this.getType(connection.type)) starts.push(this.openRuntime(connection, provider))
     }
     await Promise.all(starts)
   }
@@ -396,15 +508,17 @@ export class ConnectionService extends Service {
 
   private mapConnection(row: ConnectionRow): Connection {
     const adapter = { id: row.adapter_id, version: row.adapter_version }
+    const type = { id: row.type_id, version: row.type_version }
     return {
       id: row.id,
       name: row.name,
+      type,
       adapter,
       config: JSON.parse(row.config_json) as Record<string, NumenValue>,
       ...(row.credential_id ? { credentialId: row.credential_id } : {}),
       enabled: !!row.enabled,
       generation: row.generation,
-      adapterAvailable: !!this.adapters.get(adapterKey(adapter))?.provider,
+      adapterAvailable: !!this.types.get(connectionTypeKey(type)) && !!this.adapters.get(adapterKey(adapter))?.provider,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }
@@ -415,6 +529,14 @@ export class ConnectionService extends Service {
       SELECT id FROM connections WHERE adapter_id = ? AND adapter_version = ?
     `).all(ref.id, ref.version) as Array<{ id: string }>
     for (const row of rows) this.ctx.emit('numen/connection-change', row.id)
+  }
+
+  private emitTypeConnections(ref: ConnectionTypeRef): void {
+    const rows = this.ctx.database.db.prepare(`
+      SELECT id FROM connections WHERE type_id = ? AND type_version = ?
+    `).all(ref.id, ref.version) as Array<{ id: string }>
+    for (const row of rows) this.ctx.emit('numen/connection-change', row.id)
+    this.queueReconcile()
   }
 
   private queueReconcile(): void {
@@ -448,6 +570,7 @@ export class ConnectionService extends Service {
         runtime.controller.signal.aborted
         || this.runtimes.get(connection.id) !== runtime
         || !current?.enabled
+        || !this.getType(current.type)
         || current.generation !== runtime.generation
         || this.resolveAdapterProvider(current.adapter) !== provider
       ) {
@@ -455,7 +578,7 @@ export class ConnectionService extends Service {
         if (this.runtimes.get(connection.id) === runtime) this.runtimes.delete(connection.id)
         return
       }
-      runtime.runtime = opened ?? {}
+      runtime.runtime = opened
       runtime.status = 'READY'
       this.ctx.emit('numen/connection-runtime-change', connection.id)
     } catch (error) {

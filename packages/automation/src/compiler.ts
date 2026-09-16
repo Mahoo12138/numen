@@ -32,6 +32,7 @@ export interface CapabilityResolver {
 
 export interface ConnectionContract {
   id: string
+  type: { id: string; version: number }
   adapter: { id: string; version: number }
 }
 
@@ -341,12 +342,12 @@ export function compileAutomation(
         })
         continue
       }
-      const adapterKey = `${connection.adapter.id}@${connection.adapter.version}`
-      if (slot.accepts.length && !slot.accepts.includes(connection.adapter.id) && !slot.accepts.includes(adapterKey)) {
+      const typeKey = `${connection.type.id}@${connection.type.version}`
+      if (slot.accepts.length && !slot.accepts.includes(connection.type.id) && !slot.accepts.includes(typeKey)) {
         report({
           severity: 'error',
           code: 'CONNECTION_INCOMPATIBLE',
-          message: `${connectionId} uses ${adapterKey}, which is incompatible with slot ${slot.name}.`,
+          message: `${connectionId} has type ${typeKey}, which is incompatible with slot ${slot.name}.`,
           source: { nodeId, fieldPath: `connections.${slot.name}` },
         })
       }

@@ -16,10 +16,12 @@
   },
   "dependencies": {
     "@numen/automation": "workspace:*",
+    "@numen/connections": "workspace:*",
     "@numen/core": "workspace:*",
     "@numen/scheduler": "workspace:*"
   },
   "devDependencies": {
+    "@numen/credentials": "workspace:*",
     "@numen/database": "workspace:*",
     "@numen/resources": "workspace:*",
     "schemastery": "^3.18.0"

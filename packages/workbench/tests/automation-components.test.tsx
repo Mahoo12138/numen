@@ -282,6 +282,8 @@ describe('live Automation workspace projections', () => {
       connections: [{
         id: 'conn-ready',
         name: 'Ready account',
+        typeId: 'mail:adapter',
+        typeVersion: 1,
         adapterId: 'mail:adapter',
         adapterVersion: 1,
         enabled: true,

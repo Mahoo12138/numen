@@ -28,15 +28,32 @@ export interface CapabilityDefinition<Input = NumenValue, Output = NumenValue> e
   connections?: ConnectionSlot[]
 }
 
-export interface CapabilityInvocation<Input = NumenValue> {
+/** Preserve concrete Schema input/output types while declaring a Capability contract. */
+export function defineCapability<Input, Output>(
+  definition: CapabilityDefinition<Input, Output>,
+): CapabilityDefinition<Input, Output> {
+  return definition
+}
+
+export type ConnectionRuntimeBindings = Record<string, unknown>
+
+export interface CapabilityInvocation<
+  Input = NumenValue,
+  Connections extends ConnectionRuntimeBindings = ConnectionRuntimeBindings,
+> {
   input: Input
-  connectionIds: Record<string, string>
+  /** READY Runtime values resolved and type-checked by ConnectionService. */
+  connections: Connections
   signal: AbortSignal
   idempotencyKey?: string
 }
 
-export interface CapabilityProvider<Input = NumenValue, Output = NumenValue> {
-  invoke(invocation: CapabilityInvocation<Input>): Promise<Output>
+export interface CapabilityProvider<
+  Input = NumenValue,
+  Output = NumenValue,
+  Connections extends ConnectionRuntimeBindings = ConnectionRuntimeBindings,
+> {
+  invoke(invocation: CapabilityInvocation<Input, Connections>): Promise<Output>
 }
 
 export interface TriggerBinding {
@@ -64,6 +81,8 @@ export interface TriggerAcceptance {
 
 export interface TriggerActivation<Output = NumenValue> {
   binding: TriggerBinding
+  /** READY Runtime values resolved and type-checked by ConnectionService. */
+  connections: ConnectionRuntimeBindings
   signal: AbortSignal
   emit(emission: TriggerEmission<Output>): Promise<TriggerAcceptance>
 }
@@ -106,7 +125,7 @@ export class CapabilityRegistry extends Service {
     super(ctx, 'capabilities')
   }
 
-  define(owner: Context, definition: CapabilityDefinition): () => void {
+  define<Input, Output>(owner: Context, definition: CapabilityDefinition<Input, Output>): () => void {
     if (!idPattern.test(definition.id)) {
       throw new TypeError(`invalid capability id: ${definition.id}`)
     }
@@ -117,7 +136,7 @@ export class CapabilityRegistry extends Service {
     if (this.entries.has(key)) throw new Error(`capability already defined: ${key}`)
 
     return owner.effect(() => {
-      this.entries.set(key, { definition })
+      this.entries.set(key, { definition: definition as CapabilityDefinition })
       this.ctx.emit('numen/capability-change', definition)
       return () => {
         this.entries.delete(key)

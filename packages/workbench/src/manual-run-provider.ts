@@ -1,6 +1,6 @@
 import { ConsoleProcedureError, type ConsoleActionDefinition, type ConsoleQueryDefinition } from '@numen/console'
 import { AutomationInputValidationError } from '@numen/core'
-import { ManualRunRevisionConflictError } from '@numen/scheduler'
+import { ManualRunRequestConflictError, ManualRunRevisionConflictError } from '@numen/scheduler'
 import type { Context } from 'cordis'
 import z from 'schemastery'
 import { automationIdSchema } from './automation-schemas.js'
@@ -13,7 +13,12 @@ export const workbenchManualRunFormQuery: ConsoleQueryDefinition<{ automationId:
 }
 export const workbenchStartManualRunAction: ConsoleActionDefinition<WorkbenchStartManualRunInput, WorkbenchStartManualRunResult> = {
   ...workbenchStartManualRunActionRef, kind: 'action', title: 'Start manual Run',
-  input: z.object({ automationId: automationIdSchema, expectedRevisionId: z.string().pattern(/^rev_[a-f0-9]{32}$/).required(), input: z.any().required() }),
+  input: z.object({
+    automationId: automationIdSchema,
+    requestId: z.string().pattern(/^[a-zA-Z0-9_-]{16,80}$/).required(),
+    expectedRevisionId: z.string().pattern(/^rev_[a-f0-9]{32}$/).required(),
+    input: z.any().required(),
+  }),
   output: z.object({ runId: z.string().required() }),
 }
 function activeRevision(ctx: Context, automationId: string) {
@@ -35,9 +40,10 @@ export function provideManualRuns(ctx: Context): void {
     action({ input }: { input: WorkbenchStartManualRunInput }): WorkbenchStartManualRunResult {
       activeRevision(ctx, input.automationId)
       try {
-        const run = ctx.scheduler.startManual(input.automationId, input.input, { type: 'manual' }, input.expectedRevisionId)
+        const run = ctx.scheduler.startManual(input.automationId, input.input, { type: 'manual' }, input.expectedRevisionId, input.requestId)
         return { runId: run.id }
       } catch (error) {
+        if (error instanceof ManualRunRequestConflictError) throw new ConsoleProcedureError(409, 'MANUAL_RUN_REQUEST_CONFLICT', error.message)
         if (error instanceof ManualRunRevisionConflictError) throw new ConsoleProcedureError(409, 'MANUAL_RUN_REVISION_CONFLICT', error.message)
         if (error instanceof AutomationInputValidationError) throw new ConsoleProcedureError(422, 'AUTOMATION_INPUT_INVALID', error.message, { issues: error.issues })
         throw error
