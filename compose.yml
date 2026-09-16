@@ -1,0 +1,18 @@
+services:
+  numen:
+    build:
+      context: .
+    image: numen:local
+    restart: unless-stopped
+    environment:
+      NUMEN_MASTER_KEY: ${NUMEN_MASTER_KEY:?set NUMEN_MASTER_KEY in .env first}
+      NUMEN_HTTP_PROXY: ${NUMEN_HTTP_PROXY:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:${NUMEN_PORT:-5140}:5140"
+    volumes:
+      - numen-data:/var/lib/numen
+
+volumes:
+  numen-data:

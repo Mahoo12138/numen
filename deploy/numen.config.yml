@@ -1,0 +1,45 @@
+version: 1
+dataDir: /var/lib/numen
+
+plugins:
+  database:
+    path: /var/lib/numen/numen.db
+  capabilities: {}
+  controls: {}
+  coreControls: {}
+  credentials: {}
+  resources:
+    path: /var/lib/numen/resources
+  connections: {}
+  http:
+    timeout: 30000
+  httpSocks: {}
+  demo: {}
+  httpIntegration: {}
+  schedule: {}
+  automations: {}
+  scheduler: {}
+  triggers: {}
+  console: {}
+  consoleEntries: {}
+  consoleAuth: {}
+  server:
+    host: 0.0.0.0
+    port: 5140
+  workbench: {}
+  workbenchAutomationAuthoring: {}
+  workbenchAutomationActivation: {}
+  workbenchAutomationCatalog: {}
+  workbenchAutomations: {}
+  workbenchConnections: {}
+  workbenchCredentials: {}
+  workbenchHome: {}
+  workbenchInvalidation: {}
+  workbenchRuns: {}
+  consoleSession: {}
+  consoleAssets:
+    mode: prod
+  consoleHttp: {}
+  consoleWs: {}
+  health: {}
+  readiness: {}
