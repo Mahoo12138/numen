@@ -17,6 +17,10 @@ import { CredentialService } from '@numen/credentials'
 import { ResourceService } from '@numen/resources'
 import { CapabilityRegistry, ControlRegistry, coreControlsPlugin } from '@numen/core'
 import { DatabaseService } from '@numen/database'
+import { httpSocksPlugin, OutboundHttpService } from '@numen/http'
+import demoIntegrationPlugin from '@numen/integration-demo'
+import httpIntegrationPlugin from '@numen/integration-http'
+import scheduleIntegrationPlugin from '@numen/integration-schedule'
 import { SchedulerService } from '@numen/scheduler'
 import { TriggerService } from '@numen/triggers'
 import {
@@ -59,6 +63,11 @@ const builtins = {
   credentials: CredentialService,
   resources: ResourceService,
   connections: ConnectionService,
+  http: OutboundHttpService,
+  httpSocks: httpSocksPlugin,
+  demo: demoIntegrationPlugin,
+  httpIntegration: httpIntegrationPlugin,
+  schedule: scheduleIntegrationPlugin,
   automations: AutomationService,
   scheduler: SchedulerService,
   triggers: TriggerService,

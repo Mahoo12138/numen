@@ -12,6 +12,14 @@ plugins:
   resources:
     path: .numen/resources
   connections: {}
+  # Shared outbound client for every Integration. Set proxyAgent to an HTTP(S)
+  # proxy URL when direct access is unavailable, e.g. http://127.0.0.1:7890.
+  http:
+    timeout: 30000
+  httpSocks: {}
+  demo: {}
+  httpIntegration: {}
+  schedule: {}
   automations: {}
   scheduler: {}
   triggers: {}

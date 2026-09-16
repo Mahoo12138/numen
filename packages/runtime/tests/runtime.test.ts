@@ -39,6 +39,11 @@ describe('Numen runtime', () => {
         credentials: {},
         resources: { path: 'data/resources' },
         connections: {},
+        http: { timeout: 1_000 },
+        httpSocks: {},
+        demo: {},
+        httpIntegration: {},
+        schedule: {},
         automations: {},
         scheduler: { autoDispatch: false },
         triggers: {},
@@ -67,6 +72,10 @@ describe('Numen runtime', () => {
 
     const application = await startRuntime({ configPath })
     applications.push(application)
+    expect(application.context.http.config.timeout).toBe(1_000)
+    expect(application.context.capabilities.get({ id: 'demo:echo', version: 1 })).toMatchObject({ providerAvailable: true })
+    expect(application.context.capabilities.get({ id: 'http:request', version: 1 })).toMatchObject({ providerAvailable: true })
+    expect(application.context.capabilities.get({ id: 'schedule:cron', version: 1 })).toMatchObject({ providerAvailable: true })
     expect(application.context.console.list()).toEqual([
       expect.objectContaining({
         definition: expect.objectContaining({ id: 'numen:automation-activate-revision', version: 1, kind: 'action' }),
@@ -575,13 +584,15 @@ describe('Numen runtime', () => {
     expect(invalidRunsCursor.status).toBe(422)
     expect(await invalidRunsCursor.json()).toMatchObject({ error: { code: 'PROCEDURE_VALIDATION_FAILED' } })
 
-    const readyAdapter = { id: 'runtime:ready', version: 1, title: 'Ready Adapter', config: z.object({}) }
-    const unavailableAdapter = { id: 'runtime:unavailable', version: 1, title: 'Unavailable Adapter', config: z.object({}) }
-    const failingAdapter = { id: 'runtime:failing', version: 1, title: 'Failing Adapter', config: z.object({}) }
+    const runtimeType = { id: 'runtime:test-client', version: 1, title: 'Runtime Test Client' }
+    const readyAdapter = { id: 'runtime:ready', version: 1, title: 'Ready Adapter', type: runtimeType, config: z.object({}) }
+    const unavailableAdapter = { id: 'runtime:unavailable', version: 1, title: 'Unavailable Adapter', type: runtimeType, config: z.object({}) }
+    const failingAdapter = { id: 'runtime:failing', version: 1, title: 'Failing Adapter', type: runtimeType, config: z.object({}) }
+    application.context.connections.defineType(application.context, runtimeType)
     application.context.connections.defineAdapter(application.context, readyAdapter)
     application.context.connections.defineAdapter(application.context, unavailableAdapter)
     application.context.connections.defineAdapter(application.context, failingAdapter)
-    application.context.connections.provideAdapter(application.context, readyAdapter, { async open() {} })
+    application.context.connections.provideAdapter(application.context, readyAdapter, { async open() { return { value: {} } } })
     application.context.connections.provideAdapter(application.context, failingAdapter, {
       async open() {
         throw new Error('runtime authentication failed')
@@ -689,7 +700,7 @@ describe('Numen runtime', () => {
     expect(await ready.json()).toMatchObject({
       status: 'ready',
       checks: {
-        database: { migrationVersion: 11 },
+        database: { migrationVersion: 13 },
         automations: { ready: true, count: 1 },
         connections: {
           ready: true,
