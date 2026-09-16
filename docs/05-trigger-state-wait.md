@@ -67,6 +67,12 @@ validate
 
 `await emit()` 语义：事件已被数据库耐久接收，而不是仅入内存队列。
 
+### 3.1 Built-in Cron Schedule
+
+`schedule:cron@1` 是 MVP 的首个无人值守 Trigger。配置包含五段 cron 表达式与 IANA timezone；Provider 只维护下一次内存 timer，并以计划执行时刻生成确定性 `eventId`。真正的 generation fencing、事件去重和 Run 创建仍走统一 durable acceptance。
+
+进程重启后，TriggerService 从 enabled Automation 的 Active Revision 重建订阅并计算下一个未来时刻。当前版本不补发停机期间错过的 occurrence。
+
 ## 4. State Trigger
 
 Provider 负责提供 observation，State Trigger Service 检测 transition。
