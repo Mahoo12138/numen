@@ -5,8 +5,28 @@ RUN corepack enable && corepack prepare pnpm@10.6.3 --activate \
 
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json tsconfig.base.json vitest.config.ts ./
+COPY packages/automation/package.json packages/automation/package.json
+COPY packages/cli/package.json packages/cli/package.json
+COPY packages/config/package.json packages/config/package.json
+COPY packages/connections/package.json packages/connections/package.json
+COPY packages/console/package.json packages/console/package.json
+COPY packages/core/package.json packages/core/package.json
+COPY packages/credentials/package.json packages/credentials/package.json
+COPY packages/database/package.json packages/database/package.json
+COPY packages/http/package.json packages/http/package.json
+COPY packages/integration-demo/package.json packages/integration-demo/package.json
+COPY packages/integration-http/package.json packages/integration-http/package.json
+COPY packages/integration-schedule/package.json packages/integration-schedule/package.json
+COPY packages/resources/package.json packages/resources/package.json
+COPY packages/runtime/package.json packages/runtime/package.json
+COPY packages/scheduler/package.json packages/scheduler/package.json
+COPY packages/triggers/package.json packages/triggers/package.json
+COPY packages/webui/package.json packages/webui/package.json
+COPY packages/workbench/package.json packages/workbench/package.json
+RUN --mount=type=cache,id=numen-pnpm-store,target=/pnpm/store \
+  pnpm config set store-dir /pnpm/store \
+  && pnpm install --frozen-lockfile
 COPY packages ./packages
-RUN pnpm install --frozen-lockfile
 RUN pnpm build
 
 FROM node:24-alpine AS runtime
