@@ -13,8 +13,14 @@ Numen is a Cordis-native, plugin-first personal automation runtime. The current 
 pnpm install
 pnpm test
 pnpm build
+pnpm exec playwright install chromium
+pnpm test:e2e
 pnpm dev
 ```
+
+`pnpm test` runs the fast Node integration/unit suite. `pnpm test:e2e` builds the
+production Workbench and drives the real browser/server authoring path on an
+isolated temporary database.
 
 The default server listens on `http://127.0.0.1:5140`. Operational endpoints:
 
