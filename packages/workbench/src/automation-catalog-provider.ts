@@ -67,6 +67,17 @@ const insertItemSchema = z.union([
     description: z.string().required(),
   }),
   z.object({
+    kind: z.const('trigger').required(),
+    capability: capabilityRefSchema.required(),
+    title: z.string().required(),
+    description: z.string(),
+    providerAvailable: z.boolean().required(),
+    connectionSlots: z.array(z.string().required()).required(),
+    connectionRequirements: z.array(connectionRequirementSchema).required(),
+    inputFields: z.array(workbenchSchemaFieldSchema).required(),
+    inputSchemaSupported: z.boolean().required(),
+  }),
+  z.object({
     kind: z.const('capability').required(),
     capability: capabilityRefSchema.required(),
     capabilityKind: z.union(['query', 'action']).required(),
@@ -87,7 +98,7 @@ export const workbenchAutomationInsertCatalogQuery: ConsoleQueryDefinition<
   ...workbenchAutomationInsertCatalogQueryRef,
   kind: 'query',
   title: 'Automation insert catalog',
-  description: 'Core structured controls plus live query/action Capability definitions for the Automation Quick Picker.',
+  description: 'Core structured controls plus live Trigger/query/action Capability definitions for the Automation Quick Picker.',
   input: z.object({}),
   output: z.object({
     items: z.array(insertItemSchema).required(),
@@ -215,14 +226,10 @@ export function projectAutomationInsertCatalog(
   connections: WorkbenchAutomationConnectionOption[] = [],
   definitions: readonly ControlDefinition[] = coreControlDefinitions,
 ): WorkbenchAutomationInsertCatalog {
-  const capabilities = statuses
-    .filter(status => status.definition.kind !== 'trigger')
-    .map<WorkbenchAutomationInsertItem>(status => {
+  const projectCapability = (status: CapabilityStatus): Extract<WorkbenchAutomationInsertItem, { kind: 'trigger' | 'capability' }> => {
       const input = projectInputSchema(status.definition)
-      return {
-        kind: 'capability',
+      const shared = {
         capability: { id: status.definition.id, version: status.definition.version },
-        capabilityKind: status.definition.kind as 'query' | 'action',
         title: status.definition.title,
         ...(status.definition.description ? { description: status.definition.description } : {}),
         providerAvailable: status.providerAvailable,
@@ -234,6 +241,19 @@ export function projectAutomationInsertCatalog(
         })) ?? [],
         ...input,
       }
+      return status.definition.kind === 'trigger'
+        ? { kind: 'trigger', ...shared }
+        : { kind: 'capability', capabilityKind: status.definition.kind, ...shared }
+    }
+  const triggers = statuses
+    .filter(status => status.definition.kind === 'trigger')
+    .map(projectCapability)
+    .sort((left, right) => left.title.localeCompare(right.title)
+      || `${left.capability.id}@${left.capability.version}`.localeCompare(`${right.capability.id}@${right.capability.version}`))
+  const capabilities = statuses
+    .filter(status => status.definition.kind !== 'trigger')
+    .map<WorkbenchAutomationInsertItem>(status => {
+      return projectCapability(status)
     })
     .sort((left, right) => (
       left.title.localeCompare(right.title)
@@ -244,7 +264,7 @@ export function projectAutomationInsertCatalog(
   return {
     items: [...definitions.map<WorkbenchAutomationInsertItem>(definition => definition.kind === 'core'
       ? { kind: 'control', control: definition.control, title: definition.title, description: definition.description }
-      : { kind: 'extension', control: { id: definition.id, version: definition.version }, title: definition.title, description: definition.description, ...projectInputSchema(definition) }), ...capabilities],
+      : { kind: 'extension', control: { id: definition.id, version: definition.version }, title: definition.title, description: definition.description, ...projectInputSchema(definition) }), ...triggers, ...capabilities],
     connections: [...connections].sort((left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id)),
   }
 }

@@ -1,4 +1,4 @@
-import type { AutomationSource, CapabilitySource, CompileDiagnostic, ValueExpr } from '@numen/core'
+import type { AutomationSource, CapabilitySource, CompileDiagnostic, NumenValue, TriggerSource, ValueExpr } from '@numen/core'
 import type { SchemaUIResolver } from '@numen/webui/schema-ui'
 import { AlertCircle } from '@lucide/vue'
 import type {
@@ -12,6 +12,8 @@ import {
   parseAutomationTemplate,
   printAutomationTemplate,
 } from './ValueExpressionEditor.js'
+import { h } from 'vue'
+import type { SchemaLiteralRenderer } from './SchemaRenderers.js'
 import { defineSetupComponent } from './vue-component.js'
 
 export { parseAutomationTemplate, printAutomationTemplate }
@@ -135,3 +137,60 @@ export const CapabilityInputFields = defineSetupComponent<CapabilityInputFieldsP
     />
   })
 })
+
+type TriggerCatalogItem = Extract<WorkbenchAutomationInsertItem, { kind: 'trigger' }>
+
+export function TriggerConfigurationFields({
+  nodeId,
+  definition,
+  trigger,
+  problems,
+  canEdit,
+  schemaUI,
+  onChange,
+}: {
+  nodeId: string
+  definition: Pick<TriggerCatalogItem, 'inputFields' | 'inputSchemaSupported'>
+  trigger: Pick<TriggerSource, 'config'>
+  problems: CompileDiagnostic[]
+  canEdit: boolean
+  schemaUI?: SchemaUIResolver
+  onChange?(nodeId: string, fieldName: string, value?: NumenValue): void
+}) {
+  if (!definition.inputSchemaSupported) {
+    return <div class="inspector-schema-notice"><AlertCircle size={15} /><span>This Trigger does not expose an object configuration schema supported by the core Inspector.</span></div>
+  }
+  if (!definition.inputFields.length) return <p class="inspector-summary">This Trigger has no configurable fields.</p>
+  return <>{definition.inputFields.map((field, index) => {
+    const problem = problems.find(item => item.source?.fieldPath === `config.${field.name}`)
+      ?? (index === 0 ? problems.find(item => item.source?.fieldPath === 'config') : undefined)
+    const problemId = `${nodeId}-config-${field.name}-problem`
+    const inputId = `${nodeId}-config-${field.name}`
+    const Renderer = schemaUI?.resolveRenderer<SchemaLiteralRenderer>({
+      ...(field.role ? { role: field.role } : {}),
+      type: field.type,
+    }, 'editor')
+    return <div class="schema-field" data-invalid={!!problem} key={field.name}>
+      <div class="schema-field-row">
+        <span class="schema-field-label">
+          <label for={inputId}>{field.label}</label>
+          {field.required ? <em>Required</em> : null}
+        </span>
+        <span class="schema-value-editor trigger-config-editor">
+          <span class="schema-value-control">{Renderer ? h(Renderer, {
+            canEdit,
+            controlId: nodeId,
+            ...(problem ? { describedBy: problemId } : {}),
+            field,
+            inputId,
+            invalid: !!problem,
+            onCommit: (value?: NumenValue) => onChange?.(nodeId, field.name, value),
+            ...(trigger.config[field.name] !== undefined ? { value: trigger.config[field.name] } : {}),
+          }) : <div class="inspector-schema-notice"><AlertCircle size={15} /><span>No editor is registered for {field.role ?? field.type}.</span></div>}</span>
+        </span>
+      </div>
+      {field.description ? <p class="inspector-field-help">{field.description}</p> : null}
+      {problem ? <p class="inspector-field-error" id={problemId}>{problem.message}</p> : null}
+    </div>
+  })}</>
+}

@@ -46,7 +46,7 @@ describe('Automation insert catalog projection', () => {
     await root.fiber.dispose()
   })
 
-  it('combines core controls with sorted query/action metadata and excludes triggers', () => {
+  it('combines core controls with sorted Trigger/query/action metadata', () => {
     const statuses: CapabilityStatus[] = [
       {
         definition: definition(
@@ -85,6 +85,12 @@ describe('Automation insert catalog projection', () => {
     ])
     expect(catalog.items.slice(5)).toEqual([
       expect.objectContaining({
+        kind: 'trigger',
+        capability: { id: 'test:event', version: 1 },
+        providerAvailable: true,
+        connectionSlots: [],
+      }),
+      expect.objectContaining({
         kind: 'capability',
         capability: { id: 'test:lookup', version: 1 },
         capabilityKind: 'query',
@@ -109,7 +115,6 @@ describe('Automation insert catalog projection', () => {
       }),
     ])
     expect(catalog.connections).toEqual([expect.objectContaining({ id: 'conn-mail', adapterId: 'mail:adapter' })])
-    expect(catalog.items).not.toContainEqual(expect.objectContaining({ title: 'Event' }))
   })
 
   it('projects nested output contracts for triggers, queries, and actions', () => {

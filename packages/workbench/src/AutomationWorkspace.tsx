@@ -1,7 +1,7 @@
 import { AutomationInputs } from './AutomationInputs.js'
 import { AutomationRuns } from './AutomationRuns.js'
 import type { SourceRef } from '@numen/core'
-import { computed, h, inject, provide, ref, watch, type ComputedRef, type InjectionKey } from 'vue'
+import { computed, h, inject, onScopeDispose, provide, ref, watch, type ComputedRef, type InjectionKey } from 'vue'
 import { DraftConflictRecovery } from './DraftConflictRecovery.js'
 import { AutomationEditor, type AutomationEditorProps } from './AutomationEditor.js'
 import { AutomationPanel, AutomationStatusBar } from './AutomationPanel.js'
@@ -12,11 +12,14 @@ import {
   workbenchAutomationInsertCatalogQueryRef,
   workbenchAutomationVariableCatalogQueryRef,
   workbenchAutomationsIndexQueryRef,
+  workbenchCreateAutomationActionRef,
   type WorkbenchAutomationDetail,
   type WorkbenchAutomationDetailQueryInput,
   type WorkbenchAutomationInsertCatalog,
   type WorkbenchAutomationVariableCatalog,
   type WorkbenchAutomationsIndex,
+  type WorkbenchCreateAutomationInput,
+  type WorkbenchCreateAutomationResult,
 } from './contracts.js'
 import { Inspector, type InspectorFieldFocus } from './Inspector.js'
 import type { WorkbenchPageChromeProps } from './types.js'
@@ -41,6 +44,10 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
   const activeTab = ref('Editor')
   const requestedStepId = ref('notification')
   const fieldFocus = ref<InspectorFieldFocus>()
+  const creatingAutomation = ref(false)
+  const createAutomationError = ref<string>()
+  let createAutomationController: AbortController | undefined
+  onScopeDispose(() => createAutomationController?.abort())
   const [indexState, reloadIndex, refreshIndex] = useConsoleQuery<Record<string, never>, WorkbenchAutomationsIndex>(
     () => props.consoleClient,
     workbenchAutomationsIndexQueryRef,
@@ -59,6 +66,35 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
     emptyQueryInput,
     'automationCatalog',
   )
+  const createAutomation = async (name: string): Promise<boolean> => {
+    if (!props.consoleClient || creatingAutomation.value) return false
+    createAutomationController?.abort()
+    const controller = new AbortController()
+    createAutomationController = controller
+    creatingAutomation.value = true
+    createAutomationError.value = undefined
+    try {
+      const result = await props.consoleClient.action<WorkbenchCreateAutomationInput, WorkbenchCreateAutomationResult>(
+        workbenchCreateAutomationActionRef,
+        { name },
+        controller.signal,
+      )
+      if (controller.signal.aborted) return false
+      confirmedAutomationId.value = result.automation.id
+      requestedAutomationId.value = result.automation.id
+      activeTab.value = 'Editor'
+      refreshIndex()
+      return true
+    } catch (error) {
+      if (!controller.signal.aborted) createAutomationError.value = error instanceof Error ? error.message : 'Could not create Automation.'
+      return false
+    } finally {
+      if (createAutomationController === controller) {
+        createAutomationController = undefined
+        creatingAutomation.value = false
+      }
+    }
+  }
   const liveItems = computed(() => indexState.status === 'READY' ? indexState.data.items : [])
   const automationId = computed(() => props.consoleClient
     ? ((requestedAutomationId.value === confirmedAutomationId.value || liveItems.value.some(item => item.id === requestedAutomationId.value)) ? requestedAutomationId.value : liveItems.value[0]?.id)
@@ -124,7 +160,7 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
   })
   const capabilityTitles = computed(() => new Map(
     insertCatalogState.status === 'READY'
-      ? insertCatalogState.data.items.flatMap(item => item.kind === 'capability'
+      ? insertCatalogState.data.items.flatMap(item => item.kind === 'capability' || item.kind === 'trigger'
         ? [[`${item.capability.id}@${item.capability.version}`, item.title] as const]
         : item.kind === 'extension' ? [[`control:${item.control.id}@${item.control.version}`, item.title] as const]
         : [])
@@ -232,7 +268,11 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
       <AutomationSidebar
         {...(automationId.value ? { activeId: automationId.value } : {})}
         onChange={id => { requestedAutomationId.value = id }}
+        onCreate={createAutomation}
+        onCreateDismiss={() => { createAutomationError.value = undefined }}
         onReload={reloadIndex}
+        {...(createAutomationError.value ? { createError: createAutomationError.value } : {})}
+        creating={creatingAutomation.value}
         state={indexState}
       />
       {h(PageComponent, {
@@ -253,6 +293,7 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
         onClose={() => props.onInspectorOpenChange(false)}
         onCapabilityConnectionChange={authoring.setCapabilityConnection}
         onCapabilityInputChange={authoring.setCapabilityInput}
+        onTriggerConfigChange={authoring.setTriggerConfig}
         onExtensionInputChange={authoring.setExtensionInput}
         onControlExpressionChange={authoring.setControlExpression}
         onWaitExpressionChange={authoring.setWaitExpression}

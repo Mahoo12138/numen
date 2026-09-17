@@ -1,5 +1,5 @@
 import '@numen/automation'
-import type { ConsoleQueryDefinition } from '@numen/console'
+import type { ConsoleActionDefinition, ConsoleQueryDefinition } from '@numen/console'
 import type { Context } from 'cordis'
 import z from 'schemastery'
 import {
@@ -11,10 +11,13 @@ import {
 import {
   workbenchAutomationDetailQueryRef,
   workbenchAutomationsIndexQueryRef,
+  workbenchCreateAutomationActionRef,
   type WorkbenchAutomationDetail,
   type WorkbenchAutomationDetailQueryInput,
   type WorkbenchAutomationIndexItem,
   type WorkbenchAutomationsIndex,
+  type WorkbenchCreateAutomationInput,
+  type WorkbenchCreateAutomationResult,
 } from './contracts.js'
 
 export const workbenchAutomationsIndexQuery: ConsoleQueryDefinition<
@@ -61,6 +64,23 @@ export const workbenchAutomationDetailQuery: ConsoleQueryDefinition<
   output: z.union([automationDetail, z.const(null)]).required(),
 }
 
+export const workbenchCreateAutomationAction: ConsoleActionDefinition<
+  WorkbenchCreateAutomationInput,
+  WorkbenchCreateAutomationResult
+> = {
+  ...workbenchCreateAutomationActionRef,
+  kind: 'action',
+  title: 'Create Automation',
+  description: 'Create a disabled Automation with an empty mutable Draft.',
+  input: z.object({
+    name: z.string().min(1).max(200).pattern(/\S/).required(),
+  }),
+  output: z.object({
+    automation: z.object(automationIdentityFields).required(),
+    draft: automationDraftSchema.required(),
+  }),
+}
+
 export function summarizeAutomationIndex(
   items: WorkbenchAutomationIndexItem[],
 ): WorkbenchAutomationsIndex['summary'] {
@@ -72,6 +92,11 @@ export function summarizeAutomationIndex(
 }
 
 export function workbenchAutomationsProviderPlugin(ctx: Context): void {
+  ctx.console.provideAction(ctx, workbenchCreateAutomationActionRef, {
+    action({ input }: { input: WorkbenchCreateAutomationInput }): WorkbenchCreateAutomationResult {
+      return ctx.automations.create({ name: input.name })
+    },
+  })
   ctx.console.provideQuery(ctx, workbenchAutomationsIndexQueryRef, {
     query(): WorkbenchAutomationsIndex {
       const items = ctx.automations.listSummaries()

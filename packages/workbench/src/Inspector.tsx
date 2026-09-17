@@ -1,9 +1,9 @@
-import type { AutomationSource, CompileDiagnostic, WaitSource, ValueExpr } from '@numen/core'
+import type { AutomationSource, CompileDiagnostic, NumenValue, WaitSource, ValueExpr } from '@numen/core'
 import type { SchemaUIResolver } from '@numen/webui/schema-ui'
 import { ChevronDown, X } from '@lucide/vue'
 import type { SetupContext } from 'vue'
-import { CapabilityConnectionFields, CapabilityInputFields } from './CapabilityInspector.js'
-import { findAutomationControl } from './automation-source-editing.js'
+import { CapabilityConnectionFields, CapabilityInputFields, TriggerConfigurationFields } from './CapabilityInspector.js'
+import { findAutomationControl, findAutomationTrigger } from './automation-source-editing.js'
 import type {
   WorkbenchAutomationInsertCatalog,
   WorkbenchAutomationInputField,
@@ -35,6 +35,7 @@ export interface InspectorProps {
   onCapabilityConnectionChange?(nodeId: string, slotName: string, connectionId?: string): void
   onExtensionInputChange?(nodeId: string, fieldName: string, expression?: ValueExpr): void
   onCapabilityInputChange?(nodeId: string, fieldName: string, expression?: ValueExpr): void
+  onTriggerConfigChange?(nodeId: string, fieldName: string, value?: NumenValue): void
   onControlExpressionChange?(nodeId: string, field: 'condition' | 'items', expression: ValueExpr): void
   onWaitExpressionChange?(nodeId: string, field: 'durationMs' | 'until', expression: ValueExpr): void
   onClose(): void
@@ -151,6 +152,7 @@ export function Inspector({
   schemaUI,
   onCapabilityConnectionChange,
   onCapabilityInputChange,
+  onTriggerConfigChange,
   onExtensionInputChange,
   onControlExpressionChange,
   onWaitExpressionChange,
@@ -160,6 +162,7 @@ export function Inspector({
   const step = projectedSteps.find(item => item.id === activeStepId) ?? projectedSteps[0]
   const isNotification = !steps && step?.id === 'notification'
   const control = source && step?.sourceId ? findAutomationControl(source, step.sourceId) : undefined
+  const trigger = source && step?.sourceId ? findAutomationTrigger(source, step.sourceId) : undefined
   const stepProblems = step?.sourceId
     ? problems.filter(problem => problem.source?.nodeId === step.sourceId)
     : []
@@ -175,12 +178,19 @@ export function Inspector({
       && item.capability.id === control.capability.id
       && item.capability.version === control.capability.version)
     : undefined
+  const triggerDefinition = trigger
+    ? catalog?.items.find((item): item is Extract<WorkbenchAutomationInsertItem, { kind: 'trigger' }> => item.kind === 'trigger'
+      && item.capability.id === trigger.capability.id
+      && item.capability.version === trigger.capability.version)
+    : undefined
   const extensionDefinition = control?.type === 'extension'
     ? catalog?.items.find((item): item is Extract<WorkbenchAutomationInsertItem, { kind: 'extension' }> => item.kind === 'extension' && item.control.id === control.control.id && item.control.version === control.control.version)
     : undefined
-  const connectionBindings = control?.type === 'capability'
-    ? control.connections ?? (control.connection
-      ? { [capabilityDefinition?.connectionRequirements[0]?.name ?? 'default']: control.connection }
+  const connectionNode = control?.type === 'capability' ? control : trigger
+  const connectionDefinition = control?.type === 'capability' ? capabilityDefinition : triggerDefinition
+  const connectionBindings = connectionNode
+    ? connectionNode.connections ?? (connectionNode.connection
+      ? { [connectionDefinition?.connectionRequirements[0]?.name ?? 'default']: connectionNode.connection }
       : {})
     : {}
   return (
@@ -212,6 +222,43 @@ export function Inspector({
               <span>Run step only if previous steps succeeded</span>
             </label>
           </InspectorGroup>
+        </>
+      ) : trigger && step.sourceId ? (
+        <>
+          {triggerDefinition?.connectionRequirements.length ? (
+            <InspectorGroup title="Connection">
+              <CapabilityConnectionFields
+                bindings={connectionBindings}
+                canEdit={canEdit}
+                connections={catalog?.connections ?? []}
+                nodeId={step.sourceId}
+                {...(onCapabilityConnectionChange ? { onChange: onCapabilityConnectionChange } : {})}
+                problems={stepProblems}
+                slots={triggerDefinition.connectionRequirements}
+              />
+            </InspectorGroup>
+          ) : null}
+          <InspectorGroup title="Trigger configuration">
+            {triggerDefinition ? <TriggerConfigurationFields
+              canEdit={canEdit}
+              definition={triggerDefinition}
+              nodeId={step.sourceId}
+              {...(onTriggerConfigChange ? { onChange: onTriggerConfigChange } : {})}
+              problems={stepProblems}
+              {...(schemaUI ? { schemaUI } : {})}
+              trigger={trigger}
+            /> : <p class="inspector-schema-notice">The Trigger contract is unavailable. Restore {trigger.capability.id}@{trigger.capability.version} to edit or publish.</p>}
+          </InspectorGroup>
+          <InspectorGroup title="Source">
+            <p class="inspector-summary">{step.summary}</p>
+            <dl class="inspector-source-fields">
+              <div><dt>Source ID</dt><dd>{step.sourceId}</dd></div>
+              <div><dt>Trigger</dt><dd>{trigger.capability.id}@{trigger.capability.version}</dd></div>
+            </dl>
+          </InspectorGroup>
+          {stepProblems.length ? <InspectorGroup title="Diagnostics"><div class="inspector-diagnostics">
+            {stepProblems.map(problem => <p key={`${problem.code}:${problem.source?.fieldPath ?? ''}`}>{problem.message}</p>)}
+          </div></InspectorGroup> : null}
         </>
       ) : control?.type === 'extension' && step.sourceId ? (
         <InspectorGroup title="Configuration">

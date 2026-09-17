@@ -127,6 +127,34 @@ describe('local Automation Draft document', () => {
     expect(state.document!.source.flow).toMatchObject({ steps: [{ input: { duration: { type: 'ref' } } }] })
   })
 
+  it('inserts, configures, reorders, and deletes Trigger declarations through document history', () => {
+    const triggerItem: WorkbenchAutomationInsertItem = {
+      kind: 'trigger', capability: { id: 'schedule:cron', version: 1 }, title: 'Cron Schedule',
+      providerAvailable: true, connectionSlots: [], connectionRequirements: [], inputSchemaSupported: true,
+      inputFields: [
+        { name: 'cron', label: 'Cron', type: 'string', schemaType: 'string', required: true },
+        { name: 'timezone', label: 'Timezone', type: 'string', schemaType: 'string', required: false, defaultValue: 'UTC' },
+      ],
+    }
+    let state = reduceAutomationDraftDocument(loadedState(), { type: 'EDIT', command: { type: 'INSERT', item: triggerItem } })
+    state = reduceAutomationDraftDocument(state, { type: 'EDIT', command: { type: 'INSERT', item: triggerItem } })
+    expect(state.document!.source.triggers).toMatchObject([
+      { id: 'trigger-1', capability: triggerItem.capability, config: { timezone: 'UTC' } },
+      { id: 'trigger-2', capability: triggerItem.capability, config: { timezone: 'UTC' } },
+    ])
+    state = reduceAutomationDraftDocument(state, { type: 'EDIT', command: {
+      type: 'SET_TRIGGER_CONFIG', nodeId: 'trigger-2', fieldName: 'cron', value: '* * * * *',
+    } })
+    state = reduceAutomationDraftDocument(state, { type: 'EDIT', command: {
+      type: 'MOVE_STEP', nodeId: 'trigger-2', direction: 'up',
+    } })
+    expect(state.document!.source.triggers[0]).toMatchObject({ id: 'trigger-2', config: { cron: '* * * * *', timezone: 'UTC' } })
+    state = reduceAutomationDraftDocument(state, { type: 'EDIT', command: { type: 'DELETE_STEP', nodeId: 'trigger-1' } })
+    expect(state.document!.source.triggers.map(trigger => trigger.id)).toEqual(['trigger-2'])
+    state = reduceAutomationDraftDocument(state, { type: 'UNDO' })
+    expect(state.document!.source.triggers).toHaveLength(2)
+  })
+
   it('appends stable wait ids and preserves a non-block flow by wrapping it', () => {
     const once = insert(source)
     const twice = insert(once)

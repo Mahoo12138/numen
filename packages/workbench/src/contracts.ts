@@ -392,6 +392,20 @@ export interface WorkbenchAutomationsIndex {
   items: WorkbenchAutomationIndexItem[]
 }
 
+export const workbenchCreateAutomationActionRef = {
+  id: 'numen:automation-create',
+  version: 1,
+} as const satisfies ConsoleProcedureRef
+
+export interface WorkbenchCreateAutomationInput {
+  name: string
+}
+
+export interface WorkbenchCreateAutomationResult {
+  automation: WorkbenchAutomationIdentity
+  draft: WorkbenchAutomationDraft
+}
+
 export const workbenchAutomationDetailQueryRef = {
   id: 'numen:automation-detail',
   version: 1,
@@ -498,6 +512,17 @@ export type WorkbenchAutomationInsertItem =
     control: WorkbenchAutomationControlKind
     title: string
     description: string
+  }
+  | {
+    kind: 'trigger'
+    capability: CapabilityRef
+    title: string
+    description?: string
+    providerAvailable: boolean
+    connectionSlots: string[]
+    connectionRequirements: WorkbenchAutomationConnectionSlot[]
+    inputFields: WorkbenchAutomationInputField[]
+    inputSchemaSupported: boolean
   }
   | {
     kind: 'capability'

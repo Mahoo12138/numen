@@ -12,7 +12,7 @@ import {
   workbenchAutomationInsertCatalogQuery,
   workbenchAutomationVariableCatalogQuery,
 } from './automation-catalog-provider.js'
-import { workbenchAutomationDetailQuery, workbenchAutomationsIndexQuery } from './automations-provider.js'
+import { workbenchAutomationDetailQuery, workbenchAutomationsIndexQuery, workbenchCreateAutomationAction } from './automations-provider.js'
 import {
   workbenchCreateConnectionAction,
   workbenchDeleteConnectionAction,
@@ -39,6 +39,7 @@ export {
 export {
   workbenchAutomationDetailQuery,
   workbenchAutomationsIndexQuery,
+  workbenchCreateAutomationAction,
   workbenchAutomationsProviderPlugin,
 } from './automations-provider.js'
 export {
@@ -89,6 +90,7 @@ export class WorkbenchRuntimeService extends Service {
     ctx.console.define(ctx, workbenchSaveAutomationDraftCopyAction)
     ctx.console.define(ctx, workbenchAutomationDetailQuery)
     ctx.console.define(ctx, workbenchAutomationsIndexQuery)
+    ctx.console.define(ctx, workbenchCreateAutomationAction)
     ctx.console.define(ctx, workbenchCredentialsIndexQuery)
     ctx.console.define(ctx, workbenchCreateCredentialAction)
     ctx.console.define(ctx, workbenchRotateCredentialAction)

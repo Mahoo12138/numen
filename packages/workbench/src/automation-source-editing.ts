@@ -1,4 +1,4 @@
-import type { AutomationSource, BlockSource, ControlSource, ValueExpr } from '@numen/core'
+import type { AutomationSource, BlockSource, ControlSource, NumenValue, TriggerSource, ValueExpr } from '@numen/core'
 import type { WorkbenchAutomationInsertItem } from './contracts.js'
 
 export type AutomationSourceCommand =
@@ -7,6 +7,7 @@ export type AutomationSourceCommand =
   | { type: 'MOVE_STEP'; nodeId: string; direction: 'up' | 'down' }
   | { type: 'INSERT'; item: WorkbenchAutomationInsertItem }
   | { type: 'SET_CAPABILITY_CONNECTION'; nodeId: string; slotName: string; connectionId?: string }
+  | { type: 'SET_TRIGGER_CONFIG'; nodeId: string; fieldName: string; value?: NumenValue }
   | { type: 'SET_EXTENSION_INPUT'; nodeId: string; fieldName: string; expression?: ValueExpr }
   | { type: 'SET_CAPABILITY_INPUT'; nodeId: string; fieldName: string; expression?: ValueExpr }
   | { type: 'SET_CONTROL_EXPRESSION'; nodeId: string; field: 'condition' | 'items'; expression: ValueExpr }
@@ -86,7 +87,7 @@ function appendControl(source: AutomationSource, control: ControlSource, ids: Se
 }
 
 function createInsertControl(
-  item: WorkbenchAutomationInsertItem,
+  item: Exclude<WorkbenchAutomationInsertItem, { kind: 'trigger' }>,
   ids: Set<string>,
 ): ControlSource {
   if (item.kind === 'capability' || item.kind === 'extension') {
@@ -146,6 +147,17 @@ function createInsertControl(
 
 function insertItem(source: AutomationSource, item: WorkbenchAutomationInsertItem): AutomationSourceCommandResult {
   const ids = collectControlIds(source)
+  if (item.kind === 'trigger') {
+    const config = Object.fromEntries(item.inputFields.flatMap(field => (
+      field.defaultValue === undefined ? [] : [[field.name, structuredClone(field.defaultValue)]]
+    )))
+    const trigger: TriggerSource = {
+      id: availableId(ids, 'trigger'),
+      capability: item.capability,
+      config,
+    }
+    return { source: { ...source, triggers: [...source.triggers, trigger] }, selectedNodeId: trigger.id }
+  }
   const control = createInsertControl(item, ids)
   return {
     source: appendControl(source, control, ids),
@@ -282,20 +294,49 @@ function setCapabilityConnection(
 ): AutomationSource {
   if (!slotName) throw new TypeError('Capability connection slot name is required.')
   if (connectionId !== undefined && !connectionId) throw new TypeError('Connection ID must be non-empty when provided.')
-  const result = editControl(source.flow, nodeId, control => {
-    if (control.type !== 'capability') return control
+  const updateBindings = <Node extends { connection?: string; connections?: Record<string, string> }>(node: Node): Node => {
     const connections = {
-      ...(control.connection ? { [slotName]: control.connection } : {}),
-      ...control.connections,
+      ...(node.connection ? { [slotName]: node.connection } : {}),
+      ...node.connections,
     }
     if (connectionId === undefined) delete connections[slotName]
     else connections[slotName] = connectionId
-    const { connection: _legacy, connections: _current, ...rest } = control
-    if (!Object.keys(connections).length) return control.connection || control.connections ? rest : control
-    if (!control.connection && JSON.stringify(control.connections) === JSON.stringify(connections)) return control
-    return { ...rest, connections }
+    const { connection: _legacy, connections: _current, ...rest } = node
+    if (!Object.keys(connections).length) return (node.connection || node.connections ? rest : node) as Node
+    if (!node.connection && JSON.stringify(node.connections) === JSON.stringify(connections)) return node
+    return { ...rest, connections } as Node
+  }
+  const triggerIndex = source.triggers.findIndex(trigger => trigger.id === nodeId)
+  if (triggerIndex >= 0) {
+    const trigger = updateBindings(source.triggers[triggerIndex]!)
+    if (trigger === source.triggers[triggerIndex]) return source
+    const triggers = [...source.triggers]
+    triggers[triggerIndex] = trigger
+    return { ...source, triggers }
+  }
+  const result = editControl(source.flow, nodeId, control => {
+    if (control.type !== 'capability') return control
+    return updateBindings(control)
   })
   return result.changed ? { ...source, flow: result.control } : source
+}
+
+function setTriggerConfig(source: AutomationSource, nodeId: string, fieldName: string, value: NumenValue | undefined): AutomationSource {
+  if (!fieldName) throw new TypeError('Trigger config field name is required.')
+  const index = source.triggers.findIndex(trigger => trigger.id === nodeId)
+  if (index < 0) return source
+  const current = source.triggers[index]!
+  const config = { ...current.config }
+  if (value === undefined) {
+    if (!(fieldName in config)) return source
+    delete config[fieldName]
+  } else {
+    if (JSON.stringify(config[fieldName]) === JSON.stringify(value)) return source
+    config[fieldName] = structuredClone(value)
+  }
+  const triggers = [...source.triggers]
+  triggers[index] = { ...current, config }
+  return { ...source, triggers }
 }
 
 export interface AutomationStepEditOptions {
@@ -325,15 +366,33 @@ function sequencePosition(source: AutomationSource, nodeId: string): { block: Bl
 
 /** Mandatory branch/body Blocks and Trigger declarations are not sequence steps. */
 export function automationStepEditOptions(source: AutomationSource, nodeId: string | undefined): AutomationStepEditOptions {
+  const triggerIndex = nodeId ? source.triggers.findIndex(trigger => trigger.id === nodeId) : -1
   const position = nodeId ? sequencePosition(source, nodeId) : undefined
   return {
-    canDelete: !!position || (source.flow.type !== 'block' && source.flow.id === nodeId),
-    canMoveUp: !!position && position.index > 0,
-    canMoveDown: !!position && position.index < position.block.steps.length - 1,
+    canDelete: triggerIndex >= 0 || !!position || (source.flow.type !== 'block' && source.flow.id === nodeId),
+    canMoveUp: triggerIndex > 0 || (!!position && position.index > 0),
+    canMoveDown: (triggerIndex >= 0 && triggerIndex < source.triggers.length - 1) || (!!position && position.index < position.block.steps.length - 1),
   }
 }
 
 function editSequence(source: AutomationSource, nodeId: string, direction?: 'up' | 'down'): AutomationSourceCommandResult {
+  const triggerIndex = source.triggers.findIndex(trigger => trigger.id === nodeId)
+  if (triggerIndex >= 0) {
+    const triggers = [...source.triggers]
+    if (direction) {
+      const target = triggerIndex + (direction === 'up' ? -1 : 1)
+      if (target < 0 || target >= triggers.length) return { source }
+      const moved = triggers[triggerIndex]!
+      triggers[triggerIndex] = triggers[target]!
+      triggers[target] = moved
+      return { source: { ...source, triggers }, selectedNodeId: nodeId }
+    }
+    triggers.splice(triggerIndex, 1)
+    return {
+      source: { ...source, triggers },
+      selectedNodeId: triggers[triggerIndex]?.id ?? triggers[triggerIndex - 1]?.id,
+    }
+  }
   const position = sequencePosition(source, nodeId)
   if (!position) {
     if (!direction && source.flow.id === nodeId && source.flow.type !== 'block') {
@@ -374,6 +433,9 @@ export function applyAutomationSourceCommand(
     case 'INSERT': return insertItem(source, command.item)
     case 'SET_CAPABILITY_CONNECTION': return {
       source: setCapabilityConnection(source, command.nodeId, command.slotName, command.connectionId),
+    }
+    case 'SET_TRIGGER_CONFIG': return {
+      source: setTriggerConfig(source, command.nodeId, command.fieldName, command.value),
     }
     case 'SET_EXTENSION_INPUT': return { source: setNodeInput(source, command.nodeId, command.fieldName, command.expression, 'extension') }
     case 'SET_CAPABILITY_INPUT': return {
@@ -417,6 +479,10 @@ export function findAutomationControl(source: AutomationSource, nodeId: string):
   }
   visit(source.flow)
   return found
+}
+
+export function findAutomationTrigger(source: AutomationSource, nodeId: string): TriggerSource | undefined {
+  return source.triggers.find(trigger => trigger.id === nodeId)
 }
 
 export function automationSourceHasNode(source: AutomationSource, nodeId: string | undefined): boolean {

@@ -6,6 +6,7 @@ import {
   ListTree,
   Plus,
   Search,
+  Radio,
   Shuffle,
   Sparkles,
   X,
@@ -35,7 +36,7 @@ function searchableText(item: WorkbenchAutomationInsertItem): string {
     item.description,
     item.capability.id,
     item.capability.version,
-    item.capabilityKind,
+    item.kind === 'capability' ? item.capabilityKind : 'trigger',
     ...item.connectionSlots,
   ].filter(Boolean).join(' ').toLowerCase()
 }
@@ -44,17 +45,17 @@ function PickerItem({ item, onInsert }: {
   item: WorkbenchAutomationInsertItem
   onInsert(item: WorkbenchAutomationInsertItem): void
 }) {
-  const Icon = item.kind === 'control' ? controlIcons[item.control] : Sparkles
-  const ref = item.kind === 'capability' ? `${item.capability.id}@${item.capability.version}` : item.kind === 'extension' ? `${item.control.id}@${item.control.version}` : item.control
+  const Icon = item.kind === 'control' ? controlIcons[item.control] : item.kind === 'trigger' ? Radio : Sparkles
+  const ref = item.kind === 'capability' || item.kind === 'trigger' ? `${item.capability.id}@${item.capability.version}` : item.kind === 'extension' ? `${item.control.id}@${item.control.version}` : item.control
   return (
     <button class="quick-picker-item" onClick={() => onInsert(item)} role="option" type="button">
       <span class="quick-picker-item-icon" data-kind={item.kind}><Icon size={16} /></span>
       <span class="quick-picker-item-copy">
-        <span><strong>{item.title}</strong><em>{item.kind === 'capability' ? item.capabilityKind : 'Control'}</em></span>
+        <span><strong>{item.title}</strong><em>{item.kind === 'capability' ? item.capabilityKind : item.kind === 'trigger' ? 'Trigger' : 'Control'}</em></span>
         <small>{item.description ?? ref}</small>
         <code>{ref}</code>
       </span>
-      {item.kind === 'capability' ? (
+      {item.kind === 'capability' || item.kind === 'trigger' ? (
         <span class="quick-picker-item-meta">
           {!item.providerAvailable ? <em data-tone="warning">Provider unavailable</em> : null}
           {item.connectionSlots.length ? <small>{item.connectionSlots.length} connection {item.connectionSlots.length === 1 ? 'slot' : 'slots'}</small> : null}
@@ -99,7 +100,8 @@ export const AutomationQuickPicker = defineSetupComponent<AutomationQuickPickerP
   return () => {
     const state = props.state
     const live = !!state && state.status !== 'DISABLED'
-    const controls = filtered.value.filter(item => item.kind !== 'capability')
+    const controls = filtered.value.filter(item => item.kind === 'control' || item.kind === 'extension')
+    const triggers = filtered.value.filter(item => item.kind === 'trigger')
     const capabilities = filtered.value.filter(item => item.kind === 'capability')
     if (!live) {
       return <button class="add-step-button" disabled={props.disabled ?? false} type="button"><Plus size={15} /> Add step</button>
@@ -145,6 +147,14 @@ export const AutomationQuickPicker = defineSetupComponent<AutomationQuickPickerP
               <section class="quick-picker-group">
                 <h3>Controls</h3>
                 {controls.map(item => <PickerItem item={item} key={`control:${item.kind === 'control' ? item.control : item.kind === 'extension' ? `${item.control.id}@${item.control.version}` : ''}`} onInsert={insert} />)}
+              </section>
+            ) : null}
+            {state.status === 'READY' && triggers.length ? (
+              <section class="quick-picker-group">
+                <h3>Triggers</h3>
+                {triggers.map(item => (
+                  <PickerItem item={item} key={item.kind === 'trigger' ? `trigger:${item.capability.id}@${item.capability.version}` : ''} onInsert={insert} />
+                ))}
               </section>
             ) : null}
             {state.status === 'READY' && capabilities.length ? (

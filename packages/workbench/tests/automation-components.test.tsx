@@ -237,6 +237,47 @@ describe('live Automation workspace projections', () => {
     expect(inspectorMarkup).toContain('Wait duration is invalid.')
   })
 
+  it('renders a configured Trigger through the schema-driven Inspector', async () => {
+    const source = {
+      triggers: [{
+        id: 'trigger-1',
+        capability: { id: 'schedule:cron', version: 1 },
+        config: { cron: '* * * * *', timezone: 'UTC' },
+      }],
+      flow: { type: 'block' as const, id: 'flow', steps: [] },
+    }
+    const catalog: WorkbenchAutomationInsertCatalog = {
+      items: [{
+        kind: 'trigger', capability: { id: 'schedule:cron', version: 1 }, title: 'Cron Schedule',
+        providerAvailable: true, connectionSlots: [], connectionRequirements: [], inputSchemaSupported: true,
+        inputFields: [
+          { name: 'cron', label: 'Cron', type: 'string', schemaType: 'string', required: true },
+          { name: 'timezone', label: 'Timezone', type: 'string', schemaType: 'string', required: false, defaultValue: 'UTC' },
+        ],
+      }],
+      connections: [],
+    }
+    const steps = projectAutomationSteps(source, [], new Map([['schedule:cron@1', 'Cron Schedule']]))
+    const markup = await renderToMarkup(<Inspector
+      activeStepId={steps[0]!.id}
+      canEdit
+      catalog={catalog}
+      onClose={vi.fn()}
+      onTriggerConfigChange={vi.fn()}
+      open
+      source={source}
+      steps={steps}
+      schemaUI={schemaUI}
+    />)
+
+    expect(markup).toContain('Cron Schedule')
+    expect(markup).toContain('Trigger configuration')
+    expect(markup).toContain('for="trigger-1-config-cron"')
+    expect(markup).toContain('value="* * * * *"')
+    expect(markup).toContain('value="UTC"')
+    expect(markup).toContain('schedule:cron@1')
+  })
+
   it('renders schema-driven Capability inputs separately from named Connection bindings', async () => {
     const capabilitySource = {
       triggers: [],

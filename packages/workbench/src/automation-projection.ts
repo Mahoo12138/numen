@@ -128,7 +128,7 @@ export function projectAutomationSteps(
     id: `trigger:${trigger.id}`,
     sourceId: trigger.id,
     kind: 'trigger',
-    label: humanize(trigger.id, 'Trigger'),
+    label: capabilityTitles.get(`${trigger.capability.id}@${trigger.capability.version}`) ?? humanize(trigger.id, 'Trigger'),
     summary: `Trigger · ${trigger.capability.id}@${trigger.capability.version}${describeConnections(trigger)}`,
     icon: Radio,
     tone: 'neutral',

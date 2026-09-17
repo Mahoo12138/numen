@@ -20,6 +20,7 @@ import {
   workbenchAutomationInsertCatalogQueryRef,
   workbenchAutomationVariableCatalogQueryRef,
   workbenchAutomationsIndexQueryRef,
+  workbenchCreateAutomationActionRef,
   workbenchPublishAutomationDraftActionRef,
   workbenchSaveAutomationDraftActionRef,
   workbenchConnectionsIndexQueryRef,
@@ -69,6 +70,7 @@ describe('Workbench Runtime plugin', () => {
     expect(root.console.get(workbenchAutomationInsertCatalogQueryRef)).toMatchObject({ providerAvailable: false })
     expect(root.console.get(workbenchAutomationVariableCatalogQueryRef)).toMatchObject({ providerAvailable: false })
     expect(root.console.get(workbenchAutomationsIndexQueryRef)).toMatchObject({ providerAvailable: false })
+    expect(root.console.get(workbenchCreateAutomationActionRef)).toMatchObject({ providerAvailable: false })
     expect(root.console.get(workbenchPublishAutomationDraftActionRef)).toMatchObject({ providerAvailable: false })
     expect(root.console.get(workbenchSaveAutomationDraftActionRef)).toMatchObject({ providerAvailable: false })
     for (const ref of [workbenchActivateAutomationRevisionActionRef, workbenchSetAutomationEnabledActionRef, workbenchCredentialsIndexQueryRef, workbenchCreateCredentialActionRef, workbenchRotateCredentialActionRef, workbenchDeleteCredentialActionRef]) {
@@ -96,6 +98,7 @@ describe('Workbench Runtime plugin', () => {
     expect(root.console.get(workbenchAutomationInsertCatalogQueryRef)).toBeUndefined()
     expect(root.console.get(workbenchAutomationVariableCatalogQueryRef)).toBeUndefined()
     expect(root.console.get(workbenchAutomationsIndexQueryRef)).toBeUndefined()
+    expect(root.console.get(workbenchCreateAutomationActionRef)).toBeUndefined()
     expect(root.console.get(workbenchPublishAutomationDraftActionRef)).toBeUndefined()
     expect(root.console.get(workbenchSaveAutomationDraftActionRef)).toBeUndefined()
     for (const ref of [workbenchActivateAutomationRevisionActionRef, workbenchSetAutomationEnabledActionRef, workbenchCredentialsIndexQueryRef, workbenchCreateCredentialActionRef, workbenchRotateCredentialActionRef, workbenchDeleteCredentialActionRef]) {

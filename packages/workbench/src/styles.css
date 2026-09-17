@@ -169,6 +169,14 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   letter-spacing: .06em;
 }
 .sidebar-actions { display: flex; align-items: center; gap: 2px; }
+.automation-create-form { display: grid; gap: 7px; padding: 11px 14px; border-bottom: 1px solid var(--wb-border); background: #fff; }
+.automation-create-form label { color: var(--wb-muted); font-size: 10px; font-weight: 650; letter-spacing: .03em; }
+.automation-create-form input { width: 100%; height: 30px; padding: 0 8px; border: 1px solid var(--wb-border-strong); border-radius: 4px; font: inherit; }
+.automation-create-form p { margin: 0; color: #a13a2d; font-size: 10px; line-height: 1.4; }
+.automation-create-form div { display: flex; gap: 6px; }
+.automation-create-form button { height: 28px; padding: 0 9px; border: 1px solid var(--wb-border-strong); border-radius: 4px; background: white; cursor: pointer; font-size: 10px; }
+.automation-create-form button:first-child { border-color: var(--wb-accent); background: var(--wb-accent); color: white; }
+.automation-create-form button:disabled { cursor: default; opacity: .55; }
 .automation-list { padding-top: 4px; }
 .automation-row { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 32px; min-height: 44px; color: #343b46; }
 .automation-row[data-active="true"] { background: var(--wb-selection); color: #202a50; }
@@ -599,6 +607,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .schema-field-label, .connection-binding-field > label > span:first-child { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 4px; padding: 7px 7px 0 0; overflow-wrap: anywhere; }
 .schema-field-label label { min-height: 0; color: inherit; font: inherit; }
 .schema-value-editor { display: grid; grid-template-columns: 92px minmax(0, 1fr); align-items: start; gap: 5px; min-width: 0; }
+.schema-value-editor.trigger-config-editor { grid-template-columns: minmax(0, 1fr); }
 .schema-value-control { display: grid; min-width: 0; }
 .schema-value-control > input, .schema-value-control > select, .schema-value-control > textarea, .connection-binding-field select { width: 100%; }
 .schema-value-mode { width: 100%; color: var(--wb-muted); font-size: 10px; }

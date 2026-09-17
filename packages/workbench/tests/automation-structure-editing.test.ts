@@ -52,11 +52,14 @@ describe('Canvas structural Source commands', () => {
     expect(projectAutomationSteps(original)).toHaveLength(4)
   })
 
-  it('keeps a valid empty flow when removing a root leaf or structured control and protects Triggers', () => {
+  it('keeps a valid empty flow when removing a root leaf or structured control and deletes Trigger declarations', () => {
     const original = { ...source(wait('root')), triggers: [{ id: 'trigger', capability: { id: 'test:event', version: 1 }, config: {} }] }
     expect(apply(original, { type: 'DELETE_STEP', nodeId: 'root' }).source).toEqual({ ...original, flow: block('root', []) })
-    expect(options(original, 'trigger').canDelete).toBe(false)
-    expect(apply(original, { type: 'DELETE_STEP', nodeId: 'trigger' }).source).toBe(original)
+    expect(options(original, 'trigger').canDelete).toBe(true)
+    expect(apply(original, { type: 'DELETE_STEP', nodeId: 'trigger' })).toEqual({
+      source: { ...original, triggers: [] },
+      selectedNodeId: undefined,
+    })
     const root = source({ type: 'foreach', id: 'loop', items: { type: 'literal', value: [] }, body: block('body', [wait('child')]) })
     expect(projectAutomationSteps(apply(root, { type: 'DELETE_STEP', nodeId: 'loop' }).source)).toEqual([])
   })

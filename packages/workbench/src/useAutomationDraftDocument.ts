@@ -355,6 +355,7 @@ export interface AutomationDraftDocumentModel {
   insert(item: WorkbenchAutomationInsertItem): void
   selectNode(nodeId?: string): void
   setCapabilityConnection(nodeId: string, slotName: string, connectionId?: string): void
+  setTriggerConfig(nodeId: string, fieldName: string, value?: NumenValue): void
   setExtensionInput(nodeId: string, fieldName: string, expression?: ValueExpr): void
   setCapabilityInput(nodeId: string, fieldName: string, expression?: ValueExpr): void
   setAutomationInputs(inputs: AutomationSource['inputs']): void
@@ -476,6 +477,12 @@ export function useAutomationDraftDocument({
       command: { type: 'SET_CAPABILITY_INPUT', nodeId, fieldName, ...(expression ? { expression } : {}) },
     })
   }
+  const setTriggerConfig = (nodeId: string, fieldName: string, value?: NumenValue) => {
+    dispatch({
+      type: 'EDIT',
+      command: { type: 'SET_TRIGGER_CONFIG', nodeId, fieldName, ...(value !== undefined ? { value } : {}) },
+    })
+  }
   const setControlExpression = (nodeId: string, field: 'condition' | 'items', expression: ValueExpr) => {
     dispatch({ type: 'EDIT', command: { type: 'SET_CONTROL_EXPRESSION', nodeId, field, expression } })
   }
@@ -530,6 +537,7 @@ export function useAutomationDraftDocument({
     selectNode,
     setCapabilityConnection,
     setCapabilityInput,
+    setTriggerConfig,
     setExtensionInput,
     setAutomationInputs: inputs => dispatch({ type: 'EDIT', command: { type: 'SET_AUTOMATION_INPUTS', inputs } }),
     setControlExpression,
