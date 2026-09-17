@@ -20,7 +20,7 @@ async function startDogfoodRuntime(configPath: string): Promise<NumenApplication
   return application
 }
 
-describe('MVP Cron to Echo dogfood', () => {
+describe('MVP Cron to Echo runtime integration', () => {
   it('runs on schedule and restores the active subscription and output after restart', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-09-17T07:59:30.000Z'))

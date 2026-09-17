@@ -19,11 +19,13 @@
     "numen": "tsx packages/cli/src/bin.ts",
     "dev": "pnpm numen start",
     "start": "node packages/cli/dist/bin.js start",
+    "test:e2e": "pnpm build && playwright test",
     "typecheck": "tsc -b --pretty",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.15.0",
     "@vitejs/plugin-vue-jsx": "5.1.6",
