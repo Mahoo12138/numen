@@ -263,16 +263,47 @@ export function reduceAutomationDraftDocument(
     case 'SAVE_SUCCESS': {
       if (!state.document || !state.pendingSave) return state
       const editedDuringSave = state.editRevision !== state.pendingSave.editRevision
+      const document = editedDuringSave
+        ? {
+            ...state.document,
+            version: action.result.draft.version,
+            updatedAt: action.result.draft.updatedAt,
+            ...(action.result.draft.baseRevisionId ? { baseRevisionId: action.result.draft.baseRevisionId } : {}),
+          }
+        : toDocument(state.document.automationId, action.result.draft)
+      if (state.publishPending) {
+        return editedDuringSave
+          ? {
+              ...state,
+              document,
+              savePhase: 'SAVING',
+              pendingSave: {
+                automationId: document.automationId,
+                expectedVersion: document.version,
+                source: document.source,
+                presentation: document.presentation,
+                editRevision: state.editRevision,
+              },
+              pendingPublish: undefined,
+              conflict: undefined,
+              saveError: undefined,
+            }
+          : {
+              ...state,
+              document,
+              savePhase: 'CLEAN',
+              pendingSave: undefined,
+              pendingPublish: {
+                automationId: document.automationId,
+                expectedVersion: document.version,
+              },
+              conflict: undefined,
+              saveError: undefined,
+            }
+      }
       return {
         ...state,
-        document: editedDuringSave
-          ? {
-              ...state.document,
-              version: action.result.draft.version,
-              updatedAt: action.result.draft.updatedAt,
-              ...(action.result.draft.baseRevisionId ? { baseRevisionId: action.result.draft.baseRevisionId } : {}),
-            }
-          : toDocument(state.document.automationId, action.result.draft),
+        document,
         savePhase: editedDuringSave ? 'DIRTY' : 'CLEAN',
         pendingSave: undefined,
         conflict: undefined,
@@ -287,6 +318,8 @@ export function reduceAutomationDraftDocument(
         pendingSave: undefined,
         conflict,
         saveError: conflict ? undefined : errorRecord(action.error).message ?? 'Draft autosave failed.',
+        publishPending: false,
+        pendingPublish: undefined,
       }
     }
     case 'RETRY_SAVE':
@@ -300,7 +333,34 @@ export function reduceAutomationDraftDocument(
         saveError: undefined,
       }
     case 'PUBLISH_REQUEST':
-      if (!state.document || state.savePhase !== 'CLEAN' || state.publishPending) return state
+      if (!state.document || state.publishPending) return state
+      if (state.savePhase === 'DIRTY') {
+        return {
+          ...state,
+          savePhase: 'SAVING',
+          pendingSave: {
+            automationId: state.document.automationId,
+            expectedVersion: state.document.version,
+            source: state.document.source,
+            presentation: state.document.presentation,
+            editRevision: state.editRevision,
+          },
+          publishPending: true,
+          pendingPublish: undefined,
+          publishError: undefined,
+          problems: [],
+        }
+      }
+      if (state.savePhase === 'SAVING') {
+        return {
+          ...state,
+          publishPending: true,
+          pendingPublish: undefined,
+          publishError: undefined,
+          problems: [],
+        }
+      }
+      if (state.savePhase !== 'CLEAN') return state
       return {
         ...state,
         publishPending: true,
@@ -378,6 +438,13 @@ function saveMessage(phase: AutomationDraftSavePhase): string {
     case 'ERROR': return 'Save failed'
     case 'RELOADING': return 'Reloading Draft…'
   }
+}
+
+/** @internal Kept explicit because a blur may move CLEAN to DIRTY before the Publish click fires. */
+export function canPublishAutomationDraft(state: AutomationDraftDocumentState): boolean {
+  return !!state.document
+    && !state.publishPending
+    && (state.savePhase === 'CLEAN' || state.savePhase === 'DIRTY' || state.savePhase === 'SAVING')
 }
 
 export function useAutomationDraftDocument({
@@ -515,7 +582,7 @@ export function useAutomationDraftDocument({
         && !state.value.publishPending
     },
     get canPublish() {
-      return !!state.value.document && state.value.savePhase === 'CLEAN' && !state.value.publishPending
+      return canPublishAutomationDraft(state.value)
     },
     get canUndo() {
       return !!state.value.document

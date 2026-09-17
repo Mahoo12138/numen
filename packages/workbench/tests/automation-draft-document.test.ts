@@ -7,6 +7,7 @@ import type {
 } from '../src/contracts.js'
 import { applyAutomationSourceCommand } from '../src/automation-source-editing.js'
 import {
+  canPublishAutomationDraft,
   reduceAutomationDraftDocument,
   type AutomationDraftDocumentState,
 } from '../src/useAutomationDraftDocument.js'
@@ -542,5 +543,71 @@ describe('local Automation Draft document', () => {
     expect(state.publishError).toBeUndefined()
     expect(state.problems).toEqual([expect.objectContaining({ code: 'WAIT_SOURCE_INVALID' })])
     expect(state.document?.version).toBe(1)
+  })
+
+  it('queues one Publish request through the save caused by a focused field losing focus', () => {
+    let state = reduceAutomationDraftDocument(loadedState(), {
+      type: 'EDIT',
+      command: { type: 'INSERT', item: waitItem },
+    })
+    expect(state.savePhase).toBe('DIRTY')
+    expect(canPublishAutomationDraft(state)).toBe(true)
+
+    state = reduceAutomationDraftDocument(state, { type: 'PUBLISH_REQUEST' })
+    expect(canPublishAutomationDraft(state)).toBe(false)
+    expect(state).toMatchObject({
+      savePhase: 'SAVING',
+      publishPending: true,
+      pendingSave: { expectedVersion: 1 },
+      pendingPublish: undefined,
+    })
+
+    state = reduceAutomationDraftDocument(state, {
+      type: 'SAVE_SUCCESS',
+      result: { draft: draft(2, state.document!.source) },
+    })
+    expect(state).toMatchObject({
+      savePhase: 'CLEAN',
+      publishPending: true,
+      pendingSave: undefined,
+      pendingPublish: { expectedVersion: 2 },
+    })
+  })
+
+  it('publishes the newest snapshot when an edit already landed during autosave', () => {
+    let state = reduceAutomationDraftDocument(loadedState(), {
+      type: 'EDIT',
+      command: { type: 'INSERT', item: waitItem },
+    })
+    state = reduceAutomationDraftDocument(state, { type: 'SAVE_REQUEST' })
+    const firstSaveSource = state.pendingSave!.source
+    state = reduceAutomationDraftDocument(state, {
+      type: 'EDIT',
+      command: { type: 'INSERT', item: waitItem },
+    })
+    state = reduceAutomationDraftDocument(state, { type: 'PUBLISH_REQUEST' })
+
+    state = reduceAutomationDraftDocument(state, {
+      type: 'SAVE_SUCCESS',
+      result: { draft: draft(2, firstSaveSource) },
+    })
+    expect(state).toMatchObject({
+      savePhase: 'SAVING',
+      publishPending: true,
+      pendingSave: { expectedVersion: 2, editRevision: 2 },
+      pendingPublish: undefined,
+    })
+    expect(state.pendingSave!.source.flow).toMatchObject({ steps: [{ id: 'wait-1' }, { id: 'wait-2' }] })
+
+    state = reduceAutomationDraftDocument(state, {
+      type: 'SAVE_SUCCESS',
+      result: { draft: draft(3, state.pendingSave!.source) },
+    })
+    expect(state).toMatchObject({
+      savePhase: 'CLEAN',
+      publishPending: true,
+      pendingSave: undefined,
+      pendingPublish: { expectedVersion: 3 },
+    })
   })
 })
