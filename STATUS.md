@@ -222,10 +222,13 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Built-in `schedule:cron` Trigger with five-field cron, IANA timezone evaluation, deterministic deduplication, and restart resubscription
 - [x] First-run Docker/Compose deployment with generated Master Key, loopback-only Workbench, persistent SQLite/Resources volume, readiness health check, and shared proxy environment
 - [x] Documented cold backup, restore constraints, and forward-only container upgrade runbook
+- [x] First-run Automation creation Action and Workbench flow with stable selection and live index refresh
+- [x] Trigger authoring through the shared insert catalog, Canvas, literal Inspector fields, Connection bindings, autosave, undo/redo, sorting, and deletion
+- [x] Fresh-install Cron → Echo browser dogfood through publish, activate, enable, automatic Run inspection, container recreation, and next-trigger recovery
 
 ## Next
 
-1. Complete the fresh-install Cron → Echo MVP dogfood E2E, including Run inspection and container recreation
+1. Cut the MVP release candidate: freeze the validated surface, add a release checklist, and publish a versioned image
 
 ## Design Review
 
@@ -244,6 +247,8 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - **Schedule Trigger seam — pass:** the built-in `schedule:cron` Trigger owns only its next ephemeral timer; active Revision/generation ownership, durable acceptance, deduplication, and Run creation remain in TriggerService/Scheduler. Five-field expressions support lists, ranges, and steps, evaluate against an IANA timezone, and emit a deterministic eventId from the scheduled instant. Restart recreates the subscription from durable enabled/active Automation state and schedules the next future occurrence; it does not synthesize missed runs.
 
 - **First-run deployment seam — pass:** the production image builds the Node Runtime, native SQLite binding, and Workbench assets together, runs as a non-root user, requires an explicit Credential Master Key, exposes readiness as its health check, and keeps all mutable state in one named volume. Compose publishes only to host loopback and passes the existing global proxy environment. A real container smoke test reached migration v13 with all three built-in Capabilities available, then removed and recreated the container against the same volume while preserving the database inode and returning to healthy readiness.
+
+- **MVP dogfood seam — pass:** an empty persistent volume now supports creating an Automation entirely in Workbench, inserting and configuring `schedule:cron`, adding `demo:echo`, publishing Revision 1, activating it, enabling desired state, receiving automatic completed Runs, and inspecting Flow plus Journal timeline. Recreating the production container against the same volume preserved the enabled active Revision and restored one desired/active Trigger subscription; the next scheduled Run completed after restart. Desktop and 390×844 browser checks showed no Console errors. A deterministic Runtime test now covers the same two-occurrence restart path without wall-clock or network dependencies.
 
 - **Automation inputs seam — pass:** a serializable Core declaration contract owns type/default/required validation. Compiler diagnostics and input-variable projection use the same Source names; the Scheduler resolves parameters from the active immutable Revision before acceptance and persists defaults for manual and event-triggered Runs. Workbench Settings uses full-document commands, while the manual form pins a queried Revision and submits through typed Console procedures with explicit conflict reload and abort-safe lifecycle. Browser QA at 1440px/390px verifies declaration editing, publish versus activation separation, required/default/JSON validation, execution completion, and stale-form fencing; the JSON editor preserves temporary text and prevents native change events from entering value callbacks.
 
@@ -289,7 +294,7 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 ```text
 Typecheck: passing
 Build: passing
-Tests: 63 files, 290 tests passing
+Tests: 64 files, 294 tests passing
 CLI config validate: passing
 CLI doctor: passing
 Docker image build/start/health/recreate: passing
