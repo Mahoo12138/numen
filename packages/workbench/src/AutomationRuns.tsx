@@ -2,6 +2,7 @@ import { computed, reactive } from 'vue'
 import { workbenchRunsIndexQueryRef, type WorkbenchRunsIndex, type WorkbenchRunsQueryInput, type WorkbenchRunStatus } from './contracts.js'
 import { ManualRunForm } from './ManualRunForm.js'
 import { coreWorkbenchRunFlowRoute } from './routes.js'
+import { SelectMenu } from './SelectMenu.js'
 import type { WorkbenchPageProps } from './types.js'
 import { useConsoleQuery } from './useConsoleQuery.js'
 import { defineSetupComponent } from './vue-component.js'
@@ -24,6 +25,10 @@ export function previousRunHistory(position: RunHistoryPosition): void {
 }
 const statuses: WorkbenchRunStatus[] = ['QUEUED', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLING', 'CANCELLED']
 const label = (status: string) => status.charAt(0) + status.slice(1).toLowerCase()
+const statusOptions = [
+  { value: '', label: 'All statuses' },
+  ...statuses.map(status => ({ value: status, label: label(status) })),
+]
 const time = (value: string) => new Date(value).toLocaleString()
 
 interface AutomationRunsProps extends WorkbenchPageProps { automationId: string }
@@ -43,9 +48,13 @@ export const AutomationRuns = defineSetupComponent<AutomationRunsProps>('Automat
       <div class="automation-run-heading"><div><h2>Run history</h2><p>All revisions · newest first · 20 per page</p></div>
         <button class="secondary-button" disabled={index.status === 'LOADING'} onClick={() => { delete position.cursor; position.history = []; reload() }} type="button">Latest runs</button>
       </div>
-      <label class="automation-run-filter">Status<select aria-label="Run status" value={position.status} onChange={event => changeRunHistoryStatus(position, (event.target as HTMLSelectElement).value as RunHistoryPosition['status'])}>
-        <option value="">All statuses</option>{statuses.map(status => <option key={status} value={status}>{label(status)}</option>)}
-      </select></label>
+      <div class="automation-run-filter"><span id="run-status-label">Status</span><SelectMenu
+        ariaLabel="Run status"
+        options={statusOptions}
+        placement="top"
+        value={position.status}
+        onChange={value => changeRunHistoryStatus(position, value as RunHistoryPosition['status'])}
+      /></div>
       {index.status === 'READY' ? <>
         <p class="automation-run-totals">{index.data.summary.total} total · {index.data.summary.active} active · {index.data.summary.queued} queued · {index.data.summary.completed} completed · {index.data.summary.failed} failed · {index.data.summary.cancelled} cancelled</p>
         {index.data.items.length ? <div class="runs-table-wrap"><table class="runs-table">

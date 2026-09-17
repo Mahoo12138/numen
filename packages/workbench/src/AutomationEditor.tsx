@@ -4,6 +4,7 @@ import {
   Copy,
   Expand,
   ChevronDown,
+  PanelRight,
   ArrowUp,
   ArrowDown,
   Plus,
@@ -51,6 +52,7 @@ export interface AutomationEditorProps {
   manualRunForm?: VNodeChild
   conflictRecovery?: VNodeChild
   activation?: AutomationActivationView
+  inspectorOpen?: boolean
   onActivateRevision?(revisionId: string): void
   onSetEnabled?(enabled: boolean): void
   onStepChange(id: string): void
@@ -87,6 +89,7 @@ export function AutomationEditor({
   steps: projectedSteps,
   authoring,
   activation,
+  inspectorOpen,
   conflictRecovery,
   inputSettings,
   manualRunForm,
@@ -153,7 +156,14 @@ export function AutomationEditor({
                 type="button"
               >{authoring.publishPending ? 'Publishing…' : 'Publish'}</button>
             ) : null}
-            <button class="mobile-inspector-button" onClick={onOpenInspector} type="button">Inspector</button>
+            <button
+              aria-expanded={inspectorOpen ?? false}
+              aria-label={inspectorOpen ? 'Close Inspector' : 'Open Inspector'}
+              class="mobile-inspector-button"
+              data-active={inspectorOpen ?? false}
+              onClick={onOpenInspector}
+              type="button"
+            ><PanelRight aria-hidden="true" size={14} /><span>Inspector</span></button>
           </div>
         </div>
         {liveAutomations?.length && automationId && onAutomationChange ? (

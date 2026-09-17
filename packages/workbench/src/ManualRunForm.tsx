@@ -101,11 +101,14 @@ export const ManualRunForm = defineSetupComponent<ManualRunProps>('ManualRunForm
           value={values.value} disabled={pending.value || requiresReload.value || uncertain.value} {...(props.schemaUI ? { schemaUI: props.schemaUI } : {})}
           onChange={value => { values.value = value as Record<string, NumenValue> ?? {} }} onValidationChange={value => { invalid.value.parameters = value }} />}
       {form.value.inputs && !Object.keys(form.value.inputs).length ? <p>No parameters are required.</p> : null}
-      <button class="primary-button" type="submit" disabled={pending.value || requiresReload.value || Object.values(invalid.value).some(Boolean)}>{pending.value ? 'Starting…' : uncertain.value ? 'Retry Start Run' : 'Start Run'}</button>
+      <div class="manual-run-actions">
+        <button class="primary-button" type="submit" disabled={pending.value || requiresReload.value || Object.values(invalid.value).some(Boolean)}>{pending.value ? 'Starting…' : uncertain.value ? 'Retry Start Run' : 'Start Run'}</button>
+        <button class="secondary-button" disabled={pending.value || loading.value} onClick={() => void load()} type="button">Reload parameters</button>
+      </div>
     </form> : null}
     {issues.value.filter(issue => !form.value?.inputs || !Object.hasOwn(form.value.inputs, issue.field)).map((issue, i) => <p class="inspector-field-error" key={i} role="alert">{issue.field}: {issue.message}</p>)}
     {message.value ? <p role={runId.value ? 'status' : 'alert'}>{message.value}</p> : null}
-    {runId.value && props.navigation ? <button class="secondary-button" onClick={() => props.navigation?.navigate(coreWorkbenchRunFlowRoute, { parameters: { id: runId.value! } })} type="button">View Run</button> : null}
-    <button class="secondary-button" disabled={pending.value || loading.value} onClick={() => void load()} type="button">Reload parameters</button>
+    {runId.value && props.navigation ? <div class="manual-run-result-actions"><button class="secondary-button" onClick={() => props.navigation?.navigate(coreWorkbenchRunFlowRoute, { parameters: { id: runId.value! } })} type="button">View Run</button></div> : null}
+    {!form.value ? <div class="manual-run-actions"><button class="secondary-button" disabled={pending.value || loading.value} onClick={() => void load()} type="button">Reload parameters</button></div> : null}
   </section>
 })

@@ -179,6 +179,7 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
     ...(automationId.value ? { automationId: automationId.value } : {}),
     activeStepId: activeStepId.value,
     activeTab: activeTab.value,
+    inspectorOpen: props.inspectorOpen,
     ...(effectiveDetailState.value ? { detailState: effectiveDetailState.value } : {}),
     ...(props.consoleClient ? { insertCatalogState } : {}),
     ...(props.consoleClient ? { steps: steps.value } : {}),
@@ -234,7 +235,7 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
         if (effectiveDetail.value) activation.setEnabled(effectiveDetail.value.automation, enabled)
       },
     } : {}),
-    onOpenInspector: () => props.onInspectorOpenChange(true),
+    onOpenInspector: () => props.onInspectorOpenChange(!props.inspectorOpen),
     onStepChange: id => {
       const step = steps.value.find(item => item.id === id)
       if (props.consoleClient) authoring.selectNode(step?.sourceId)
@@ -268,6 +269,11 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
       <AutomationSidebar
         {...(automationId.value ? { activeId: automationId.value } : {})}
         onChange={id => { requestedAutomationId.value = id }}
+        onOpen={(id, tab) => {
+          requestedAutomationId.value = id
+          activeTab.value = tab
+          if (tab !== 'Editor') props.onInspectorOpenChange(false)
+        }}
         onCreate={createAutomation}
         onCreateDismiss={() => { createAutomationError.value = undefined }}
         onReload={reloadIndex}
