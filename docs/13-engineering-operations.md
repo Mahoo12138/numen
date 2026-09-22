@@ -286,6 +286,12 @@ docker compose exec numen node packages/cli/dist/bin.js doctor \
 安装了 `httpSocks` 时也支持 SOCKS URL。容器访问宿主机代理时可以使用
 `host.docker.internal`；Compose 已把该名称映射到宿主机 gateway。
 
+需要直连 NAS 或 Home Assistant 时，在 `.env` 中设置
+`NO_PROXY=localhost,127.0.0.1,::1,host.docker.internal,.home.arpa`，按实际主机增删。
+开发与发布 Compose 都将此值传入容器；未定义大写变量时兼容 `no_proxy`。
+地址规则见 [出站 HTTP Contract](16-outbound-http-proxy.md#31-直连例外no_proxy)。
+环境值在启动时固定，修改 `.env` 后执行 `docker compose up -d` 重建容器配置。
+
 ### 10.2 生产约束
 
 - 同一个 SQLite 数据卷只运行一个 Numen 实例。

@@ -16,6 +16,8 @@ plugins:
   # proxy URL when direct access is unavailable, e.g. http://127.0.0.1:7890.
   http:
     timeout: 30000
+    # noProxy: localhost,127.0.0.1,::1,.home.arpa
+    # Omitted noProxy reads NO_PROXY (then no_proxy) once at startup.
   httpSocks: {}
   demo: {}
   httpIntegration: {}

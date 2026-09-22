@@ -69,6 +69,8 @@ plugins:
     timeout: 30000
     # proxyAgent: http://127.0.0.1:7890
     # proxyAgentEnv: NUMEN_HTTP_PROXY
+    # noProxy: localhost,127.0.0.1,::1,.home.arpa
+    # noProxyEnv: NO_PROXY
 ```
 
 优先级：
@@ -84,6 +86,34 @@ direct
 `proxyAgentEnv` 默认是 `NUMEN_HTTP_PROXY`；设置为空字符串可以关闭环境变量 fallback。环境变量只在 Runtime 启动时读取一次，变更后应重启 Runtime。代理 URL 可能包含秘密，生产部署优先使用环境变量，不应把带认证信息的 URL 写进日志、Run、Timeline 或诊断输出。
 
 默认 Runtime 内置支持 `http://`、`https://`、`socks://`、`socks4://`、`socks4a://`、`socks5://` 和 `socks5h://`。HTTP(S) 由 Cordis HTTP Core 提供；SOCKS 由兼容 Cordis 4 的 `@cordisjs/plugin-http-socks` 在相同 `ctx.http.proxy()` seam 注册。旧的 `plugin-proxy-agent` 仍依赖 Cordis 3，因此不纳入 Runtime。
+
+### 3.1 直连例外（NO_PROXY）
+
+共享代理配置后，可用 `noProxy` 指定直连目标。未配置该字段时，读取 `noProxyEnv`
+指定的环境变量（默认 `NO_PROXY`）；只有默认的 `NO_PROXY` 未定义时才继续读取
+小写 `no_proxy`。显式 `noProxy: ''` 禁用全部直连例外，`noProxyEnv: ''` 仅关闭环境
+fallback。环境值在 HTTP Service 启动时读取一次；修改后重启 Runtime。
+
+规则以逗号或空白分隔：
+
+| 规则 | 匹配范围 |
+|---|---|
+| `example.com` / `.example.com` | 本域及其子域，不匹配 `notexample.com` 或 `example.com.evil.test` |
+| `*.example.com` | 仅子域 |
+| `localhost:8123` | 该主机的指定端口；省略端口则匹配所有端口 |
+| `127.0.0.1` / `::1` / `[::1]:8123` | IP 字面量；IPv6 带端口必须加方括号 |
+| `*` | 所有目标直连 |
+
+匹配忽略域名大小写与末尾的点，支持国际化域名；HTTP/WS 默认端口是 80，HTTPS/WSS
+是 443。仅根据 URL 主机匹配，不查询 DNS，也不隐式绕过私有网络。CIDR、URL、路径、
+PAC 和其他 glob 规则不受支持；无效规则使 HTTP Service 配置失败，错误不回显规则内容。
+域名与独立 `*` 的语义参考 [curl NO_PROXY 文档](https://curl.se/libcurl/c/CURLOPT_NOPROXY.html)，
+上表是 Numen 的具体支持范围。
+
+直连规则是宿主级策略，也适用于 `extend()` 或请求级选择的代理。未匹配的目标继续
+使用已解析的代理；未配置代理时保持直连。HTTP 自动重定向对每一跳重新选择路径，
+WebSocket 握手复用相同路由。实现保留 Cordis 的代理 factory 扩展，支持 HTTP(S) 与
+SOCKS；复用的代理连接与直连连接随所属 Effect 卸载而关闭。Integration 无需改变代码。
 
 ## 4. 行为约束
 
@@ -133,7 +163,7 @@ body
 
 ## 6. 当前边界
 
-- 尚未提供 `NO_PROXY`/按域名路由；需要时应在同一 HTTP seam 增加宿主级路由，而不是让每个 Integration 自行实现。
+- 已提供宿主级 `NO_PROXY` 路由；CIDR、DNS 解析后的地址匹配和 PAC 尚不支持。
 - 尚未提供 mTLS、客户端证书、统一重试或断路器。
 - HTTP Module 不自动重试。是否安全重试由 Capability 语义、Scheduler policy 和上游协议共同决定。
 - `http:request` 只允许 `http:` / `https:` 目标；Cordis 的 `file:` / `data:` handler 不属于 Automation 权限面。

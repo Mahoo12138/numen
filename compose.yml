@@ -7,6 +7,7 @@ services:
     environment:
       NUMEN_MASTER_KEY: ${NUMEN_MASTER_KEY:?set NUMEN_MASTER_KEY in .env first}
       NUMEN_HTTP_PROXY: ${NUMEN_HTTP_PROXY:-}
+      NO_PROXY: ${NO_PROXY-${no_proxy-}}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
