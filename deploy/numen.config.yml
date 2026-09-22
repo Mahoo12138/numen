@@ -2,6 +2,8 @@ version: 1
 dataDir: /var/lib/numen
 
 plugins:
+  i18n:
+    locales: [en-US]
   database:
     path: /var/lib/numen/numen.db
   capabilities: {}

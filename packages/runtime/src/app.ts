@@ -36,6 +36,7 @@ import {
   workbenchRuntimePlugin,
 } from '@numen/workbench/runtime'
 import { Context } from 'cordis'
+import { I18nService } from '@numen/i18n'
 import { sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { healthPlugin, readinessPlugin } from './health.js'
@@ -56,6 +57,7 @@ export interface NumenApplication {
 }
 
 const builtins = {
+  i18n: I18nService,
   database: DatabaseService,
   capabilities: CapabilityRegistry,
   controls: ControlRegistry,

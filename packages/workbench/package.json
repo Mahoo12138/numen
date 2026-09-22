@@ -21,6 +21,10 @@
     "./runtime": {
       "types": "./dist/runtime.d.ts",
       "default": "./dist/runtime.js"
+    },
+    "./i18n": {
+      "types": "./dist/i18n.d.ts",
+      "default": "./dist/i18n.js"
     }
   },
   "scripts": {
@@ -35,6 +39,7 @@
     "@numen/console": "workspace:*",
     "@numen/core": "workspace:*",
     "@numen/credentials": "workspace:*",
+    "@numen/i18n": "workspace:*",
     "@numen/scheduler": "workspace:*",
     "@numen/webui": "workspace:*",
     "cordis": "^4.0.0-rc.8",

@@ -8,6 +8,7 @@ export default defineConfig({
   plugins: [vueJsx()],
   resolve: {
     alias: {
+      '@numen/i18n': fromRoot('./packages/i18n/src/index.ts'),
       '@numen/config': fromRoot('./packages/config/src/index.ts'),
       '@numen/core': fromRoot('./packages/core/src/index.ts'),
       '@numen/database': fromRoot('./packages/database/src/index.ts'),

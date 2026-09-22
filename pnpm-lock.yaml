@@ -157,6 +157,15 @@ importers:
         specifier: ^7.29.1
         version: 7.29.1
 
+  packages/i18n:
+    dependencies:
+      '@koishijs/i18n-utils':
+        specifier: 1.0.1
+        version: 1.0.1
+      cordis:
+        specifier: ^4.0.0-rc.8
+        version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
+
   packages/integration-demo:
     dependencies:
       '@numen/core':
@@ -291,6 +300,9 @@ importers:
       '@numen/http':
         specifier: workspace:*
         version: link:../http
+      '@numen/i18n':
+        specifier: workspace:*
+        version: link:../i18n
       '@numen/integration-demo':
         specifier: workspace:*
         version: link:../integration-demo
@@ -384,6 +396,9 @@ importers:
       '@numen/console':
         specifier: workspace:*
         version: link:../console
+      '@numen/i18n':
+        specifier: workspace:*
+        version: link:../i18n
       cordis:
         specifier: ^4.0.0-rc.8
         version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
@@ -424,6 +439,9 @@ importers:
       '@numen/credentials':
         specifier: workspace:*
         version: link:../credentials
+      '@numen/i18n':
+        specifier: workspace:*
+        version: link:../i18n
       '@numen/scheduler':
         specifier: workspace:*
         version: link:../scheduler
@@ -942,6 +960,9 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
+
+  '@koishijs/i18n-utils@1.0.1':
+    resolution: {integrity: sha512-N58UAnhMMtqS4+VGW5IwJ6U9xwXZpzrcPaJrdEBzUJ4yBKKrkHfG1ck9tvQ99SnzxhZGGcBa/SKWnHQf/omrvg==}
 
   '@lucide/vue@1.33.0':
     resolution: {integrity: sha512-8d3HnIIglHnosvsnm+IWNy8XhYYJvkf4YEgQqb74HnY3ihzdz+7XX4MxMZoyKdw7pbKOGno2HoaHTq7DH/v5AA==}
@@ -2060,6 +2081,10 @@ snapshots:
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
+
+  '@koishijs/i18n-utils@1.0.1':
+    dependencies:
+      cosmokit: 1.8.1
 
   '@lucide/vue@1.33.0(vue@3.5.41(typescript@5.9.3))':
     dependencies:

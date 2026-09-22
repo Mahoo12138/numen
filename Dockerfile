@@ -14,6 +14,7 @@ COPY packages/core/package.json packages/core/package.json
 COPY packages/credentials/package.json packages/credentials/package.json
 COPY packages/database/package.json packages/database/package.json
 COPY packages/http/package.json packages/http/package.json
+COPY packages/i18n/package.json packages/i18n/package.json
 COPY packages/integration-demo/package.json packages/integration-demo/package.json
 COPY packages/integration-http/package.json packages/integration-http/package.json
 COPY packages/integration-schedule/package.json packages/integration-schedule/package.json

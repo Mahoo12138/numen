@@ -3,6 +3,8 @@ dataDir: .numen
 
 # Core services are regular Cordis plugins; their inject declarations enforce readiness order.
 plugins:
+  i18n:
+    locales: [en-US]
   database:
     path: .numen/numen.db
   capabilities: {}

@@ -25,10 +25,15 @@
     "./schema-ui": {
       "types": "./dist/schema-ui.d.ts",
       "default": "./dist/schema-ui.js"
+    },
+    "./i18n": {
+      "types": "./dist/i18n.d.ts",
+      "default": "./dist/i18n.js"
     }
   },
   "dependencies": {
     "@numen/console": "workspace:*",
+    "@numen/i18n": "workspace:*",
     "cordis": "^4.0.0-rc.8"
   },
   "devDependencies": {
