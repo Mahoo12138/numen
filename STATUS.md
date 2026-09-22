@@ -1,6 +1,6 @@
 # Numen Development Status
 
-> Last updated: 2026-09-17
+> Last updated: 2026-09-22
 >
 > Architecture baseline: V1 Draft in [`docs/`](docs/README.md)
 
@@ -230,7 +230,25 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 
 ## Next
 
-1. Cut the MVP release candidate: freeze the validated surface, add a release checklist, and publish a versioned image
+1. Implement plugin-owned i18n for Runtime and Workbench, following Koishi's i18n utilities and service conventions, with English/Simplified Chinese catalogs and reactive language selection.
+2. Registry publication remains a separate operation: confirm registry/visibility/platforms, complete cold backup/restore acceptance, and upload/pull-test the image digest. See [the release checklist](docs/17-mvp-release.md).
+
+### Local 0.1.0 baseline
+
+- [x] Application version aligned to `0.1.0`; deployment, CI, and documentation committed by module
+- [x] Frozen MVP surface, known boundaries, release checklist, and image deployment runbook
+- [x] OCI version/revision/source labels and versioned local image build command
+- [x] Unified release verification and GitHub Actions definition for Node 22/24, browser E2E, and Linux AMD64 container gates
+- [x] Standalone image-only Compose deployment with explicit image reference and shared proxy/bypass configuration
+- [x] Isolated real-HTTP container acceptance for authoring, Echo execution, recreation, durable deduplication, session rotation, and the next Cron Run
+- [x] Combined source baseline: typecheck, 65 test files / 336 tests, production build, browser E2E, config validation, and CLI doctor passed on 2026-09-22
+- [ ] Remote CI, cold backup/restore acceptance, registry upload/pull-by-digest verification, and GitHub Release
+
+The `0.1.0` Git tag identifies the local source baseline before i18n development.
+It does not claim a published container registry digest or a remote GitHub Release.
+The earlier `0.1.0-rc.1` ARM64 image was only a local preparation snapshot; rebuild
+images from the version tag for deployment. No branch, tag, or image is pushed by
+local release verification.
 
 ## Design Review
 

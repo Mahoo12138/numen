@@ -72,3 +72,21 @@ HTTPS, or SOCKS proxy. Set `NO_PROXY` for direct destinations such as
 for production startup, backup, restore, and upgrade procedures.
 
 Architecture decisions and the planned product surface live in [`docs/`](docs/README.md).
+
+## MVP 0.1.0
+
+The current application version is `0.1.0`. Build and verify it locally:
+
+```bash
+pnpm release:verify
+pnpm image:build
+pnpm image:smoke
+```
+
+The container smoke test exercises authenticated authoring, an actual Echo Run,
+container recreation, persisted state, and the next Cron Run using an isolated
+temporary volume. It removes its test container and volume afterward.
+
+For the frozen scope, release checklist, registry publication steps, and
+`compose.release.yml` deployment, see [the release runbook](docs/17-mvp-release.md).
+No registry image is published by these local commands.

@@ -50,6 +50,7 @@
 | [14-v1-scope-open-questions.md](14-v1-scope-open-questions.md) | V1 边界、明确不做、后续开放问题 |
 | [15-reference-repositories.md](15-reference-repositories.md) | 开发参考仓库、源码阅读路线、Cordis/Koishi/Shigma/Satori/VS Code 对照图 |
 | [16-outbound-http-proxy.md](16-outbound-http-proxy.md) | 宿主级出站 HTTP、代理、取消、错误与 Integration 约束 |
+| [17-mvp-release.md](17-mvp-release.md) | MVP 候选范围冻结、发布门禁、版本镜像与发布检查表 |
 
 ## 推荐阅读顺序
 
