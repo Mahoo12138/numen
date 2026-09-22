@@ -207,3 +207,7 @@ Capability input 的 Schema 描述目标类型 `T`，Automation Editor 实际编
 `numen:automation-save-draft-copy@1` 接收 `automationId`、`requestId`、`name`、完整 `source` 与 `presentation`，返回新 Automation 的 `automationId` 和 `name`。允许保存无法编译的本地 Draft；复制不是 Publish 或 Activate。
 
 AutomationService 在同一 SQLite 事务中创建禁用的 Automation、v1 Draft 和请求去重记录，提交后发送 `numen/automation-change`。requestId 重试返回同一副本；内容指纹不同则返回 `409 DRAFT_COPY_REQUEST_CONFLICT`。首次复制时原 Automation 不存在返回 `404 AUTOMATION_NOT_FOUND`。请求记录随副本删除级联清理。数据库 v11 只新增去重表，保留已有 Draft、Revision 和运行状态。
+
+## 国际化
+
+Browser Runtime 在 Entry 加载前安装共享 i18n 服务与浏览器语言偏好服务。词条注册绑定 Entry Fiber，并与扩展快照一起暂存、激活和卸载。页面通过 `titleKey` 提供可翻译标题，Schema 元数据通过稳定 Capability/Control 标识查找词条；用户字段值保持不变。Workbench 支持英文、简体中文及跟随浏览器语言，切换不会重建 Draft。API 与插件示例见 [国际化实现](18-i18n.md)。

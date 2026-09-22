@@ -37,6 +37,14 @@ pnpm numen doctor
 pnpm numen start --safe
 ```
 
+## Languages
+
+Workbench supports English and Simplified Chinese. Use the language selector in
+the top bar, or follow the browser language. Explicit choices persist locally;
+switching languages preserves open editors and user data. Plugin translations
+use the shared Cordis i18n service and unload with their owning Entry.
+See [the i18n guide](docs/18-i18n.md) for service and Vue examples.
+
 ## Docker first run
 
 The Compose deployment keeps SQLite and Resources in one named volume, requires

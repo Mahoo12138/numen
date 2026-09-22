@@ -228,10 +228,20 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Fresh-install Cron → Echo browser dogfood through publish, activate, enable, automatic Run inspection, container recreation, and next-trigger recovery
 - [x] Automated production-browser Publish E2E covering focused field commit, autosave chaining, and immutable Revision contents
 
+### i18n after the 0.1.0 baseline
+
+- [x] Shared Node/browser `@numen/i18n` Cordis service using `@koishijs/i18n-utils@1.0.1`, with locale fallback, safe plain-text interpolation, references, override restoration, and Fiber-owned cleanup
+- [x] Browser locale detection, local preference persistence, reactive Vue adapter, and English/Simplified Chinese Workbench catalogs
+- [x] Entry locale staging coupled to Page/Renderer snapshot activation; failed generations preserve the old dictionaries
+- [x] Localized navigation, authoring, catalog metadata, forms, statuses, dates, run events, and known diagnostic explanations; user Source/configuration and raw runtime data remain unchanged
+- [x] Preserve uncommitted field input across language changes and dispose Vue before browser services on shutdown
+- [x] Catalog parity, interpolation parameters, Vue isolation/escaping, and production-browser language switching/reload/mobile/publish coverage
+- [x] Post-i18n release verification: 68 test files / 346 tests, 2 production-browser E2Es, build, config validation, and CLI doctor passed
+- [x] [Plugin API and UI integration guide](docs/18-i18n.md), with [pinned Koishi source research](docs/18-i18n-research.md)
+
 ## Next
 
-1. Implement plugin-owned i18n for Runtime and Workbench, following Koishi's i18n utilities and service conventions, with English/Simplified Chinese catalogs and reactive language selection.
-2. Registry publication remains a separate operation: confirm registry/visibility/platforms, complete cold backup/restore acceptance, and upload/pull-test the image digest. See [the release checklist](docs/17-mvp-release.md).
+1. Registry publication remains a separate operation: confirm registry/visibility/platforms, complete cold backup/restore acceptance, and upload/pull-test the image digest. See [the release checklist](docs/17-mvp-release.md).
 
 ### Local 0.1.0 baseline
 

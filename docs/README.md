@@ -51,6 +51,8 @@
 | [15-reference-repositories.md](15-reference-repositories.md) | 开发参考仓库、源码阅读路线、Cordis/Koishi/Shigma/Satori/VS Code 对照图 |
 | [16-outbound-http-proxy.md](16-outbound-http-proxy.md) | 宿主级出站 HTTP、代理、取消、错误与 Integration 约束 |
 | [17-mvp-release.md](17-mvp-release.md) | MVP 候选范围冻结、发布门禁、版本镜像与发布检查表 |
+| [18-i18n.md](18-i18n.md) | 共用词条服务、浏览器语言、Vue 接入、Entry 生命周期与验证 |
+| [18-i18n-research.md](18-i18n-research.md) | Koishi i18n 第一方源码依据与适配取舍 |
 
 ## 推荐阅读顺序
 
@@ -60,7 +62,7 @@
 
 若准备做前端：
 
-`00 → 15 → 08 → 09 → 12`
+`00 → 15 → 08 → 18 → 09 → 12`
 
 若准备写第三方插件：
 
