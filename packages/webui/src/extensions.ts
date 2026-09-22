@@ -13,6 +13,7 @@ export interface FrontendExtensionRef {
 export interface FrontendPage<Component = unknown> extends FrontendExtensionRef {
   path: string
   title: string
+  titleKey?: string
   component: Component
 }
 
@@ -399,7 +400,7 @@ export class BrowserExtensionRegistry extends Service {
     return this.active?.revision
   }
 
-  activateSnapshot(revision: number, stage: FrontendExtensionStage): void {
+  activateSnapshot(revision: number, stage: FrontendExtensionStage, beforeNotify?: () => void): void {
     if (!Number.isSafeInteger(revision) || revision < 0) {
       throw new TypeError(`invalid frontend snapshot revision: ${revision}`)
     }
@@ -409,7 +410,12 @@ export class BrowserExtensionRegistry extends Service {
     const next = stage.materialize()
     this.validateSnapshot(next)
     const previous = this.active?.state
+    const previousSnapshot = this.active
     this.active = { revision, state: next }
+    try { beforeNotify?.() } catch (error) {
+      this.active = previousSnapshot
+      throw error
+    }
     this.emitSnapshotChanges(previous, next)
   }
 

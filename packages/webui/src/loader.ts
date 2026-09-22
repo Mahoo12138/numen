@@ -1,4 +1,5 @@
 import type { ConsoleEntryManifest, ConsoleEntryManifestItem } from '@numen/console'
+import type { I18nService } from '@numen/i18n'
 import { Service, type Context, type Fiber, type Plugin } from 'cordis'
 import {
   BrowserExtensionRegistry,
@@ -148,6 +149,7 @@ export class BrowserEntryLoader extends Service {
       await this.queue
       if (!this.active) return
       this.ctx.webuiExtensions.deactivateSnapshot(this.active.revision)
+      this.localeService()?.deactivateSnapshot(this.active.revision)
       await this.disposeFibers(this.active.fibers)
       this.active = undefined
       this.state = { status: 'IDLE', entries: [] }
@@ -190,6 +192,8 @@ export class BrowserEntryLoader extends Service {
     }
 
     const stage = new FrontendExtensionStage()
+    const i18n = this.localeService()
+    const localeStage = i18n?.createStage()
     const fibers: Fiber[] = []
     const entries = [...manifest.entries].sort((left, right) => left.id.localeCompare(right.id))
     try {
@@ -199,10 +203,14 @@ export class BrowserEntryLoader extends Service {
         const stagingContext = this.ctx.extend({
           baseUrl: url,
           webuiExtensions: stage as unknown as BrowserExtensionRegistry,
+          ...(localeStage ? { i18n: localeStage as unknown as I18nService } : {}),
         })
         fibers.push(await stagingContext.plugin(module.default))
       }
-      this.ctx.webuiExtensions.activateSnapshot(manifest.revision, stage)
+      i18n?.validateSnapshot(manifest.revision)
+      this.ctx.webuiExtensions.activateSnapshot(manifest.revision, stage, () => {
+        if (i18n && localeStage) i18n.activateSnapshot(manifest.revision, localeStage)
+      })
     } catch (error) {
       await this.disposeFibers(fibers)
       return this.fail(error)
@@ -232,6 +240,10 @@ export class BrowserEntryLoader extends Service {
     }
     if (!this.active) throw failure
     return false
+  }
+
+  private localeService(): I18nService | undefined {
+    return this.ctx.get('i18n') as I18nService | undefined
   }
 
   private async disposeFibers(fibers: Fiber[]): Promise<void> {

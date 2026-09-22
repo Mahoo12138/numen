@@ -1,4 +1,5 @@
 export * from './extensions.js'
+export * from './i18n.js'
 export * from './loader.js'
 export * from './router.js'
 export * from './runtime.js'

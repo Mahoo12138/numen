@@ -1,4 +1,5 @@
 import type { ConsoleEntryManifest } from '@numen/console'
+import { I18nService } from '@numen/i18n'
 import { Context, type Plugin } from 'cordis'
 import { describe, expect, it, vi } from 'vitest'
 import {
@@ -41,6 +42,39 @@ function pagePlugin(
 }
 
 describe('BrowserEntryLoader', () => {
+  it('commits locale and Page generations together and preserves translations on failed replacement', async () => {
+    const manifest: ConsoleEntryManifest = { revision: 1,
+      entries: [{ id: 'plugin:page', url: '/assets/page.js' }], unavailable: [] }
+    const root = new Context()
+    await root.plugin(I18nService)
+    await root.plugin(BrowserExtensionRegistry)
+    await root.plugin(SchemaUIRegistry)
+    await root.plugin(BrowserConsoleClient, { environment: browserEnvironment(() => manifest) })
+    let fail = false
+    const observed: string[] = []
+    root.on('numen/webui-extension-change', () => observed.push(root.i18n.text(['zh-CN'], 'plugin.title')))
+    const importer: BrowserEntryModuleImporter = async () => {
+      const generation = manifest.revision
+      const plugin = (ctx: Context) => {
+        ctx.i18n.define(ctx, 'zh-CN', { plugin: { title: `第 ${generation} 代` } })
+        expect(root.i18n.text(['zh-CN'], 'plugin.title')).toBe(generation === 1 ? 'plugin.title' : '第 1 代')
+        ctx.webuiExtensions.page(ctx, { id: 'plugin:page', version: 1, path: fail ? 'invalid' : '/plugin', title: 'Plugin', component: {} })
+      }
+      plugin.inject = ['webuiExtensions', 'i18n']
+      return { default: plugin }
+    }
+    await root.plugin(BrowserEntryLoader, { moduleImporter: importer })
+    expect(observed).toEqual(['第 1 代'])
+    manifest.revision = 2; fail = true
+    expect(await root.webuiLoader.reconcile()).toBe(false)
+    expect(root.i18n.text(['zh-CN'], 'plugin.title')).toBe('第 1 代')
+    expect(observed).toEqual(['第 1 代'])
+    manifest.revision = 3; fail = false
+    expect(await root.webuiLoader.reconcile()).toBe(true)
+    expect(root.i18n.text(['zh-CN'], 'plugin.title')).toBe('第 3 代')
+    expect(observed.at(-1)).toBe('第 3 代')
+    await root.fiber.dispose()
+  })
   it('keeps modules staged until the complete manifest activates atomically', async () => {
     const manifest: ConsoleEntryManifest = {
       revision: 1,
