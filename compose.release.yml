@@ -1,0 +1,18 @@
+# Use with --env-file .env. This deployment never builds from a local checkout.
+services:
+  numen:
+    image: ${NUMEN_IMAGE:?set NUMEN_IMAGE to a versioned image or digest}
+    restart: unless-stopped
+    environment:
+      NUMEN_MASTER_KEY: ${NUMEN_MASTER_KEY:?set NUMEN_MASTER_KEY in .env first}
+      NUMEN_HTTP_PROXY: ${NUMEN_HTTP_PROXY:-}
+      NO_PROXY: ${NO_PROXY-${no_proxy-}}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:${NUMEN_PORT:-5140}:5140"
+    volumes:
+      - numen-data:/var/lib/numen
+
+volumes:
+  numen-data:

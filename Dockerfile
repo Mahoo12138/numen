@@ -31,6 +31,15 @@ RUN pnpm build
 
 FROM node:24-alpine AS runtime
 
+ARG NUMEN_VERSION=development
+ARG NUMEN_REVISION=unknown
+ARG NUMEN_SOURCE
+LABEL org.opencontainers.image.title="Numen" \
+  org.opencontainers.image.description="Cordis-native personal automation runtime" \
+  org.opencontainers.image.version=$NUMEN_VERSION \
+  org.opencontainers.image.revision=$NUMEN_REVISION \
+  org.opencontainers.image.source=$NUMEN_SOURCE
+
 ENV NODE_ENV=production
 WORKDIR /app
 
