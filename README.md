@@ -67,7 +67,8 @@ timeline after the next scheduled minute. `docker compose restart numen` verifie
 that its revision, subscription, and future Runs survive a process restart.
 
 Set `NUMEN_HTTP_PROXY` in `.env` when outbound Integrations need a shared HTTP,
-HTTPS, or SOCKS proxy. See [the deployment runbook](docs/13-engineering-operations.md#10-deployment)
+HTTPS, or SOCKS proxy. Set `NO_PROXY` for direct destinations such as
+`localhost,127.0.0.1,::1,.home.arpa`. See [the deployment runbook](docs/13-engineering-operations.md#10-deployment)
 for production startup, backup, restore, and upgrade procedures.
 
 Architecture decisions and the planned product surface live in [`docs/`](docs/README.md).
