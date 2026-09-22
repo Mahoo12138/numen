@@ -1,5 +1,6 @@
 import { BrowserExtensionRegistry, SchemaUIRegistry } from '@numen/webui'
 import { Context } from 'cordis'
+import { I18nService } from '@numen/i18n'
 import { describe, expect, it } from 'vitest'
 import {
   parseAutomationTemplate,
@@ -10,6 +11,7 @@ import { coreWorkbenchFrontend } from '../src/entry.js'
 describe('Workbench Schema UI adapters', () => {
   it('registers core Literal renderers with the frontend Entry Fiber', async () => {
     const root = new Context()
+    await root.plugin(I18nService)
     await root.plugin(BrowserExtensionRegistry)
     await root.plugin(SchemaUIRegistry)
     const fiber = await root.plugin(coreWorkbenchFrontend)

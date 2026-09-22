@@ -1,4 +1,5 @@
 import { AutomationInputs } from './AutomationInputs.js'
+import { localizeCatalogItem, useWorkbenchI18n } from './i18n.js'
 import { AutomationRuns } from './AutomationRuns.js'
 import type { SourceRef } from '@numen/core'
 import { computed, h, inject, onScopeDispose, provide, ref, watch, type ComputedRef, type InjectionKey } from 'vue'
@@ -39,6 +40,7 @@ export function useAutomationWorkspace(): ComputedRef<AutomationEditorProps> {
 }
 
 export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProps>('AutomationPageChrome', ['page', 'consoleClient', 'schemaUI', 'navigation', 'inspectorOpen', 'onInspectorOpenChange'], props => {
+  const { t } = useWorkbenchI18n()
   const confirmedAutomationId = ref<string>()
   const requestedAutomationId = ref('morning-brief')
   const activeTab = ref('Editor')
@@ -66,6 +68,11 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
     emptyQueryInput,
     'automationCatalog',
   )
+  const localizedCatalogState = computed<ConsoleQueryState<WorkbenchAutomationInsertCatalog>>(() => (
+    insertCatalogState.status === 'READY'
+      ? { status: 'READY', data: { ...insertCatalogState.data, items: insertCatalogState.data.items.map(item => localizeCatalogItem(item, t)) } }
+      : insertCatalogState
+  ))
   const createAutomation = async (name: string): Promise<boolean> => {
     if (!props.consoleClient || creatingAutomation.value) return false
     createAutomationController?.abort()
@@ -159,15 +166,15 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
     return { status: 'READY', data: effectiveDetail.value }
   })
   const capabilityTitles = computed(() => new Map(
-    insertCatalogState.status === 'READY'
-      ? insertCatalogState.data.items.flatMap(item => item.kind === 'capability' || item.kind === 'trigger'
+    localizedCatalogState.value.status === 'READY'
+      ? localizedCatalogState.value.data.items.flatMap(item => item.kind === 'capability' || item.kind === 'trigger'
         ? [[`${item.capability.id}@${item.capability.version}`, item.title] as const]
         : item.kind === 'extension' ? [[`control:${item.control.id}@${item.control.version}`, item.title] as const]
         : [])
       : [],
   ))
   const steps = computed(() => (
-    effectiveDetail.value ? projectAutomationSteps(effectiveDetail.value.draft.source, authoring.problems, capabilityTitles.value) : []
+    effectiveDetail.value ? projectAutomationSteps(effectiveDetail.value.draft.source, authoring.problems, capabilityTitles.value, t) : []
   ))
   const activeStepId = computed(() => {
     const selectedStep = steps.value.find(step => step.sourceId === authoring.selectedNodeId)
@@ -181,7 +188,7 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
     activeTab: activeTab.value,
     inspectorOpen: props.inspectorOpen,
     ...(effectiveDetailState.value ? { detailState: effectiveDetailState.value } : {}),
-    ...(props.consoleClient ? { insertCatalogState } : {}),
+    ...(props.consoleClient ? { insertCatalogState: localizedCatalogState.value } : {}),
     ...(props.consoleClient ? { steps: steps.value } : {}),
     ...(props.consoleClient ? {
       automations: liveItems.value,
@@ -289,7 +296,7 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
       <Inspector
         activeStepId={activeStepId.value}
         canEdit={authoring.canEdit}
-        {...(insertCatalogState.status === 'READY' ? { catalog: insertCatalogState.data } : {})}
+        {...(localizedCatalogState.value.status === 'READY' ? { catalog: localizedCatalogState.value.data } : {})}
         {...(variableCatalogState.status === 'READY' ? { variableCatalog: variableCatalogState.data } : {})}
         {...(fieldFocus.value ? { fieldFocus: fieldFocus.value } : {})}
         open={props.inspectorOpen}

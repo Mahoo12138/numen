@@ -1,3 +1,4 @@
+import { diagnosticText, t } from './i18n.js'
 import { automationStepEditOptions } from './automation-source-editing.js'
 import {
   AlignCenter,
@@ -128,53 +129,53 @@ export function AutomationEditor({
       <header class="entity-header">
         <div class="entity-title-row">
           <div>
-            <span class="breadcrumb">Automations / {automationName}</span>
+            <span class="breadcrumb">{t('workbench.automations')}{automationName}</span>
             <div class="automation-title"><h1>{automationName}</h1>{detail ? (
               <span class="automation-badges">
-                <em data-tone={detail.automation.enabled ? 'enabled' : 'disabled'}>{detail.automation.enabled ? 'Enabled' : 'Disabled'}</em>
-                <em>Draft v{detail.draft.version}</em>
-                <em>{latestRevision ? `Published r${latestRevision.number}` : 'No revisions'}</em>
-                <em>{activeRevision ? `Active r${activeRevision.number}` : 'Not active'}</em>
+                <em data-tone={detail.automation.enabled ? 'enabled' : 'disabled'}>{detail.automation.enabled ? t('workbench.enabled') : t('workbench.disabled')}</em>
+                <em>{t('workbench.draftV')}{detail.draft.version}</em>
+                <em>{latestRevision ? t('workbench.publishedRValue0', { value0: latestRevision.number }) : t('workbench.noRevisions')}</em>
+                <em>{activeRevision ? t('workbench.activeRValue0', { value0: activeRevision.number }) : t('workbench.notActive')}</em>
               </span>
             ) : null}</div>
           </div>
           <div class="entity-title-actions">
             {detail && activation && onSetEnabled ? <button
-              aria-label={detail.automation.enabled ? 'Disable Automation' : 'Enable Automation'}
+              aria-label={detail.automation.enabled ? t('workbench.disableAutomation') : t('workbench.enableAutomation')}
               aria-checked={detail.automation.enabled}
               role="switch"
               class="automation-enabled-button"
               disabled={activation.pending || (!detail.automation.enabled && !detail.automation.activeRevisionId)}
               onClick={() => onSetEnabled(!detail.automation.enabled)}
               type="button"
-            >{activation.pending && !activation.activatingRevisionId ? 'Updating…' : detail.automation.enabled ? 'Disable' : 'Enable'}</button> : null}
+            >{activation.pending && !activation.activatingRevisionId ? t('workbench.updating') : detail.automation.enabled ? t('workbench.disable') : t('workbench.enable')}</button> : null}
             {authoring && onPublish ? (
               <button
                 class="publish-button"
                 disabled={!authoring.canPublish}
                 onClick={onPublish}
                 type="button"
-              >{authoring.publishPending ? 'Publishing…' : 'Publish'}</button>
+              >{authoring.publishPending ? t('workbench.publishing') : t('workbench.publish')}</button>
             ) : null}
             <button
               aria-expanded={inspectorOpen ?? false}
-              aria-label={inspectorOpen ? 'Close Inspector' : 'Open Inspector'}
+              aria-label={inspectorOpen ? t('workbench.closeInspector') : t('workbench.openInspector')}
               class="mobile-inspector-button"
               data-active={inspectorOpen ?? false}
               onClick={onOpenInspector}
               type="button"
-            ><PanelRight aria-hidden="true" size={14} /><span>Inspector</span></button>
+            ><PanelRight aria-hidden="true" size={14} /><span>{t('workbench.inspector')}</span></button>
           </div>
         </div>
         {liveAutomations?.length && automationId && onAutomationChange ? (
           <label class="mobile-automation-switcher">
-            <span>Automation</span>
-            <select aria-label="Select automation" onChange={event => onAutomationChange((event.target as HTMLInputElement).value)} value={automationId}>
+            <span>{t('workbench.automation')}</span>
+            <select aria-label={t('workbench.selectAutomation')} onChange={event => onAutomationChange((event.target as HTMLInputElement).value)} value={automationId}>
               {liveAutomations.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
             </select>
           </label>
         ) : null}
-        <nav class="context-tabs" aria-label="Automation sections">
+        <nav class="context-tabs" aria-label={t('workbench.automationSections')}>
           {tabs.map(tab => (
             <button
               aria-selected={activeTab === tab}
@@ -184,68 +185,68 @@ export function AutomationEditor({
               onClick={() => onTabChange(tab)}
               role="tab"
               type="button"
-            >{tab}</button>
+            >{t(`workbench.tabs.${tab}`)}</button>
           ))}
         </nav>
       </header>
       {activation?.error ? <section class="authoring-notice" data-tone="error" role="alert"><span>{activation.error}</span></section> : null}
       {authoring?.conflict ? (conflictRecovery ??
         <section class="authoring-notice" data-tone="conflict" role="alert">
-          <span><strong>Draft changed elsewhere.</strong> Local version {authoring.conflict.expectedVersion} cannot overwrite server version {authoring.conflict.actualVersion}.</span>
-          {onReloadDraft ? <button onClick={onReloadDraft} type="button">Reload server Draft</button> : null}
+          <span><strong>{t('workbench.draftChangedElsewhere')}</strong>{t('workbench.localVersion')}{authoring.conflict.expectedVersion}{t('workbench.cannotOverwriteServerVersion')}{authoring.conflict.actualVersion}.</span>
+          {onReloadDraft ? <button onClick={onReloadDraft} type="button">{t('workbench.reloadServerDraft')}</button> : null}
         </section>
       ) : authoring?.saveError ? (
         <section class="authoring-notice" data-tone="error" role="alert">
-          <span><strong>Autosave failed.</strong> {authoring.saveError}</span>
-          {onRetrySave ? <button onClick={onRetrySave} type="button">Retry autosave</button> : null}
+          <span><strong>{t('workbench.autosaveFailed')}</strong> {authoring.saveError}</span>
+          {onRetrySave ? <button onClick={onRetrySave} type="button">{t('workbench.retryAutosave')}</button> : null}
         </section>
       ) : authoring?.publishError ? (
         <section class="authoring-notice" data-tone="error" role="alert">
-          <span><strong>Publish failed.</strong> {authoring.publishError}</span>
+          <span><strong>{t('workbench.publishFailed')}</strong> {authoring.publishError}</span>
         </section>
       ) : null}
       {live && (detailState?.status === 'LOADING' || (detailState?.status === 'READY' && detailState.data && !detail)) ? (
-        <AutomationState title="Loading automation" message="Reading the current Draft Source and Revision history…" busy />
+        <AutomationState title={t('workbench.loadingAutomation')} message={t('workbench.readingTheCurrentDraftSourceAndRevisionHistory')} busy />
       ) : live && detailState?.status === 'ERROR' ? (
         <AutomationState
-          title="Automation unavailable"
-          message={detailState.message}
-          action="Try again"
+          title={t('workbench.automationUnavailable')}
+          message={diagnosticText(detailState)}
+          action={t('workbench.tryAgain')}
           {...(onReload ? { onAction: onReload } : {})}
           tone="error"
         />
       ) : live && detailState?.status === 'READY' && !detailState.data ? (
         <AutomationState
-          title={liveAutomations?.length ? 'Automation not found' : 'No automations yet'}
+          title={liveAutomations?.length ? t('workbench.automationNotFound') : t('workbench.noAutomationsYet')}
           message={liveAutomations?.length
-            ? 'The selected Automation no longer exists. Choose another item from the Sidebar.'
-            : 'Create an Automation to begin shaping a Draft.'}
+            ? t('workbench.theSelectedAutomationNoLongerExistsChooseAnotherItemFromTheSidebar')
+            : t('workbench.createAnAutomationToBeginShapingADraft')}
         />
       ) : activeTab === 'Editor' ? (
         <>
-          <div class="editor-toolbar" aria-label="Editor toolbar">
+          <div class="editor-toolbar" aria-label={t('workbench.editorToolbar')}>
             <div class="toolbar-group">
-              <ToolbarButton disabled={authoring ? !authoring.canUndo : false} label="Undo" {...(onUndo ? { onClick: onUndo } : {})}><Undo2 size={16} /></ToolbarButton>
-              <ToolbarButton disabled={authoring ? !authoring.canRedo : false} label="Redo" {...(onRedo ? { onClick: onRedo } : {})}><Redo2 size={16} /></ToolbarButton>
+              <ToolbarButton disabled={authoring ? !authoring.canUndo : false} label={t('workbench.undo')} {...(onUndo ? { onClick: onUndo } : {})}><Undo2 size={16} /></ToolbarButton>
+              <ToolbarButton disabled={authoring ? !authoring.canRedo : false} label={t('workbench.redo')} {...(onRedo ? { onClick: onRedo } : {})}><Redo2 size={16} /></ToolbarButton>
             </div>
             <div class="toolbar-group">
-              <ToolbarButton disabled label="Cut"><Scissors size={16} /></ToolbarButton>
-              <ToolbarButton disabled label="Copy"><Copy size={16} /></ToolbarButton>
-              <ToolbarButton disabled={!canEdit || !editOptions?.canDelete || !onDeleteStep} label="Delete" onClick={() => selectedNodeId && onDeleteStep?.(selectedNodeId)}><Trash2 size={16} /></ToolbarButton>
-              <ToolbarButton disabled={!canEdit || !editOptions?.canMoveUp || !onMoveStep} label="Move up" onClick={() => selectedNodeId && onMoveStep?.(selectedNodeId, 'up')}><ArrowUp size={16} /></ToolbarButton>
-              <ToolbarButton disabled={!canEdit || !editOptions?.canMoveDown || !onMoveStep} label="Move down" onClick={() => selectedNodeId && onMoveStep?.(selectedNodeId, 'down')}><ArrowDown size={16} /></ToolbarButton>
+              <ToolbarButton disabled label={t('workbench.cut')}><Scissors size={16} /></ToolbarButton>
+              <ToolbarButton disabled label={t('workbench.copy')}><Copy size={16} /></ToolbarButton>
+              <ToolbarButton disabled={!canEdit || !editOptions?.canDelete || !onDeleteStep} label={t('workbench.delete')} onClick={() => selectedNodeId && onDeleteStep?.(selectedNodeId)}><Trash2 size={16} /></ToolbarButton>
+              <ToolbarButton disabled={!canEdit || !editOptions?.canMoveUp || !onMoveStep} label={t('workbench.moveUp')} onClick={() => selectedNodeId && onMoveStep?.(selectedNodeId, 'up')}><ArrowUp size={16} /></ToolbarButton>
+              <ToolbarButton disabled={!canEdit || !editOptions?.canMoveDown || !onMoveStep} label={t('workbench.moveDown')} onClick={() => selectedNodeId && onMoveStep?.(selectedNodeId, 'down')}><ArrowDown size={16} /></ToolbarButton>
             </div>
             <div class="toolbar-group toolbar-spacer">
-              <ToolbarButton label="Align steps"><AlignCenter size={16} /></ToolbarButton>
+              <ToolbarButton label={t('workbench.alignSteps')}><AlignCenter size={16} /></ToolbarButton>
             </div>
             <div class="toolbar-group">
-              <ToolbarButton label="Zoom out"><ZoomOut size={16} /></ToolbarButton>
-              <ToolbarButton label="Zoom in"><ZoomIn size={16} /></ToolbarButton>
-              <ToolbarButton label="Fit to view"><Expand size={16} /></ToolbarButton>
+              <ToolbarButton label={t('workbench.zoomOut')}><ZoomOut size={16} /></ToolbarButton>
+              <ToolbarButton label={t('workbench.zoomIn')}><ZoomIn size={16} /></ToolbarButton>
+              <ToolbarButton label={t('workbench.fitToView')}><Expand size={16} /></ToolbarButton>
             </div>
-            <button class="layout-control" type="button">Layout <span>⌄</span></button>
+            <button class="layout-control" type="button">{t('workbench.layout')}<span>⌄</span></button>
           </div>
-          <section class="automation-canvas" aria-label={`${automationName} automation flow`}>
+          <section class="automation-canvas" aria-label={t('workbench.value0AutomationFlow', { value0: automationName })}>
             <div class="step-flow">
               {steps.map((step, index) => {
                 const Icon = step.icon
@@ -266,15 +267,15 @@ export function AutomationEditor({
                         <small>{step.summary}</small>
                       </span>
                       {step.problemCount ? (
-                        <span aria-label={`${step.problemCount} ${step.problemCount === 1 ? 'problem' : 'problems'}`} class="step-problem-badge">!</span>
+                        <span aria-label={t('workbench.problemsCount', { count: step.problemCount })} class="step-problem-badge">!</span>
                       ) : null}
                       <ChevronDown aria-hidden="true" class="step-menu" size={18} />
                     </button>
-                    {selected && detail && step.sourceId ? <div class="step-edit-actions" role="group" aria-label={`Actions for ${step.label}`}>
-                      <button disabled={!canEdit || !editOptions?.canMoveUp || !onMoveStep} aria-label={`Move ${step.label} up`} onClick={() => onMoveStep?.(step.sourceId!, 'up')} type="button"><ArrowUp size={14} /> Move up</button>
-                      <button disabled={!canEdit || !editOptions?.canMoveDown || !onMoveStep} aria-label={`Move ${step.label} down`} onClick={() => onMoveStep?.(step.sourceId!, 'down')} type="button"><ArrowDown size={14} /> Move down</button>
-                      <button disabled={!canEdit || !editOptions?.canDelete || !onDeleteStep} aria-label={`Delete ${step.label}`} title="Delete this step and its contents. Undo restores it." onClick={() => onDeleteStep?.(step.sourceId!)} type="button"><Trash2 size={14} /> Delete</button>
-                      <p>{editOptions?.canDelete ? 'Move within this sequence. Delete includes nested steps; references are kept as written.' : 'This container or Trigger cannot be removed as a sequence step.'}</p>
+                    {selected && detail && step.sourceId ? <div class="step-edit-actions" role="group" aria-label={t('workbench.actionsForValue0', { value0: step.label })}>
+                      <button disabled={!canEdit || !editOptions?.canMoveUp || !onMoveStep} aria-label={t('workbench.moveValue0Up', { value0: step.label })} onClick={() => onMoveStep?.(step.sourceId!, 'up')} type="button"><ArrowUp size={14} />{t('workbench.moveUp2')}</button>
+                      <button disabled={!canEdit || !editOptions?.canMoveDown || !onMoveStep} aria-label={t('workbench.moveValue0Down', { value0: step.label })} onClick={() => onMoveStep?.(step.sourceId!, 'down')} type="button"><ArrowDown size={14} />{t('workbench.moveDown2')}</button>
+                      <button disabled={!canEdit || !editOptions?.canDelete || !onDeleteStep} aria-label={t('workbench.deleteValue0', { value0: step.label })} title={t('workbench.deleteThisStepAndItsContentsUndoRestoresIt')} onClick={() => onDeleteStep?.(step.sourceId!)} type="button"><Trash2 size={14} />{t('workbench.delete2')}</button>
+                      <p>{editOptions?.canDelete ? t('workbench.moveWithinThisSequenceDeleteIncludesNestedStepsReferencesAreKeptAsWritten') : t('workbench.thisContainerOrTriggerCannotBeRemovedAsASequenceStep')}</p>
                     </div> : null}
                     {index < steps.length - 1 ? (
                       <div class="step-connector" aria-hidden="true"><span><Plus size={13} /></span></div>
@@ -282,7 +283,7 @@ export function AutomationEditor({
                   </div>
                 )
               })}
-              {!steps.length ? <p class="automation-flow-empty">This Draft has no triggers or flow steps yet.</p> : null}
+              {!steps.length ? <p class="automation-flow-empty">{t('workbench.thisDraftHasNoTriggersOrFlowStepsYet')}</p> : null}
               <AutomationQuickPicker
                 disabled={authoring ? !authoring.canEdit : false}
                 {...(insertCatalogState ? { state: insertCatalogState } : {})}
@@ -294,43 +295,43 @@ export function AutomationEditor({
         </>
       ) : activeTab === 'Settings' && inputSettings ? inputSettings : activeTab === 'Runs' && manualRunForm ? manualRunForm : activeTab === 'Revisions' && detail ? (
         <section class="automation-revisions">
-          <div class="runs-section-heading"><h2>Immutable revisions</h2><span>Newest first</span></div>
-          <p class="activation-help">Activate a published Revision, then enable the Automation to accept Trigger events. Existing Runs keep their original Revision.</p>
+          <div class="runs-section-heading"><h2>{t('workbench.immutableRevisions')}</h2><span>{t('workbench.newestFirst')}</span></div>
+          <p class="activation-help">{t('workbench.activateAPublishedRevisionThenEnableTheAutomationToAcceptTriggerEventsExistingRunsKeep')}</p>
           {detail.revisions.length ? (
             <div class="revision-list">
               {detail.revisions.map(revision => (
                 <article data-active={revision.active} key={revision.id}>
-                  <div><strong>Revision {revision.number}</strong>{revision.active ? <em>Active</em> : null}</div>
+                  <div><strong>{t('workbench.revision')}{revision.number}</strong>{revision.active ? <em>{t('workbench.active')}</em> : null}</div>
                   <small>{revision.contentHash}</small>
                   <time datetime={revision.createdAt}>{revision.createdAt}</time>
                   {activation && onActivateRevision ? <button
-                    aria-label={`Activate Revision ${revision.number}`}
+                    aria-label={t('workbench.activateRevisionValue0', { value0: revision.number })}
                     class="revision-activate-button"
                     disabled={revision.active || activation.pending}
                     onClick={() => onActivateRevision(revision.id)}
                     type="button"
-                  >{activation.activatingRevisionId === revision.id ? 'Activating…' : revision.active ? 'Active' : 'Activate'}</button> : null}
+                  >{activation.activatingRevisionId === revision.id ? t('workbench.activating') : revision.active ? t('workbench.active') : t('workbench.activate')}</button> : null}
                 </article>
               ))}
             </div>
-          ) : <p class="automation-flow-empty">No immutable Revision has been published from this Draft.</p>}
+          ) : <p class="automation-flow-empty">{t('workbench.noImmutableRevisionHasBeenPublishedFromThisDraft')}</p>}
         </section>
       ) : activeTab === 'State' && detail ? (
         <section class="automation-activation-state">
-          <h2>Activation</h2>
+          <h2>{t('workbench.activation')}</h2>
           <dl>
-            <div><dt>Desired state</dt><dd>{detail.automation.enabled ? 'Enabled' : 'Disabled'}</dd></div>
-            <div><dt>Active Revision</dt><dd>{activeRevision ? `Revision ${activeRevision.number}` : 'None'}</dd></div>
+            <div><dt>{t('workbench.desiredState')}</dt><dd>{detail.automation.enabled ? t('workbench.enabled') : t('workbench.disabled')}</dd></div>
+            <div><dt>{t('workbench.activeRevision')}</dt><dd>{activeRevision ? t('workbench.revisionValue0', { value0: activeRevision.number }) : t('workbench.none')}</dd></div>
           </dl>
-          <p>{!activeRevision ? 'Publish and activate a Revision before enabling this Automation.'
-            : detail.automation.enabled ? 'Trigger subscriptions follow the active Revision. Event delivery depends on available Providers and Connections.'
-              : 'Trigger subscriptions are disabled. Existing Runs continue with their original Revision.'}</p>
-          <button class="revision-activate-button" onClick={() => onTabChange('Revisions')} type="button">Manage revisions</button>
+          <p>{!activeRevision ? t('workbench.publishAndActivateARevisionBeforeEnablingThisAutomation')
+            : detail.automation.enabled ? t('workbench.triggerSubscriptionsFollowTheActiveRevisionEventDeliveryDependsOnAvailableProvidersAndConnections')
+              : t('workbench.triggerSubscriptionsAreDisabledExistingRunsContinueWithTheirOriginalRevision')}</p>
+          <button class="revision-activate-button" onClick={() => onTabChange('Revisions')} type="button">{t('workbench.manageRevisions')}</button>
         </section>
       ) : (
         <section class="secondary-view">
           <h2>{activeTab}</h2>
-          <p>This workspace view is owned by its Page extension.</p>
+          <p>{t('workbench.thisWorkspaceViewIsOwnedByItsPageExtension')}</p>
         </section>
       )}
     </main>

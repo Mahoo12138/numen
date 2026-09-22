@@ -11,7 +11,7 @@ export type ConsoleQueryState<Output> =
   | { status: 'DISABLED' }
   | { status: 'LOADING' }
   | { status: 'READY'; data: Output }
-  | { status: 'ERROR'; message: string }
+  | { status: 'ERROR'; message: string; code?: string }
 
 export function useConsoleQuery<Input, Output>(
   client: MaybeRefOrGetter<WorkbenchConsoleClient | undefined>,
@@ -29,6 +29,7 @@ export function useConsoleQuery<Input, Output>(
   const setState = (next: ConsoleQueryState<Output>) => {
     delete (state as Partial<{ data: Output }>).data
     delete (state as Partial<{ message: string }>).message
+    delete (state as Partial<{ code: string }>).code
     Object.assign(state, next)
   }
 
@@ -60,6 +61,7 @@ export function useConsoleQuery<Input, Output>(
           setState({
             status: 'ERROR',
             message: error instanceof Error ? error.message : 'The Console Query failed.',
+            ...(error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' ? { code: error.code } : {}),
           })
         },
       )

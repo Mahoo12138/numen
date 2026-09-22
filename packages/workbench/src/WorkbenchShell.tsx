@@ -1,3 +1,5 @@
+import { t, provideWorkbenchI18n, pageTitle } from './i18n.js'
+import type { BrowserLocaleService } from '@numen/webui/i18n'
 import type { FrontendExtensionRef } from '@numen/webui/extensions'
 import type { SchemaUIResolver } from '@numen/webui/schema-ui'
 import type {
@@ -32,6 +34,7 @@ export interface WorkbenchRouter {
 }
 
 export interface WorkbenchShellProps {
+  localeService?: BrowserLocaleService
   router?: WorkbenchRouter
   consoleClient?: WorkbenchConsoleClient
   schemaUI?: SchemaUIResolver
@@ -43,8 +46,8 @@ function DefaultPageChrome({ page, consoleClient, schemaUI, navigation }: Workbe
   return (
     <>
       <aside class="primary-sidebar simple-sidebar">
-        <div class="sidebar-heading">{page.title.toUpperCase()}</div>
-        <p>Browse {page.title.toLowerCase()} in the main workspace.</p>
+        <div class="sidebar-heading">{pageTitle(page)}</div>
+        <p>{t('workbench.browsePage', { page: pageTitle(page) })}</p>
       </aside>
       {h(PageComponent, {
         ...(consoleClient ? { consoleClient } : {}),
@@ -59,19 +62,24 @@ function NotFoundPageChrome({ pathname }: { pathname: string }) {
   return (
     <>
       <aside class="primary-sidebar simple-sidebar">
-        <div class="sidebar-heading">NOT FOUND</div>
-        <p>No Page matches the current URL.</p>
+        <div class="sidebar-heading">{t('workbench.notFound')}</div>
+        <p>{t('workbench.noPageMatchesTheCurrentUrl')}</p>
       </aside>
       <main class="main-workbench secondary-view activity-placeholder">
         <Command size={24} />
-        <h1>Page not found</h1>
-        <p>No registered Page matches {pathname}.</p>
+        <h1>{t('workbench.pageNotFound')}</h1>
+        <p>{t('workbench.noRegisteredPageMatches')}{pathname}.</p>
       </main>
     </>
   )
 }
 
-export const WorkbenchShell = defineSetupComponent<WorkbenchShellProps>('WorkbenchShell', ['router', 'consoleClient', 'schemaUI', 'standalonePages'], props => {
+export const WorkbenchShell = defineSetupComponent<WorkbenchShellProps>('WorkbenchShell', ['localeService', 'router', 'consoleClient', 'schemaUI', 'standalonePages'], props => {
+  const language = provideWorkbenchI18n(() => props.localeService)
+  const { t } = language
+  watchEffect(() => {
+    if (typeof document !== 'undefined') document.documentElement.lang = language.locale.value
+  })
   const standaloneActivityId = ref<CoreWorkbenchActivityId>('automations')
   const panelOpen = ref(false)
   const panelTab = ref('Problems')
@@ -120,16 +128,25 @@ export const WorkbenchShell = defineSetupComponent<WorkbenchShellProps>('Workben
         <div class="brand"><span class="brand-mark">N</span><strong>Numen Workbench</strong></div>
         <label class="command-center">
           <Search aria-hidden="true" size={17} />
-          <input aria-label="Command center" placeholder="Command center" />
+          <input aria-label={t('workbench.commandCenter')} placeholder={t('workbench.commandCenter')} />
           <kbd>⌘K</kbd>
         </label>
         <div class="top-actions">
-          <button aria-label="Run automation" class="icon-button" type="button"><Play size={17} /></button>
-          <button aria-label="Recent activity" class="icon-button" type="button"><Clock3 size={17} /></button>
-          <button aria-label="Create" class="icon-button" type="button"><Plus size={18} /></button>
+          {props.localeService ? <label class="language-switcher">
+            <span class="visually-hidden">{t('workbench.language')}</span>
+            <select aria-label={t('workbench.language')} value={language.preferredLocale.value ?? ''}
+              onChange={event => language.setLocale((event.target as HTMLSelectElement).value || undefined)}>
+              <option value="">{t('workbench.systemLanguage')}</option>
+              <option value="en-US">English</option>
+              <option value="zh-CN">简体中文</option>
+            </select>
+          </label> : null}
+          <button aria-label={t('workbench.runAutomation')} class="icon-button" type="button"><Play size={17} /></button>
+          <button aria-label={t('workbench.recentActivity')} class="icon-button" type="button"><Clock3 size={17} /></button>
+          <button aria-label={t('workbench.create')} class="icon-button" type="button"><Plus size={18} /></button>
           <span class="top-divider" />
-          <button aria-label="Settings" class="icon-button" type="button"><Settings size={17} /></button>
-          <button aria-label="Help" class="icon-button" type="button"><CircleHelp size={17} /></button>
+          <button aria-label={t('workbench.settings')} class="icon-button" type="button"><Settings size={17} /></button>
+          <button aria-label={t('workbench.help')} class="icon-button" type="button"><CircleHelp size={17} /></button>
         </div>
       </header>
       <ActivityRail activeId={activityId} onChange={onActivityChange} />
@@ -145,7 +162,7 @@ export const WorkbenchShell = defineSetupComponent<WorkbenchShellProps>('Workben
       ) : (
         <NotFoundPageChrome pathname={routeState.value.pathname} />
       )}
-      {ownsPanel ? null : <section class="bottom-panel" data-open={panelOpen.value} aria-label="Bottom panel">
+      {ownsPanel ? null : <section class="bottom-panel" data-open={panelOpen.value} aria-label={t('workbench.bottomPanel')}>
         <div class="panel-tablist" role="tablist">
           {panelTabs.map(tab => (
             <button
@@ -155,23 +172,23 @@ export const WorkbenchShell = defineSetupComponent<WorkbenchShellProps>('Workben
               onClick={() => { panelTab.value = tab; panelOpen.value = true }}
               role="tab"
               type="button"
-            >{tab}{tab === 'Problems' ? <span class="problem-count">1</span> : null}</button>
+            >{t(`workbench.tabs.${tab}`)}{tab === 'Problems' ? <span class="problem-count">1</span> : null}</button>
           ))}
           <button
-            aria-label={panelOpen.value ? 'Collapse bottom panel' : 'Expand bottom panel'}
+            aria-label={panelOpen.value ? t('workbench.collapseBottomPanel') : t('workbench.expandBottomPanel')}
             class="panel-toggle"
             onClick={() => { panelOpen.value = !panelOpen.value }}
             type="button"
           >⌃</button>
         </div>
-        {panelOpen.value ? <div class="panel-content">{panelTab.value} output will appear here.</div> : null}
+        {panelOpen.value ? <div class="panel-content">{t('workbench.panelOutput', { panel: t(`workbench.tabs.${panelTab.value}`) })}</div> : null}
       </section>}
       {ownsStatus ? null : <footer class="status-bar">
-        <span class="ready-status"><span class="status-check">✓</span>Ready</span>
-        <span><Save size={14} />Saved</span>
+        <span class="ready-status"><span class="status-check">✓</span>{t('workbench.ready')}</span>
+        <span><Save size={14} />{t('workbench.saved')}</span>
       </footer>}
       <button
-        aria-label="Close inspector overlay"
+        aria-label={t('workbench.closeInspectorOverlay')}
         class="inspector-backdrop"
         data-open={hasInspector && inspectorOpen.value}
         onClick={() => { inspectorOpen.value = false }}

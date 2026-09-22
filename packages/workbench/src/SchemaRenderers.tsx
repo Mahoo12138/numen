@@ -1,9 +1,10 @@
+import { t } from './i18n.js'
 import { isNumenValue, type NumenValue } from '@numen/core'
 import type { SchemaRendererDefinition } from '@numen/webui/schema-ui'
 import type { Context } from 'cordis'
 import { ref, watch, type Component } from 'vue'
 import type { WorkbenchSchemaField } from './contracts.js'
-import { defineSetupComponent } from './vue-component.js'
+import { defineSetupComponent, useTextDraft } from './vue-component.js'
 
 export interface SchemaLiteralRendererProps {
   canEdit: boolean
@@ -29,52 +30,61 @@ function inputAccessibility(props: SchemaLiteralRendererProps) {
   }
 }
 
-function StringLiteralEditor(props: SchemaLiteralRendererProps) {
-  const value = typeof props.value === 'string' ? props.value : ''
-  return <input
-    {...inputAccessibility(props)}
-    value={value}
-    disabled={!props.canEdit}
-    key={`${props.controlId}:${props.field.name}:${value}`}
-    onBlur={event => {
-      const next = (event.target as HTMLInputElement).value
-      if (!next && !props.field.required) props.onCommit()
-      else if (next !== value) props.onCommit(next)
-    }}
-    onKeydown={event => { if (event.key === 'Enter') (event.target as HTMLElement).blur() }}
-    placeholder={props.field.required ? 'Required' : 'Optional'}
-    type="text"
-  />
-}
+const StringLiteralEditor = defineSetupComponent<SchemaLiteralRendererProps>('StringLiteralEditor', ['canEdit', 'autofocus', 'controlId', 'describedBy', 'field', 'inputId', 'invalid', 'value', 'onCommit', 'onValidationChange'], props => {
+  const draft = useTextDraft(() => typeof props.value === 'string' ? props.value : '')
+  return () => {
+    const value = typeof props.value === 'string' ? props.value : ''
+    return <input
+      {...inputAccessibility(props)}
+      onInput={draft.onInput}
+      value={draft.text.value}
+      disabled={!props.canEdit}
+      key={`${props.controlId}:${props.field.name}:${value}`}
+      onBlur={event => {
+        const next = (event.target as HTMLInputElement).value
+        if (!next && !props.field.required) props.onCommit()
+        else if (next !== value) props.onCommit(next)
+      }}
+      onKeydown={event => { if (event.key === 'Enter') (event.target as HTMLElement).blur() }}
+      placeholder={props.field.required ? t('workbench.required') : t('workbench.optional')}
+      type="text"
+    />
+  }
+})
 
-function NumberLiteralEditor(props: SchemaLiteralRendererProps) {
-  const value = typeof props.value === 'number' ? props.value : undefined
-  return <input
-    {...inputAccessibility(props)}
-    value={value ?? ''}
-    disabled={!props.canEdit}
-    key={`${props.controlId}:${props.field.name}:${value ?? 'unset'}`}
-    {...(props.field.min !== undefined ? { min: props.field.min } : {})}
-    {...(props.field.max !== undefined ? { max: props.field.max } : {})}
-    {...(props.field.step !== undefined ? { step: props.field.step } : {})}
-    onBlur={event => {
-      if (!(event.target as HTMLInputElement).value) {
-        if (!props.field.required) props.onCommit()
-        else (event.target as HTMLInputElement).value = value === undefined ? '' : String(value)
-        return
-      }
-      const next = Number((event.target as HTMLInputElement).value)
-      if (!Number.isFinite(next)) {
-        (event.target as HTMLInputElement).value = value === undefined ? '' : String(value)
-        return
-      }
-      if (next !== value) props.onCommit(next)
-    }}
-    onKeydown={event => { if (event.key === 'Enter') (event.target as HTMLElement).blur() }}
-    placeholder={props.field.required ? 'Required number' : 'Optional number'}
-    type="number"
-  />
-}
+const NumberLiteralEditor = defineSetupComponent<SchemaLiteralRendererProps>('NumberLiteralEditor', ['canEdit', 'autofocus', 'controlId', 'describedBy', 'field', 'inputId', 'invalid', 'value', 'onCommit', 'onValidationChange'], props => {
+  const draft = useTextDraft(() => typeof props.value === 'number' ? String(props.value) : '')
+  return () => {
+    const value = typeof props.value === 'number' ? props.value : undefined
+    return <input
+      {...inputAccessibility(props)}
+      onInput={draft.onInput}
+      value={draft.text.value}
+      disabled={!props.canEdit}
+      key={`${props.controlId}:${props.field.name}:${value ?? 'unset'}`}
+      {...(props.field.min !== undefined ? { min: props.field.min } : {})}
+      {...(props.field.max !== undefined ? { max: props.field.max } : {})}
+      {...(props.field.step !== undefined ? { step: props.field.step } : {})}
+      onBlur={event => {
+        if (!(event.target as HTMLInputElement).value) {
+          if (!props.field.required) props.onCommit()
+          else { draft.reset(); (event.target as HTMLInputElement).value = value === undefined ? '' : String(value) }
+          return
+        }
+        const next = Number((event.target as HTMLInputElement).value)
+        if (!Number.isFinite(next)) {
+          draft.reset()
+          ;(event.target as HTMLInputElement).value = draft.text.value
+          return
+        }
+        if (next !== value) props.onCommit(next)
+      }}
+      onKeydown={event => { if (event.key === 'Enter') (event.target as HTMLElement).blur() }}
+      placeholder={props.field.required ? t('workbench.requiredNumber') : t('workbench.optionalNumber')}
+      type="number"
+    />
+  }
+})
 
 function BooleanLiteralEditor(props: SchemaLiteralRendererProps) {
   const value = typeof props.value === 'boolean' ? String(props.value) : ''
@@ -87,10 +97,10 @@ function BooleanLiteralEditor(props: SchemaLiteralRendererProps) {
     }}
     value={value}
   >
-    {!props.field.required ? <option value="">Not set</option> : null}
-    {props.field.required && !value ? <option disabled value="">Select…</option> : null}
-    <option value="true">True</option>
-    <option value="false">False</option>
+    {!props.field.required ? <option value="">{t('workbench.notSet')}</option> : null}
+    {props.field.required && !value ? <option disabled value="">{t('workbench.select')}</option> : null}
+    <option value="true">{t('workbench.true')}</option>
+    <option value="false">{t('workbench.false')}</option>
   </select>
 }
 
@@ -108,7 +118,7 @@ function EnumLiteralEditor(props: SchemaLiteralRendererProps) {
     value={selectedIndex < 0 ? '' : String(selectedIndex)}
   >
     {!props.field.required || selectedIndex < 0
-      ? <option value="">{props.field.required ? 'Select…' : 'Not set'}</option>
+      ? <option value="">{props.field.required ? t('workbench.select') : t('workbench.notSet')}</option>
       : null}
     {options.map((option, index) => <option key={`${index}:${option.label}`} value={index}>{option.label}</option>)}
   </select>
@@ -147,46 +157,51 @@ const JsonLiteralEditor = defineSetupComponent<SchemaLiteralRendererProps>('Json
           if (JSON.stringify(next) !== JSON.stringify(props.value)) props.onCommit(next)
         } catch (error) {
           props.onValidationChange?.(true)
-          localError.value = error instanceof Error ? error.message : 'Enter valid JSON.'
+          localError.value = 'workbench.validation.json'
         }
       }}
-      placeholder={props.field.required ? 'Required JSON value' : 'Optional JSON value'}
+      placeholder={props.field.required ? t('workbench.requiredJsonValue') : t('workbench.optionalJsonValue')}
       rows={4}
     />
-    {localError.value ? <p class="inspector-field-error" id={localProblemId} role="alert">{localError.value}</p> : null}
+    {localError.value ? <p class="inspector-field-error" id={localProblemId} role="alert">{t(localError.value)}</p> : null}
   </>
   }
 })
 
-function DurationLiteralEditor(props: SchemaLiteralRendererProps) {
-  const value = typeof props.value === 'number' ? props.value : undefined
-  const seconds = value === undefined ? '' : String(value / 1_000)
-  return <span class="input-with-unit expression-duration-input">
-    <input
-      {...inputAccessibility(props)}
-      aria-label="Wait duration in seconds"
-      disabled={!props.canEdit}
-      key={`${props.controlId}:${props.field.name}:${seconds}`}
-      min="0"
-      onBlur={event => {
-        const raw = (event.target as HTMLInputElement).value
-        const nextSeconds = Number(raw)
-        const nextDuration = Math.round(nextSeconds * 1_000)
-        if (!raw || !Number.isFinite(nextSeconds) || nextSeconds < 0 || !Number.isSafeInteger(nextDuration)) {
-          (event.target as HTMLInputElement).value = seconds
-          return
-        }
-        if (nextDuration !== value) props.onCommit(nextDuration)
-      }}
-      onKeydown={event => { if (event.key === 'Enter') (event.target as HTMLElement).blur() }}
-      placeholder="seconds"
-      step="0.001"
-      type="number"
-      value={seconds}
-    />
-    <span>s</span>
-  </span>
-}
+const DurationLiteralEditor = defineSetupComponent<SchemaLiteralRendererProps>('DurationLiteralEditor', ['canEdit', 'autofocus', 'controlId', 'describedBy', 'field', 'inputId', 'invalid', 'value', 'onCommit', 'onValidationChange'], props => {
+  const draft = useTextDraft(() => typeof props.value === 'number' ? String(props.value / 1_000) : '')
+  return () => {
+    const value = typeof props.value === 'number' ? props.value : undefined
+    const seconds = value === undefined ? '' : String(value / 1_000)
+    return <span class="input-with-unit expression-duration-input">
+      <input
+        {...inputAccessibility(props)}
+      onInput={draft.onInput}
+        aria-label={t('workbench.waitDurationInSeconds')}
+        disabled={!props.canEdit}
+        key={`${props.controlId}:${props.field.name}:${seconds}`}
+        min="0"
+        onBlur={event => {
+          const raw = (event.target as HTMLInputElement).value
+          const nextSeconds = Number(raw)
+          const nextDuration = Math.round(nextSeconds * 1_000)
+          if (!raw || !Number.isFinite(nextSeconds) || nextSeconds < 0 || !Number.isSafeInteger(nextDuration)) {
+            draft.reset()
+            ;(event.target as HTMLInputElement).value = seconds
+            return
+          }
+          if (nextDuration !== value) props.onCommit(nextDuration)
+        }}
+        onKeydown={event => { if (event.key === 'Enter') (event.target as HTMLElement).blur() }}
+        placeholder={t('workbench.seconds')}
+        step="0.001"
+        type="number"
+        value={draft.text.value}
+      />
+      <span>s</span>
+    </span>
+  }
+})
 
 function localDateTimeValue(value: NumenValue | undefined): string {
   if (typeof value !== 'string') return ''
@@ -196,29 +211,34 @@ function localDateTimeValue(value: NumenValue | undefined): string {
   return local.toISOString().slice(0, 19)
 }
 
-function IsoDateTimeLiteralEditor(props: SchemaLiteralRendererProps) {
-  const value = typeof props.value === 'string' ? props.value : undefined
-  const localValue = localDateTimeValue(value)
-  return <input
-    {...inputAccessibility(props)}
-    aria-label="Wait until date and time"
-    disabled={!props.canEdit}
-    key={`${props.controlId}:${props.field.name}:${localValue}`}
-    onBlur={event => {
-      const raw = (event.target as HTMLInputElement).value
-      const parsed = new Date(raw)
-      if (!raw || !Number.isFinite(parsed.getTime())) {
-        (event.target as HTMLInputElement).value = localValue
-        return
-      }
-      const next = parsed.toISOString()
-      if (next !== value) props.onCommit(next)
-    }}
-    step="1"
-    type="datetime-local"
-    value={localValue}
-  />
-}
+const IsoDateTimeLiteralEditor = defineSetupComponent<SchemaLiteralRendererProps>('IsoDateTimeLiteralEditor', ['canEdit', 'autofocus', 'controlId', 'describedBy', 'field', 'inputId', 'invalid', 'value', 'onCommit', 'onValidationChange'], props => {
+  const draft = useTextDraft(() => localDateTimeValue(props.value))
+  return () => {
+    const value = typeof props.value === 'string' ? props.value : undefined
+    const localValue = localDateTimeValue(value)
+    return <input
+      {...inputAccessibility(props)}
+      onInput={draft.onInput}
+      aria-label={t('workbench.waitUntilDateAndTime')}
+      disabled={!props.canEdit}
+      key={`${props.controlId}:${props.field.name}:${localValue}`}
+      onBlur={event => {
+        const raw = (event.target as HTMLInputElement).value
+        const parsed = new Date(raw)
+        if (!raw || !Number.isFinite(parsed.getTime())) {
+          draft.reset()
+          ;(event.target as HTMLInputElement).value = localValue
+          return
+        }
+        const next = parsed.toISOString()
+        if (next !== value) props.onCommit(next)
+      }}
+      step="1"
+      type="datetime-local"
+      value={draft.text.value}
+    />
+  }
+})
 
 export const coreSchemaLiteralRenderers: ReadonlyArray<SchemaRendererDefinition<SchemaLiteralRenderer>> = [
   { id: 'numen:schema-duration-ms', version: 1, role: 'numen/duration-ms', editor: DurationLiteralEditor },

@@ -1,3 +1,4 @@
+import { t } from './i18n.js'
 import { AutomationInputValidationError, resolveAutomationInputs, type AutomationInputIssue, type NumenValue } from '@numen/core'
 import { onScopeDispose, ref, shallowRef } from 'vue'
 import { AutomationInputValue } from './AutomationInputs.js'
@@ -35,7 +36,7 @@ export const ManualRunForm = defineSetupComponent<ManualRunProps>('ManualRunForm
     } catch (error) {
       if (disposed || request.signal.aborted) return
       const code = error && typeof error === 'object' && 'code' in error ? error.code : ''
-      message.value = code === 'AUTOMATION_NOT_ACTIVE' ? 'Publish and activate a Revision before starting a Run.' : 'Could not load Run parameters. Try loading again.'
+      message.value = code === 'AUTOMATION_NOT_ACTIVE' ? 'workbench.manual.notActive' : 'workbench.manual.loadFailed'
     } finally { if (!disposed && !request.signal.aborted) loading.value = false }
   }
   const start = async () => {
@@ -61,22 +62,22 @@ export const ManualRunForm = defineSetupComponent<ManualRunProps>('ManualRunForm
         submission, request.signal)
       if (disposed || request.signal.aborted) return
       runId.value = result.runId
-      message.value = 'Run accepted.'
+      message.value = 'workbench.manual.accepted'
       uncertain.value = false; submission = undefined
     } catch (error) {
       if (disposed || request.signal.aborted) return
       const code = error && typeof error === 'object' && 'code' in error ? error.code : ''
       if (code === 'AUTOMATION_INPUT_INVALID' && error && typeof error === 'object' && 'details' in error) {
         issues.value = (error.details as { issues?: AutomationInputIssue[] })?.issues ?? []
-        message.value = 'Review the input values.'
+        message.value = 'workbench.manual.invalid'
         submission = undefined
       } else if (code === 'MANUAL_RUN_REVISION_CONFLICT' || code === 'MANUAL_RUN_REQUEST_CONFLICT') {
         requiresReload.value = true; uncertain.value = false; submission = undefined
-        message.value = code === 'MANUAL_RUN_REVISION_CONFLICT' ? 'The active Revision changed. Reload parameters and review the new contract.'
-          : 'This Run request conflicts with an earlier submission. Reload parameters before trying again.'
+        message.value = code === 'MANUAL_RUN_REVISION_CONFLICT' ? 'workbench.manual.revisionChanged'
+          : 'workbench.manual.conflict'
       } else {
         uncertain.value = true
-        message.value = 'Run acceptance could not be confirmed. Retry safely with the same request.'
+        message.value = 'workbench.manual.uncertain'
       }
     } finally { if (!disposed && !request.signal.aborted) pending.value = false }
   }
@@ -87,28 +88,28 @@ export const ManualRunForm = defineSetupComponent<ManualRunProps>('ManualRunForm
     issues.value = issues.value.filter(issue => issue.field !== name)
   }
   return () => <section class="automation-manual-run">
-    <h2>Run manually</h2>
-    <p class="activation-help">Run the active published Revision with your parameters. Trigger subscriptions do not need to be enabled.</p>
-    {loading.value ? <p role="status">Loading parameters…</p> : null}
+    <h2>{t('workbench.runManually')}</h2>
+    <p class="activation-help">{t('workbench.runTheActivePublishedRevisionWithYourParametersTriggerSubscriptionsDoNotNeedToBe')}</p>
+    {loading.value ? <p role="status">{t('workbench.loadingParameters')}</p> : null}
     {form.value ? <form onSubmit={event => { event.preventDefault(); void start() }}>
-      <p class="manual-run-revision">Revision {form.value.revisionNumber}</p>
+      <p class="manual-run-revision">{t('workbench.revision')}{form.value.revisionNumber}</p>
       {form.value.inputs !== undefined ? Object.entries(form.value.inputs).map(([name, field]) => <AutomationInputValue key={name} name={name} declaration={field} prefix="manual-run"
         disabled={pending.value || requiresReload.value || uncertain.value} {...(props.schemaUI ? { schemaUI: props.schemaUI } : {})}
         {...(values.value[name] !== undefined ? { value: values.value[name] } : {})}
         {...(issues.value.find(issue => issue.field === name) ? { error: issues.value.find(issue => issue.field === name)!.message } : {})}
         onChange={value => change(name, value)} onValidationChange={value => { invalid.value[name] = value }} />)
-        : <AutomationInputValue name="parameters" declaration={{ type: 'object', title: 'Parameters', description: 'This Revision accepts a JSON object with undeclared inputs.' }} prefix="manual-run"
+        : <AutomationInputValue name="parameters" declaration={{ type: 'object', title: t('workbench.parameters'), description: t('workbench.undeclaredParameters') }} prefix="manual-run"
           value={values.value} disabled={pending.value || requiresReload.value || uncertain.value} {...(props.schemaUI ? { schemaUI: props.schemaUI } : {})}
           onChange={value => { values.value = value as Record<string, NumenValue> ?? {} }} onValidationChange={value => { invalid.value.parameters = value }} />}
-      {form.value.inputs && !Object.keys(form.value.inputs).length ? <p>No parameters are required.</p> : null}
+      {form.value.inputs && !Object.keys(form.value.inputs).length ? <p>{t('workbench.noParametersAreRequired')}</p> : null}
       <div class="manual-run-actions">
-        <button class="primary-button" type="submit" disabled={pending.value || requiresReload.value || Object.values(invalid.value).some(Boolean)}>{pending.value ? 'Starting…' : uncertain.value ? 'Retry Start Run' : 'Start Run'}</button>
-        <button class="secondary-button" disabled={pending.value || loading.value} onClick={() => void load()} type="button">Reload parameters</button>
+        <button class="primary-button" type="submit" disabled={pending.value || requiresReload.value || Object.values(invalid.value).some(Boolean)}>{pending.value ? t('workbench.starting') : uncertain.value ? t('workbench.retryStartRun') : t('workbench.startRun')}</button>
+        <button class="secondary-button" disabled={pending.value || loading.value} onClick={() => void load()} type="button">{t('workbench.reloadParameters')}</button>
       </div>
     </form> : null}
     {issues.value.filter(issue => !form.value?.inputs || !Object.hasOwn(form.value.inputs, issue.field)).map((issue, i) => <p class="inspector-field-error" key={i} role="alert">{issue.field}: {issue.message}</p>)}
-    {message.value ? <p role={runId.value ? 'status' : 'alert'}>{message.value}</p> : null}
-    {runId.value && props.navigation ? <div class="manual-run-result-actions"><button class="secondary-button" onClick={() => props.navigation?.navigate(coreWorkbenchRunFlowRoute, { parameters: { id: runId.value! } })} type="button">View Run</button></div> : null}
-    {!form.value ? <div class="manual-run-actions"><button class="secondary-button" disabled={pending.value || loading.value} onClick={() => void load()} type="button">Reload parameters</button></div> : null}
+    {message.value ? <p role={runId.value ? 'status' : 'alert'}>{t(message.value)}</p> : null}
+    {runId.value && props.navigation ? <div class="manual-run-result-actions"><button class="secondary-button" onClick={() => props.navigation?.navigate(coreWorkbenchRunFlowRoute, { parameters: { id: runId.value! } })} type="button">{t('workbench.viewRun')}</button></div> : null}
+    {!form.value ? <div class="manual-run-actions"><button class="secondary-button" disabled={pending.value || loading.value} onClick={() => void load()} type="button">{t('workbench.reloadParameters')}</button></div> : null}
   </section>
 })

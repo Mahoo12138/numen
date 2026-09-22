@@ -1,3 +1,4 @@
+import { diagnosticText, t, plural } from './i18n.js'
 import type { CompileDiagnostic, SourceRef } from '@numen/core'
 import { AlertTriangle, Save } from '@lucide/vue'
 import { ref, watch } from 'vue'
@@ -25,7 +26,7 @@ export const AutomationPanel = defineSetupComponent<AutomationPanelProps>('Autom
 
   return () => {
     const problemCount = props.preview ? 1 : props.problems.length
-    return <section class="bottom-panel" data-open={open.value} aria-label="Bottom panel">
+    return <section class="bottom-panel" data-open={open.value} aria-label={t('workbench.bottomPanel')}>
       <div class="panel-tablist" role="tablist">
         {panelTabs.map(tab => (
           <button
@@ -35,10 +36,10 @@ export const AutomationPanel = defineSetupComponent<AutomationPanelProps>('Autom
             onClick={() => { activeTab.value = tab; open.value = true }}
             role="tab"
             type="button"
-          >{tab}{tab === 'Problems' ? <span class="problem-count">{problemCount}</span> : null}</button>
+          >{t(`workbench.tabs.${tab}`)}{tab === 'Problems' ? <span class="problem-count">{problemCount}</span> : null}</button>
         ))}
         <button
-          aria-label={open.value ? 'Collapse bottom panel' : 'Expand bottom panel'}
+          aria-label={open.value ? t('workbench.collapseBottomPanel') : t('workbench.expandBottomPanel')}
           class="panel-toggle"
           onClick={() => { open.value = !open.value }}
           type="button"
@@ -55,11 +56,11 @@ export const AutomationPanel = defineSetupComponent<AutomationPanelProps>('Autom
                 type="button"
               >
                 <AlertTriangle aria-hidden="true" size={14} />
-                <span><strong>{problem.code}</strong><small>{problem.message}</small></span>
-                <code>{[problem.source?.nodeId, problem.source?.fieldPath].filter(Boolean).join(' · ') || 'Automation'}</code>
+                <span><strong>{problem.code}</strong><small>{diagnosticText(problem)}</small></span>
+                <code>{[problem.source?.nodeId, problem.source?.fieldPath].filter(Boolean).join(' · ') || t('workbench.automation')}</code>
               </button>
-            )) : <p>No publish problems for the current local Draft.</p>
-          ) : <p>{activeTab.value} output will appear here.</p>}
+            )) : <p>{t('workbench.noPublishProblemsForTheCurrentLocalDraft')}</p>
+          ) : <p>{t('workbench.panelOutput', { panel: t(`workbench.tabs.${activeTab.value}`) })}</p>}
         </div>
       ) : null}
     </section>
@@ -78,10 +79,10 @@ export function AutomationStatusBar({ phase, message, problemCount, preview = fa
       <span class={problemCount || needsAttention ? 'problem-status' : 'ready-status'}>
         <span class="status-check">{problemCount || needsAttention ? '!' : '✓'}</span>
         {problemCount
-          ? `${problemCount} publish problem${problemCount === 1 ? '' : 's'}`
-          : needsAttention ? 'Draft needs attention' : 'Ready'}
+          ? plural('workbench.publishProblems', problemCount)
+          : needsAttention ? t('workbench.draftNeedsAttention') : t('workbench.ready')}
       </span>
-      <span><Save size={14} />{preview ? 'Saved' : message}</span>
+      <span><Save size={14} />{preview ? t('workbench.saved') : t(`workbench.save.${phase}`)}</span>
     </footer>
   )
 }

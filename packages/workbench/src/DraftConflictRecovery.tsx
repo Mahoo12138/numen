@@ -1,3 +1,4 @@
+import { t } from './i18n.js'
 import { computed, ref, shallowRef, watch } from 'vue'
 import { compareAutomationDrafts } from './draft-comparison.js'
 import { createDraftConflictRecovery } from './draft-conflict-recovery.js'
@@ -30,46 +31,46 @@ export const DraftConflictRecovery = defineSetupComponent<Props>('DraftConflictR
   return () => {
     const controller = recovery.value!
     const state = controller.state
-    return <section class="draft-recovery" aria-label="Draft conflict recovery">
+    return <section class="draft-recovery" aria-label={t('workbench.draftConflictRecovery')}>
       <div class="authoring-notice" data-tone="conflict" role="alert">
-        <span><strong>Draft changed elsewhere.</strong> Your local changes are preserved. Local v{props.conflict.expectedVersion}; server v{props.conflict.actualVersion}.</span>
+        <span><strong>{t('workbench.draftChangedElsewhere')}</strong>{t('workbench.yourLocalChangesArePreservedLocalV')}{props.conflict.expectedVersion}{t('workbench.serverV')}{props.conflict.actualVersion}.</span>
         <button aria-expanded={open.value} onClick={() => {
           open.value = !open.value
           if (open.value && !state.server) void controller.compare()
-        }} type="button">{open.value ? 'Hide comparison' : 'Compare and recover'}</button>
+        }} type="button">{open.value ? t('workbench.hideComparison') : t('workbench.compareAndRecover')}</button>
       </div>
       {open.value ? <div class="draft-recovery-content">
         <div class="draft-recovery-heading">
-          <div><h2>Compare Drafts</h2><p>Local changes stay paused until you choose how to recover.</p></div>
-          <button disabled={state.comparing} onClick={() => void controller.compare()} type="button">{state.comparing ? 'Loading server Draft…' : 'Refresh comparison'}</button>
+          <div><h2>{t('workbench.compareDrafts')}</h2><p>{t('workbench.localChangesStayPausedUntilYouChooseHowToRecover')}</p></div>
+          <button disabled={state.comparing} onClick={() => void controller.compare()} type="button">{state.comparing ? t('workbench.loadingServerDraft') : t('workbench.refreshComparison')}</button>
         </div>
         {state.compareError ? <p role="alert">{state.compareError}</p> : null}
         {comparison.value && state.server ? <>
-          <p>Comparing local v{controller.local.version} with server v{state.server.version}. The server may have newer changes after this snapshot.</p>
-          {comparison.value.differences.length ? <div class="draft-differences" aria-label="Draft differences">
+          <p>{t('workbench.comparingLocalV')}{controller.local.version}{t('workbench.withServerV')}{state.server.version}{t('workbench.theServerMayHaveNewerChangesAfterThisSnapshot')}</p>
+          {comparison.value.differences.length ? <div class="draft-differences" aria-label={t('workbench.draftDifferences')}>
             {comparison.value.differences.map(item => <article key={item.path}>
               <h3>{item.path}</h3>
               <div class="draft-difference-values">
-                <div><strong>Local</strong><pre>{item.local}</pre></div>
-                <div><strong>Server</strong><pre>{item.server}</pre></div>
+                <div><strong>{t('workbench.local')}</strong><pre>{item.local}</pre></div>
+                <div><strong>{t('workbench.server')}</strong><pre>{item.server}</pre></div>
               </div>
             </article>)}
-          </div> : <p>Source and presentation are identical.</p>}
-          {comparison.value.truncated ? <p>Comparison limit reached. Only the first differences are shown; saving a copy preserves the complete document.</p> : null}
+          </div> : <p>{t('workbench.sourceAndPresentationAreIdentical')}</p>}
+          {comparison.value.truncated ? <p>{t('workbench.comparisonLimitReachedOnlyTheFirstDifferencesAreShownSavingACopyPreservesTheComplete')}</p> : null}
         </> : null}
         <div class="draft-recovery-actions">
           <div>
-            <h3>Keep local changes as a copy</h3>
-            <p>The new Automation starts disabled, with no published Revisions.</p>
-            <label>Copy name<input aria-label="Draft copy name" maxlength={200} disabled={!!state.request} value={name.value} onInput={event => { name.value = (event.target as HTMLInputElement).value }} /></label>
-            {state.copy ? <p role="status">Saved “{state.copy.name}”. <button onClick={() => props.onOpenCopy(state.copy!.automationId)} type="button">Open saved copy</button></p>
-              : <button disabled={state.saving || !name.value.trim()} onClick={() => void controller.saveCopy(name.value)} type="button">{state.saving ? 'Saving copy…' : state.copyError && state.request ? 'Retry saving copy' : 'Save local as copy'}</button>}
+            <h3>{t('workbench.keepLocalChangesAsACopy')}</h3>
+            <p>{t('workbench.theNewAutomationStartsDisabledWithNoPublishedRevisions')}</p>
+            <label>{t('workbench.copyName')}<input aria-label={t('workbench.draftCopyName')} maxlength={200} disabled={!!state.request} value={name.value} onInput={event => { name.value = (event.target as HTMLInputElement).value }} /></label>
+            {state.copy ? <p role="status">{t('workbench.saved2')}{state.copy.name}”. <button onClick={() => props.onOpenCopy(state.copy!.automationId)} type="button">{t('workbench.openSavedCopy')}</button></p>
+              : <button disabled={state.saving || !name.value.trim()} onClick={() => void controller.saveCopy(name.value)} type="button">{state.saving ? t('workbench.savingCopy') : state.copyError && state.request ? t('workbench.retrySavingCopy') : t('workbench.saveLocalAsCopy')}</button>}
             {state.copyError ? <p role="alert">{state.copyError}</p> : null}
           </div>
           <div>
-            <h3>Continue from the server</h3>
-            <p>This discards this tab’s local edits and undo history, then loads the latest server Draft.</p>
-            <button disabled={!state.server || state.comparing || state.saving} onClick={props.onReload} type="button">Discard local and reload latest</button>
+            <h3>{t('workbench.continueFromTheServer')}</h3>
+            <p>{t('workbench.thisDiscardsThisTabSLocalEditsAndUndoHistoryThenLoadsTheLatestServer')}</p>
+            <button disabled={!state.server || state.comparing || state.saving} onClick={props.onReload} type="button">{t('workbench.discardLocalAndReloadLatest')}</button>
           </div>
         </div>
       </div> : null}

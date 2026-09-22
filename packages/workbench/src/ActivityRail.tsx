@@ -1,3 +1,4 @@
+import { t } from './i18n.js'
 import { activities } from './model.js'
 import type { CoreWorkbenchActivityId } from './routes.js'
 
@@ -8,7 +9,7 @@ export interface ActivityRailProps {
 
 export function ActivityRail({ activeId, onChange }: ActivityRailProps) {
   return (
-    <nav class="activity-rail" aria-label="Primary navigation">
+    <nav class="activity-rail" aria-label={t('workbench.primaryNavigation')}>
       {activities.map(({ id, label, icon: Icon }) => (
         <button
           aria-current={activeId === id ? 'page' : undefined}
@@ -19,7 +20,7 @@ export function ActivityRail({ activeId, onChange }: ActivityRailProps) {
           type="button"
         >
           <Icon aria-hidden="true" size={20} strokeWidth={1.7} />
-          <span>{label}</span>
+          <span>{t(`workbench.navigation.${id}`)}</span>
         </button>
       ))}
     </nav>

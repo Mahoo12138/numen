@@ -1,9 +1,22 @@
 import {
   defineComponent,
+  ref,
+  watch,
   type DefineComponent,
   type SetupContext,
   type VNodeChild,
 } from 'vue'
+
+/** Preserve uncommitted input across presentation-only renders; reset only when its source value changes. */
+export function useTextDraft(readValue: () => string) {
+  const text = ref(readValue())
+  watch(readValue, value => { text.value = value })
+  return {
+    text,
+    onInput(event: Event) { text.value = (event.target as HTMLInputElement).value },
+    reset() { text.value = readValue() },
+  }
+}
 
 /**
  * Defines a Vue setup component whose public interface is a plain props object.

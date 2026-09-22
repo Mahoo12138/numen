@@ -1,3 +1,4 @@
+import { t } from './i18n.js'
 import type { NumenValue } from '@numen/core'
 import type { SchemaUIResolver } from '@numen/webui/schema-ui'
 import { AlertCircle, Save, Trash2, X } from '@lucide/vue'
@@ -35,10 +36,10 @@ function defaultValue(field: WorkbenchSchemaField): NumenValue | undefined {
 
 function mutationMessage(error: unknown): string {
   const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : undefined
-  if (code === 'CONNECTION_GENERATION_CONFLICT') return 'This Connection changed elsewhere. Close and reopen it before saving.'
-  if (code === 'CONNECTION_NOT_FOUND') return 'This Connection no longer exists. Refresh the list.'
-  if (code === 'CONNECTION_INVALID') return error instanceof Error ? error.message : 'Review the Connection fields and try again.'
-  return error instanceof Error ? error.message : 'The Connection could not be saved. Try again.'
+  if (code === 'CONNECTION_GENERATION_CONFLICT') return 'workbench.connectionConflict'
+  if (code === 'CONNECTION_NOT_FOUND') return 'workbench.connectionGone'
+  if (code === 'CONNECTION_INVALID') return error instanceof Error ? error.message : 'workbench.connectionInvalid'
+  return error instanceof Error ? error.message : 'workbench.connectionFailed'
 }
 
 function adapterKey(adapter: Pick<WorkbenchConnectionAdapter, 'id' | 'version'>): string {
@@ -161,10 +162,10 @@ export const ConnectionConfigurationPanel = defineSetupComponent<ConnectionConfi
         ...(field.role ? { role: field.role } : {}),
         type: field.type,
       }, 'editor')
-      if (!Renderer) return <p class="connection-config-notice">No editor is registered for {field.role ?? field.type}. Its current value is preserved.</p>
+      if (!Renderer) return <p class="connection-config-notice">{t('workbench.noEditorIsRegisteredFor')}{field.role ?? field.type}{t('workbench.itsCurrentValueIsPreserved')}</p>
       const inputId = `connection-config-${field.name}`
       return <label class="connection-config-field" data-required={field.required}>
-        <span>{field.label}{field.required ? <em>Required</em> : null}</span>
+        <span>{field.label}{field.required ? <em>{t('workbench.required')}</em> : null}</span>
         {h(Renderer, {
           canEdit: !pending.value,
           controlId: props.connection?.id ?? 'new-connection',
@@ -185,18 +186,18 @@ export const ConnectionConfigurationPanel = defineSetupComponent<ConnectionConfi
 
     return () => {
       const selected = adapter.value
-      return <aside aria-label="Connection configuration" class="connection-config-panel">
+      return <aside aria-label={t('workbench.connectionConfiguration')} class="connection-config-panel">
         <header>
-          <div><h2>{mode === 'create' ? 'New Connection' : 'Connection settings'}</h2><p>{mode === 'create' ? 'Choose an Adapter and configure one durable connection.' : props.connection?.name}</p></div>
-          <button aria-label="Close Connection configuration" class="icon-button" onClick={props.onClose} type="button"><X size={16} /></button>
+          <div><h2>{mode === 'create' ? t('workbench.newConnection') : t('workbench.connectionSettings')}</h2><p>{mode === 'create' ? t('workbench.chooseAnAdapterAndConfigureOneDurableConnection') : props.connection?.name}</p></div>
+          <button aria-label={t('workbench.closeConnectionConfiguration')} class="icon-button" onClick={props.onClose} type="button"><X size={16} /></button>
         </header>
         <form onSubmit={event => { event.preventDefault(); void save() }}>
           <label class="connection-config-field">
-            <span>Name<em>Required</em></span>
-            <input autofocus value={name.value} disabled={pending.value} maxlength="120" onInput={event => { name.value = (event.target as HTMLInputElement).value }} placeholder="Personal workspace" type="text" />
+            <span>{t('workbench.name')}<em>{t('workbench.required')}</em></span>
+            <input autofocus value={name.value} disabled={pending.value} maxlength="120" onInput={event => { name.value = (event.target as HTMLInputElement).value }} placeholder={t('workbench.personalWorkspace')} type="text" />
           </label>
           <label class="connection-config-field">
-            <span>Adapter<em>Required</em></span>
+            <span>{t('workbench.adapter')}<em>{t('workbench.required')}</em></span>
             <select
               disabled={mode === 'edit' || pending.value}
               onChange={event => {
@@ -205,29 +206,29 @@ export const ConnectionConfigurationPanel = defineSetupComponent<ConnectionConfi
               }}
               value={selectedAdapterKey.value}
             >
-              {!props.adapters.length ? <option value="">No Adapters available</option> : null}
+              {!props.adapters.length ? <option value="">{t('workbench.noAdaptersAvailable')}</option> : null}
               {props.adapters.map(item => <option key={adapterKey(item)} value={adapterKey(item)}>{item.title}</option>)}
             </select>
-            {selected ? <small>{selected.id}@{selected.version}{selected.providerAvailable ? '' : ' · Provider unavailable'}</small> : null}
+            {selected ? <small>{selected.id}@{selected.version}{selected.providerAvailable ? '' : t('workbench.providerUnavailable2')}</small> : null}
           </label>
           {selected?.credentialType ? <label class="connection-config-field">
-            <span>Credential<em>Required</em></span>
+            <span>{t('workbench.credential')}<em>{t('workbench.required')}</em></span>
             <select disabled={pending.value || !selected.credentials.length} onChange={event => { credentialId.value = (event.target as HTMLInputElement).value }} value={credentialId.value}>
-              {!selected.credentials.length ? <option value="">No compatible Credentials</option> : null}
+              {!selected.credentials.length ? <option value="">{t('workbench.noCompatibleCredentials')}</option> : null}
               {selected.credentials.map(credential => <option key={credential.id} value={credential.id}>{credential.name} · v{credential.secretVersion}</option>)}
             </select>
-            <small>Only metadata is shown. Secret material never enters Workbench reads.</small>
+            <small>{t('workbench.onlyMetadataIsShownSecretMaterialNeverEntersWorkbenchReads')}</small>
           </label> : null}
           {selected?.configSchemaSupported ? <div class="connection-config-fields">{selected.configFields.map(renderField)}</div> : selected ? (
-            <p class="connection-config-notice"><AlertCircle size={15} />This Adapter uses a configuration shape without a generic editor. Existing values remain preserved.</p>
+            <p class="connection-config-notice"><AlertCircle size={15} />{t('workbench.thisAdapterUsesAConfigurationShapeWithoutAGenericEditorExistingValuesRemainPreserved')}</p>
           ) : null}
-          {error.value ? <p class="connection-config-error" role="alert"><AlertCircle size={15} />{error.value}</p> : null}
+          {error.value ? <p class="connection-config-error" role="alert"><AlertCircle size={15} />{t(error.value)}</p> : null}
           <footer>
             {mode === 'edit' ? (
-              confirmDelete.value ? <span class="connection-delete-confirm"><span>Delete this Connection configuration?</span><button disabled={pending.value} onClick={() => { confirmDelete.value = false }} type="button">Cancel</button><button class="danger-button" disabled={pending.value} onClick={() => { void remove() }} type="button">Delete Connection</button></span>
-                : <button class="danger-text-button" disabled={pending.value} onClick={() => { confirmDelete.value = true }} type="button"><Trash2 size={14} />Delete</button>
+              confirmDelete.value ? <span class="connection-delete-confirm"><span>{t('workbench.deleteThisConnectionConfiguration')}</span><button disabled={pending.value} onClick={() => { confirmDelete.value = false }} type="button">{t('workbench.cancel')}</button><button class="danger-button" disabled={pending.value} onClick={() => { void remove() }} type="button">{t('workbench.deleteConnection')}</button></span>
+                : <button class="danger-text-button" disabled={pending.value} onClick={() => { confirmDelete.value = true }} type="button"><Trash2 size={14} />{t('workbench.delete')}</button>
             ) : <span />}
-            {!confirmDelete.value ? <button class="primary-button connection-save-button" disabled={!canSave.value} type="submit"><Save size={14} />{pending.value ? 'Saving…' : mode === 'create' ? 'Create Connection' : 'Save changes'}</button> : null}
+            {!confirmDelete.value ? <button class="primary-button connection-save-button" disabled={!canSave.value} type="submit"><Save size={14} />{pending.value ? t('workbench.saving') : mode === 'create' ? t('workbench.createConnection') : t('workbench.saveChanges')}</button> : null}
           </footer>
         </form>
       </aside>

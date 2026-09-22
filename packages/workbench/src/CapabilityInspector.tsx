@@ -1,3 +1,4 @@
+import { diagnosticText, t } from './i18n.js'
 import type { AutomationSource, CapabilitySource, CompileDiagnostic, NumenValue, TriggerSource, ValueExpr } from '@numen/core'
 import type { SchemaUIResolver } from '@numen/webui/schema-ui'
 import { AlertCircle } from '@lucide/vue'
@@ -73,26 +74,26 @@ export function CapabilityConnectionFields({
     return (
       <div class="connection-binding-field" data-invalid={!!problem} key={slot.name}>
         <label>
-          <span>{slot.name}{slot.required ? <em>Required</em> : null}</span>
+          <span>{slot.name}{slot.required ? <em>{t('workbench.required')}</em> : null}</span>
           <select
             aria-describedby={problem ? problemId : undefined}
             aria-invalid={!!problem}
-            aria-label={`${slot.name} connection`}
+            aria-label={t('workbench.value0Connection', { value0: slot.name })}
             disabled={!canEdit}
             onChange={event => onChange?.(nodeId, slot.name, (event.target as HTMLInputElement).value || undefined)}
             value={selected}
           >
-            <option value="">{slot.required ? 'Select a Connection…' : 'No Connection'}</option>
-            {missingSelection ? <option value={selected}>Missing · {selected}</option> : null}
+            <option value="">{slot.required ? t('workbench.selectAConnection') : t('workbench.noConnection')}</option>
+            {missingSelection ? <option value={selected}>{t('workbench.missing')}{selected}</option> : null}
             {options.map(connection => <option key={connection.id} value={connection.id}>{connectionLabel(connection)}</option>)}
           </select>
         </label>
         <p class="inspector-field-help">
           {options.length
-            ? `Accepts ${slot.accepts.length ? slot.accepts.join(', ') : 'any Connection Type'}.`
-            : `No compatible Connections configured${slot.accepts.length ? ` for ${slot.accepts.join(', ')}` : ''}.`}
+            ? t('workbench.acceptsValue0', { value0: slot.accepts.length ? slot.accepts.join(', ') : 'any Connection Type' })
+            : t('workbench.noCompatibleConnectionsConfiguredValue0', { value0: slot.accepts.length ? ` for ${slot.accepts.join(', ')}` : '' })}
         </p>
-        {problem ? <p class="inspector-field-error" id={problemId}>{problem.message}</p> : null}
+        {problem ? <p class="inspector-field-error" id={problemId}>{diagnosticText(problem)}</p> : null}
       </div>
     )
   })}</>
@@ -114,9 +115,9 @@ interface CapabilityInputFieldsProps {
 
 export const CapabilityInputFields = defineSetupComponent<CapabilityInputFieldsProps>('CapabilityInputFields', ['nodeId', 'definition', 'control', 'problems', 'canEdit', 'source', 'variableCatalog', 'schemaUI', 'focusFieldPath', 'focusRequest', 'onChange'], props => () => {
   if (!props.definition.inputSchemaSupported) {
-    return <div class="inspector-schema-notice"><AlertCircle size={15} /><span>This step does not expose an object input schema supported by the core Inspector.</span></div>
+    return <div class="inspector-schema-notice"><AlertCircle size={15} /><span>{t('workbench.thisStepDoesNotExposeAnObjectInputSchemaSupportedByTheCoreInspector')}</span></div>
   }
-  if (!props.definition.inputFields.length) return <p class="inspector-summary">This step has no configurable inputs.</p>
+  if (!props.definition.inputFields.length) return <p class="inspector-summary">{t('workbench.thisStepHasNoConfigurableInputs')}</p>
   return props.definition.inputFields.map(field => {
     const expression = props.control.input[field.name]
     const problem = fieldProblem(props.problems, field.name)
@@ -158,9 +159,9 @@ export function TriggerConfigurationFields({
   onChange?(nodeId: string, fieldName: string, value?: NumenValue): void
 }) {
   if (!definition.inputSchemaSupported) {
-    return <div class="inspector-schema-notice"><AlertCircle size={15} /><span>This Trigger does not expose an object configuration schema supported by the core Inspector.</span></div>
+    return <div class="inspector-schema-notice"><AlertCircle size={15} /><span>{t('workbench.thisTriggerDoesNotExposeAnObjectConfigurationSchemaSupportedByTheCoreInspector')}</span></div>
   }
-  if (!definition.inputFields.length) return <p class="inspector-summary">This Trigger has no configurable fields.</p>
+  if (!definition.inputFields.length) return <p class="inspector-summary">{t('workbench.thisTriggerHasNoConfigurableFields')}</p>
   return <>{definition.inputFields.map((field, index) => {
     const problem = problems.find(item => item.source?.fieldPath === `config.${field.name}`)
       ?? (index === 0 ? problems.find(item => item.source?.fieldPath === 'config') : undefined)
@@ -174,7 +175,7 @@ export function TriggerConfigurationFields({
       <div class="schema-field-row">
         <span class="schema-field-label">
           <label for={inputId}>{field.label}</label>
-          {field.required ? <em>Required</em> : null}
+          {field.required ? <em>{t('workbench.required')}</em> : null}
         </span>
         <span class="schema-value-editor trigger-config-editor">
           <span class="schema-value-control">{Renderer ? h(Renderer, {
@@ -186,11 +187,11 @@ export function TriggerConfigurationFields({
             invalid: !!problem,
             onCommit: (value?: NumenValue) => onChange?.(nodeId, field.name, value),
             ...(trigger.config[field.name] !== undefined ? { value: trigger.config[field.name] } : {}),
-          }) : <div class="inspector-schema-notice"><AlertCircle size={15} /><span>No editor is registered for {field.role ?? field.type}.</span></div>}</span>
+          }) : <div class="inspector-schema-notice"><AlertCircle size={15} /><span>{t('workbench.noEditorIsRegisteredFor')}{field.role ?? field.type}.</span></div>}</span>
         </span>
       </div>
       {field.description ? <p class="inspector-field-help">{field.description}</p> : null}
-      {problem ? <p class="inspector-field-error" id={problemId}>{problem.message}</p> : null}
+      {problem ? <p class="inspector-field-error" id={problemId}>{diagnosticText(problem)}</p> : null}
     </div>
   })}</>
 }

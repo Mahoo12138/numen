@@ -1,15 +1,8 @@
+import { t } from './i18n.js'
 import { Braces, Search, X } from '@lucide/vue'
 import { computed, nextTick, ref, watch } from 'vue'
 import type { MagicVariableCandidate, MagicVariableGroup } from './automation-variable-catalog.js'
 import { defineSetupComponent } from './vue-component.js'
-
-const groupLabels: Record<MagicVariableGroup, string> = {
-  input: 'Automation inputs',
-  trigger: 'Trigger',
-  steps: 'Previous steps',
-  loop: 'Loop',
-  run: 'Run',
-}
 
 const groupOrder: MagicVariableGroup[] = ['input', 'trigger', 'steps', 'loop', 'run']
 
@@ -53,26 +46,26 @@ export const MagicVariablePicker = defineSetupComponent<MagicVariablePickerProps
     }}>
       <button
         aria-expanded={open.value}
-        aria-label="Insert variable"
+        aria-label={t('workbench.insertVariable2')}
         class="magic-variable-trigger"
         disabled={props.disabled ?? false}
         onClick={() => { open.value = !open.value }}
         onMousedown={event => event.preventDefault()}
-        title="Insert variable"
+        title={t('workbench.insertVariable2')}
         type="button"
       ><Braces size={14} /></button>
       {open.value ? (
-        <section aria-label="Available variables" class="magic-variable-picker">
+        <section aria-label={t('workbench.availableVariables')} class="magic-variable-picker">
           <header>
-            <strong>Insert variable</strong>
-            <button aria-label="Close variable picker" onClick={() => { open.value = false }} type="button"><X size={14} /></button>
+            <strong>{t('workbench.insertVariable2')}</strong>
+            <button aria-label={t('workbench.closeVariablePicker')} onClick={() => { open.value = false }} type="button"><X size={14} /></button>
           </header>
           <label class="magic-variable-search">
             <Search aria-hidden="true" size={13} />
             <input
-              aria-label="Search available variables"
+              aria-label={t('workbench.searchAvailableVariables')}
               onInput={event => { query.value = (event.target as HTMLInputElement).value }}
-              placeholder="Search by name or path…"
+              placeholder={t('workbench.searchByNameOrPath')}
               ref={inputRef}
               value={query.value}
             />
@@ -82,7 +75,7 @@ export const MagicVariablePicker = defineSetupComponent<MagicVariablePickerProps
               const items = filtered.value.filter(item => item.group === group)
               return items.length ? (
                 <section class="magic-variable-group" key={group}>
-                  <h4>{groupLabels[group]}</h4>
+                  <h4>{t(`workbench.variableGroups.${group}`)}</h4>
                   {items.map(item => (
                     <button class="magic-variable-item" key={`${item.path}:${item.conversion ?? 'direct'}`} onClick={() => select(item)} type="button">
                       <span>
@@ -92,7 +85,7 @@ export const MagicVariablePicker = defineSetupComponent<MagicVariablePickerProps
                       <code>{item.path}</code>
                       <span class="magic-variable-meta">
                         <em>{item.valueType}</em>
-                        {item.conversion ? <small>Convert to text</small> : null}
+                        {item.conversion ? <small>{t('workbench.convertToText')}</small> : null}
                       </span>
                     </button>
                   ))}
@@ -101,11 +94,11 @@ export const MagicVariablePicker = defineSetupComponent<MagicVariablePickerProps
             })}
             {!filtered.value.length ? (
               <p class="magic-variable-empty">
-                {query.value.trim() ? `No variables match “${query.value.trim()}”.` : 'No variables match this field type in the current scope.'}
+                {query.value.trim() ? t('workbench.noVariablesMatchValue0', { value0: query.value.trim() }) : t('workbench.noVariablesMatchThisFieldTypeInTheCurrentScope')}
               </p>
             ) : null}
           </div>
-          <footer>Only variables visible before this step are shown. Paths use stable Source IDs.</footer>
+          <footer>{t('workbench.onlyVariablesVisibleBeforeThisStepAreShownPathsUseStableSourceIds')}</footer>
         </section>
       ) : null}
     </div>

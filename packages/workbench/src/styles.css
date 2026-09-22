@@ -999,3 +999,19 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .automation-runs .runs-table td:first-child { max-width: 214px; }
   .automation-runs .run-detail-link { max-width: 190px; }
 }
+
+.language-switcher select {
+  max-width: 130px;
+  min-height: 30px;
+  padding: 3px 7px;
+  border: 1px solid var(--border, #dfe3e6);
+  border-radius: 5px;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+}
+
+@media (max-width: 640px) {
+  .language-switcher select { max-width: 108px; }
+}

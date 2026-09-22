@@ -1,5 +1,7 @@
 import type { Context } from 'cordis'
 import { createApp } from 'vue'
+import { I18nService } from '@numen/i18n'
+import { BrowserLocaleService } from '@numen/webui/i18n'
 import { WorkbenchShell } from './WorkbenchShell.js'
 
 const root = document.querySelector('#root')
@@ -15,6 +17,8 @@ async function startContext(): Promise<{ context: Context; stop(): Promise<void>
       import('@numen/webui/schema-ui'),
     ])
     const context = new Context()
+    await context.plugin(I18nService)
+    await context.plugin(BrowserLocaleService)
     await context.plugin(BrowserExtensionRegistry)
     await context.plugin(SchemaUIRegistry)
     await context.plugin(BrowserRouterService, { basePath: import.meta.env.BASE_URL })
@@ -30,16 +34,19 @@ async function main(): Promise<void> {
     const { coreWorkbenchFrontend } = await import('./entry.js')
     await context.plugin(coreWorkbenchFrontend)
   }
-  globalThis.addEventListener('beforeunload', () => void runtime.stop(), { once: true })
   const app = createApp(() => (
     <WorkbenchShell
+      localeService={context.webuiLocale}
       router={context.webuiRouter}
       schemaUI={context.schemaUI}
       {...(import.meta.env.DEV ? {} : { consoleClient: context.consoleClient })}
     />
   ))
   app.mount(rootElement)
-  globalThis.addEventListener('beforeunload', () => app.unmount(), { once: true })
+  globalThis.addEventListener('beforeunload', () => {
+    app.unmount()
+    void runtime.stop()
+  }, { once: true })
 }
 
 void main().catch((error) => {

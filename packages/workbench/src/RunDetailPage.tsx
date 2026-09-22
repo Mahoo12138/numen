@@ -1,3 +1,4 @@
+import { diagnosticText, t, metadataText, formatDateTime, statusLabel } from './i18n.js'
 import { Ban, Braces, ChevronLeft, Clock3, GitBranch, ListTree, RotateCcw, ScrollText } from '@lucide/vue'
 import { computed, onScopeDispose, reactive, shallowReactive, watch } from 'vue'
 import {
@@ -19,7 +20,7 @@ import type { WorkbenchPageProps } from './types.js'
 import { useConsoleQuery, type ConsoleQueryState } from './useConsoleQuery.js'
 import { defineSetupComponent } from './vue-component.js'
 
-const dateTimeFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'medium' })
+const formatTime = formatDateTime
 
 interface RunDetailPosition {
   executionCursor?: string
@@ -161,12 +162,12 @@ function RunDetailHeader({ state, cancellation, onBack, onCancel }: {
   const cancellable = status === 'QUEUED' || status === 'RUNNING' || status === 'CANCELLING'
   return (
     <header class="core-page-header run-detail-header">
-      <button aria-label="Back to Runs" class="run-detail-back" onClick={onBack} type="button">
+      <button aria-label={t('workbench.backToRuns')} class="run-detail-back" onClick={onBack} type="button">
         <ChevronLeft aria-hidden="true" size={18} />
       </button>
       <div class="run-detail-heading">
-        <h1>{run?.automationName ?? 'Run detail'}</h1>
-        <p>{run ? `${run.id} · Revision ${run.revisionNumber ?? run.revisionId}` : 'Durable execution timeline and diagnostics.'}</p>
+        <h1>{run?.automationName ?? t('workbench.runDetail')}</h1>
+        <p>{run ? t('workbench.value0RevisionValue1', { value0: run.id, value1: run.revisionNumber ?? run.revisionId }) : t('workbench.durableExecutionTimelineAndDiagnostics')}</p>
       </div>
       {run ? (
         <div class="run-detail-actions">
@@ -176,7 +177,7 @@ function RunDetailHeader({ state, cancellation, onBack, onCancel }: {
               disabled={cancellation.pending || status === 'CANCELLING'}
               onClick={onCancel}
               type="button"
-            ><Ban aria-hidden="true" size={14} />{cancellation.pending ? 'Cancelling…' : status === 'CANCELLING' ? 'Cancellation pending' : 'Cancel Run'}</button>
+            ><Ban aria-hidden="true" size={14} />{cancellation.pending ? t('workbench.cancelling') : status === 'CANCELLING' ? t('workbench.cancellationPending') : t('workbench.cancelRun')}</button>
           ) : null}
           <em class="run-detail-status" data-status={status}>{statusLabel(status ?? run.status)}</em>
         </div>
@@ -210,25 +211,25 @@ export function RunDetailContent({
   onOlderEvents(): void
 }) {
   if (state.status === 'DISABLED') {
-    return <RunDetailState title="Runtime preview" message="Open this Page from a running Numen Runtime to inspect a durable Run." />
+    return <RunDetailState title={t('workbench.runtimePreview')} message={t('workbench.openThisPageFromARunningNumenRuntimeToInspectADurableRun')} />
   }
   if (state.status === 'LOADING') {
-    return <RunDetailState busy title="Loading Run" message="Reading durable Execution, Attempt, and Journal state…" />
+    return <RunDetailState busy title={t('workbench.loadingRun')} message={t('workbench.readingDurableExecutionAttemptAndJournalState')} />
   }
   if (state.status === 'ERROR') {
-    return <RunDetailState action="Try again" message={state.message} onAction={onReload} title="Run unavailable" tone="error" />
+    return <RunDetailState action={t('workbench.tryAgain')} message={diagnosticText(state)} onAction={onReload} title={t('workbench.runUnavailable')} tone="error" />
   }
   if (!state.data) {
-    return <RunDetailState title="Run not found" message="This Run does not exist or is no longer available." />
+    return <RunDetailState title={t('workbench.runNotFound')} message={t('workbench.thisRunDoesNotExistOrIsNoLongerAvailable')} />
   }
   const detail = state.data
   return (
     <div class="run-detail-content">
       <RunFacts detail={detail} />
-      <nav aria-label="Run detail views" class="run-context-tabs">
-        <RunViewTab active={activeView === 'flow'} icon={ListTree} label="Flow" onClick={() => onSelectView('flow')} />
-        <RunViewTab active={activeView === 'timeline'} icon={ScrollText} label="Timeline" onClick={() => onSelectView('timeline')} />
-        <RunViewTab active={activeView === 'context'} icon={Braces} label="Context" onClick={() => onSelectView('context')} />
+      <nav aria-label={t('workbench.runDetailViews')} class="run-context-tabs">
+        <RunViewTab active={activeView === 'flow'} icon={ListTree} label={t('workbench.flow')} onClick={() => onSelectView('flow')} />
+        <RunViewTab active={activeView === 'timeline'} icon={ScrollText} label={t('workbench.timeline')} onClick={() => onSelectView('timeline')} />
+        <RunViewTab active={activeView === 'context'} icon={Braces} label={t('workbench.context')} onClick={() => onSelectView('context')} />
       </nav>
       {activeView === 'flow' ? <RunFlowView detail={detail} /> : null}
       {activeView === 'context' ? <RunContextView detail={detail} /> : null}
@@ -236,7 +237,7 @@ export function RunDetailContent({
       <div class="run-detail-columns">
         <section aria-labelledby="run-timeline-title" class="run-detail-section run-timeline">
           <div class="run-detail-section-heading">
-            <div><h2 id="run-timeline-title">Timeline</h2><span>Semantic Journal · newest first</span></div>
+            <div><h2 id="run-timeline-title">{t('workbench.timeline')}</h2><span>{t('workbench.semanticJournalNewestFirst')}</span></div>
             <strong>{detail.timeline.total}</strong>
           </div>
           {detail.timeline.items.length ? (
@@ -245,36 +246,36 @@ export function RunDetailContent({
                 <li key={event.sequence}>
                   <span aria-hidden="true" class="timeline-marker" data-event-type={event.type} />
                   <div>
-                    <strong>{event.title}</strong>
+                    <strong>{metadataText(`workbench.events.${event.type}`, event.title)}</strong>
                     {event.detail ? <p>{event.detail}</p> : null}
                     <small>#{event.sequence} · {formatTime(event.occurredAt)}</small>
                   </div>
                 </li>
               ))}
             </ol>
-          ) : <p class="run-detail-empty">No Journal events have been recorded.</p>}
+          ) : <p class="run-detail-empty">{t('workbench.noJournalEventsHaveBeenRecorded')}</p>}
           <PageControls
             canGoNewer={canShowNewerEvents}
             canGoOlder={!!detail.timeline.nextCursor}
-            label="Timeline pages"
+            label={t('workbench.timelinePages')}
             onNewer={onNewerEvents}
             onOlder={onOlderEvents}
           />
         </section>
         <section aria-labelledby="execution-diagnostics-title" class="run-detail-section execution-diagnostics">
           <div class="run-detail-section-heading">
-            <div><h2 id="execution-diagnostics-title">Execution diagnostics</h2><span>Newest durable units first</span></div>
+            <div><h2 id="execution-diagnostics-title">{t('workbench.executionDiagnostics')}</h2><span>{t('workbench.newestDurableUnitsFirst')}</span></div>
             <strong>{detail.executionSummary.total}</strong>
           </div>
           {detail.executions.length ? (
             <div class="execution-records">
               {detail.executions.map(execution => <ExecutionRecord execution={execution} key={execution.id} />)}
             </div>
-          ) : <p class="run-detail-empty">No Executions have been created for this Run.</p>}
+          ) : <p class="run-detail-empty">{t('workbench.noExecutionsHaveBeenCreatedForThisRun')}</p>}
           <PageControls
             canGoNewer={canShowNewerExecutions}
             canGoOlder={!!detail.nextExecutionCursor}
-            label="Execution diagnostic pages"
+            label={t('workbench.executionDiagnosticPages')}
             onNewer={onNewerExecutions}
             onOlder={onOlderExecutions}
           />
@@ -302,13 +303,13 @@ function RunFlowView({ detail }: { detail: WorkbenchRunDetail }) {
   return (
     <section aria-labelledby="run-flow-title" class="run-detail-section run-flow-view">
       <div class="run-detail-section-heading">
-        <div><h2 id="run-flow-title">Flow</h2><span>Immutable Revision structure · durable execution status</span></div>
+        <div><h2 id="run-flow-title">{t('workbench.flow')}</h2><span>{t('workbench.immutableRevisionStructureDurableExecutionStatus')}</span></div>
         <strong>{detail.flow.root.executionCount}</strong>
       </div>
       <ol class="run-flow-tree">
         <RunFlowNode node={detail.flow.root} />
       </ol>
-      {detail.flow.truncated ? <p class="run-projection-note">This Flow exceeds the 250-node inspection limit. The remaining structure is hidden.</p> : null}
+      {detail.flow.truncated ? <p class="run-projection-note">{t('workbench.thisFlowExceedsThe250NodeInspectionLimitTheRemainingStructureIsHidden')}</p> : null}
     </section>
   )
 }
@@ -330,13 +331,13 @@ function RunContextView({ detail }: { detail: WorkbenchRunDetail }) {
   return (
     <section aria-labelledby="run-context-title" class="run-detail-section run-context-view">
       <div class="run-detail-section-heading">
-        <div><h2 id="run-context-title">Context</h2><span>Rebuildable binding paths · payload scalars are summarized</span></div>
+        <div><h2 id="run-context-title">{t('workbench.context')}</h2><span>{t('workbench.rebuildableBindingPathsPayloadScalarsAreSummarized')}</span></div>
         <strong>{detail.context.length}</strong>
       </div>
       <div class="run-context-groups">
         {detail.context.map(group => (
           <details key={group.name} open={group.name === 'run' || group.name === 'input' || group.name === 'steps'}>
-            <summary><code>{group.name}.*</code>{group.truncated ? <span>Inspection limit reached</span> : null}</summary>
+            <summary><code>{group.name}.*</code>{group.truncated ? <span>{t('workbench.inspectionLimitReached')}</span> : null}</summary>
             <pre>{JSON.stringify(group.value, null, 2)}</pre>
           </details>
         ))}
@@ -348,13 +349,13 @@ function RunContextView({ detail }: { detail: WorkbenchRunDetail }) {
 function RunFacts({ detail }: { detail: WorkbenchRunDetail }) {
   const { run, executionSummary } = detail
   return (
-    <section aria-label="Run facts" class="run-facts">
-      <div><span>Started</span><strong>{run.startedAt ? formatTime(run.startedAt) : 'Not started'}</strong></div>
-      <div><span>Duration</span><strong>{formatDuration(run.startedAt, run.finishedAt)}</strong></div>
-      <div><span>Executions</span><strong>{executionSummary.total} · {executionSummary.completed} completed</strong></div>
-      <div><span>Attempts</span><strong>{executionSummary.attempts}</strong></div>
+    <section aria-label={t('workbench.runFacts')} class="run-facts">
+      <div><span>{t('workbench.started')}</span><strong>{run.startedAt ? formatTime(run.startedAt) : t('workbench.notStarted')}</strong></div>
+      <div><span>{t('workbench.duration')}</span><strong>{formatDuration(run.startedAt, run.finishedAt)}</strong></div>
+      <div><span>{t('workbench.executions2')}</span><strong>{executionSummary.total} · {executionSummary.completed}{t('workbench.completed2')}</strong></div>
+      <div><span>{t('workbench.attempts2')}</span><strong>{executionSummary.attempts}</strong></div>
       {executionSummary.blocked || executionSummary.failed || executionSummary.timedOut ? (
-        <div data-tone="warning"><span>Attention</span><strong>{executionSummary.blocked} blocked · {executionSummary.failed + executionSummary.timedOut} failed</strong></div>
+        <div data-tone="warning"><span>{t('workbench.attention')}</span><strong>{executionSummary.blocked}{t('workbench.blocked')}{executionSummary.failed + executionSummary.timedOut}{t('workbench.failed2')}</strong></div>
       ) : null}
     </section>
   )
@@ -369,20 +370,20 @@ function ExecutionRecord({ execution }: { execution: WorkbenchRunExecution }) {
       </header>
       <h3>{execution.title}</h3>
       <code>{execution.instructionId}</code>
-      {execution.blockedReason ? <p class="execution-warning">Blocked: {statusLabel(execution.blockedReason)}</p> : null}
+      {execution.blockedReason ? <p class="execution-warning">{t('workbench.blocked2')}{statusLabel(execution.blockedReason)}</p> : null}
       <dl>
-        <div><dt>Updated</dt><dd>{formatTime(execution.updatedAt)}</dd></div>
-        <div><dt>Generation</dt><dd>{execution.generation}</dd></div>
-        {execution.loopIndex === undefined ? null : <div><dt>Loop item</dt><dd>{execution.loopIndex + 1}</dd></div>}
-        {execution.scopeBranch === undefined ? null : <div><dt>Branch</dt><dd>{execution.scopeBranch + 1}</dd></div>}
+        <div><dt>{t('workbench.updated')}</dt><dd>{formatTime(execution.updatedAt)}</dd></div>
+        <div><dt>{t('workbench.generation')}</dt><dd>{execution.generation}</dd></div>
+        {execution.loopIndex === undefined ? null : <div><dt>{t('workbench.loopItem')}</dt><dd>{execution.loopIndex + 1}</dd></div>}
+        {execution.scopeBranch === undefined ? null : <div><dt>{t('workbench.branch')}</dt><dd>{execution.scopeBranch + 1}</dd></div>}
       </dl>
       {execution.attempts.length ? (
         <details class="execution-attempts" open={execution.attempts.some(attempt => attempt.status !== 'SUCCEEDED')}>
-          <summary><RotateCcw aria-hidden="true" size={13} />{execution.attempts.length} {execution.attempts.length === 1 ? 'attempt' : 'attempts'}</summary>
+          <summary><RotateCcw aria-hidden="true" size={13} />{execution.attempts.length} {execution.attempts.length === 1 ? t('workbench.attempt') : t('workbench.attempts3')}</summary>
           <div>
             {execution.attempts.map(attempt => (
               <article key={attempt.id}>
-                <span>Attempt {attempt.number}</span>
+                <span>{t('workbench.attempt2')}{attempt.number}</span>
                 <em data-attempt-status={attempt.status}>{statusLabel(attempt.status)}</em>
                 <small>{attempt.providerRef} · {formatDuration(attempt.startedAt, attempt.finishedAt)}</small>
                 {attempt.errorSummary ? <p>{attempt.errorSummary}</p> : null}
@@ -405,8 +406,8 @@ function PageControls({ canGoNewer, canGoOlder, label, onNewer, onOlder }: {
   if (!canGoNewer && !canGoOlder) return null
   return (
     <nav aria-label={label} class="run-detail-pagination">
-      <button disabled={!canGoNewer} onClick={onNewer} type="button">Newer</button>
-      <button disabled={!canGoOlder} onClick={onOlder} type="button">Older</button>
+      <button disabled={!canGoNewer} onClick={onNewer} type="button">{t('workbench.newer')}</button>
+      <button disabled={!canGoOlder} onClick={onOlder} type="button">{t('workbench.older')}</button>
     </nav>
   )
 }
@@ -428,23 +429,14 @@ function RunDetailState({ title, message, busy = false, tone = 'default', action
   )
 }
 
-function formatTime(value: string): string {
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? value : dateTimeFormatter.format(date)
-}
-
 function formatDuration(startedAt?: string, finishedAt?: string): string {
-  if (!startedAt) return 'Not started'
-  if (!finishedAt) return 'In progress'
+  if (!startedAt) return t('workbench.notStarted')
+  if (!finishedAt) return t('workbench.inProgress')
   const duration = new Date(finishedAt).getTime() - new Date(startedAt).getTime()
   if (!Number.isFinite(duration) || duration < 0) return '—'
   if (duration < 1000) return `${duration} ms`
   if (duration < 60_000) return `${(duration / 1000).toFixed(1)} s`
   return `${Math.floor(duration / 60_000)}m ${Math.floor((duration % 60_000) / 1000)}s`
-}
-
-function statusLabel(status: string): string {
-  return status.toLowerCase().replaceAll('_', ' ').replace(/^./, first => first.toUpperCase())
 }
 
 function operationLabel(operation: string): string {

@@ -1,3 +1,4 @@
+import { diagnosticText, t } from './i18n.js'
 import {
   Braces,
   Clock3,
@@ -51,14 +52,14 @@ function PickerItem({ item, onInsert }: {
     <button class="quick-picker-item" onClick={() => onInsert(item)} role="option" type="button">
       <span class="quick-picker-item-icon" data-kind={item.kind}><Icon size={16} /></span>
       <span class="quick-picker-item-copy">
-        <span><strong>{item.title}</strong><em>{item.kind === 'capability' ? item.capabilityKind : item.kind === 'trigger' ? 'Trigger' : 'Control'}</em></span>
+        <span><strong>{item.title}</strong><em>{item.kind === 'capability' ? item.capabilityKind : item.kind === 'trigger' ? t('workbench.trigger') : t('workbench.control')}</em></span>
         <small>{item.description ?? ref}</small>
         <code>{ref}</code>
       </span>
       {item.kind === 'capability' || item.kind === 'trigger' ? (
         <span class="quick-picker-item-meta">
-          {!item.providerAvailable ? <em data-tone="warning">Provider unavailable</em> : null}
-          {item.connectionSlots.length ? <small>{item.connectionSlots.length} connection {item.connectionSlots.length === 1 ? 'slot' : 'slots'}</small> : null}
+          {!item.providerAvailable ? <em data-tone="warning">{t('workbench.providerUnavailable')}</em> : null}
+          {item.connectionSlots.length ? <small>{item.connectionSlots.length}{t('workbench.connection')}{item.connectionSlots.length === 1 ? t('workbench.slot') : t('workbench.slots')}</small> : null}
         </span>
       ) : null}
     </button>
@@ -104,7 +105,7 @@ export const AutomationQuickPicker = defineSetupComponent<AutomationQuickPickerP
     const triggers = filtered.value.filter(item => item.kind === 'trigger')
     const capabilities = filtered.value.filter(item => item.kind === 'capability')
     if (!live) {
-      return <button class="add-step-button" disabled={props.disabled ?? false} type="button"><Plus size={15} /> Add step</button>
+      return <button class="add-step-button" disabled={props.disabled ?? false} type="button"><Plus size={15} />{t('workbench.addStep')}</button>
     }
     return (
     <div class="quick-picker-anchor" onKeydown={event => {
@@ -117,41 +118,41 @@ export const AutomationQuickPicker = defineSetupComponent<AutomationQuickPickerP
         disabled={props.disabled ?? false}
         onClick={() => { open.value = !open.value }}
         type="button"
-      ><Plus size={15} /> Add step</button>
+      ><Plus size={15} />{t('workbench.addStep')}</button>
       {open.value ? (
-        <section aria-label="Add automation step" class="quick-picker" role="dialog">
+        <section aria-label={t('workbench.addAutomationStep')} class="quick-picker" role="dialog">
           <header>
-            <div><strong>Add step</strong><small>Controls and registered capabilities</small></div>
-            <button aria-label="Close step picker" onClick={() => { open.value = false }} type="button"><X size={16} /></button>
+            <div><strong>{t('workbench.addStep2')}</strong><small>{t('workbench.controlsAndRegisteredCapabilities')}</small></div>
+            <button aria-label={t('workbench.closeStepPicker')} onClick={() => { open.value = false }} type="button"><X size={16} /></button>
           </header>
           <label class="quick-picker-search">
             <Search aria-hidden="true" size={15} />
             <input
-              aria-label="Search controls and capabilities"
+              aria-label={t('workbench.searchControlsAndCapabilities')}
               onInput={event => { query.value = (event.target as HTMLInputElement).value }}
-              placeholder="Search controls and capabilities…"
+              placeholder={t('workbench.searchControlsAndCapabilities2')}
               ref={inputRef}
               value={query.value}
             />
           </label>
           <div class="quick-picker-results" role="listbox">
-            {state.status === 'LOADING' ? <p class="quick-picker-state">Loading insert catalog…</p> : null}
+            {state.status === 'LOADING' ? <p class="quick-picker-state">{t('workbench.loadingInsertCatalog')}</p> : null}
             {state.status === 'ERROR' ? (
               <div class="quick-picker-state" role="alert">
                 <Braces size={18} />
-                <p>{state.message}</p>
-                {props.onReload ? <button onClick={props.onReload} type="button">Try again</button> : null}
+                <p>{diagnosticText(state)}</p>
+                {props.onReload ? <button onClick={props.onReload} type="button">{t('workbench.tryAgain')}</button> : null}
               </div>
             ) : null}
             {state.status === 'READY' && controls.length ? (
               <section class="quick-picker-group">
-                <h3>Controls</h3>
+                <h3>{t('workbench.controls')}</h3>
                 {controls.map(item => <PickerItem item={item} key={`control:${item.kind === 'control' ? item.control : item.kind === 'extension' ? `${item.control.id}@${item.control.version}` : ''}`} onInsert={insert} />)}
               </section>
             ) : null}
             {state.status === 'READY' && triggers.length ? (
               <section class="quick-picker-group">
-                <h3>Triggers</h3>
+                <h3>{t('workbench.triggers')}</h3>
                 {triggers.map(item => (
                   <PickerItem item={item} key={item.kind === 'trigger' ? `trigger:${item.capability.id}@${item.capability.version}` : ''} onInsert={insert} />
                 ))}
@@ -159,7 +160,7 @@ export const AutomationQuickPicker = defineSetupComponent<AutomationQuickPickerP
             ) : null}
             {state.status === 'READY' && capabilities.length ? (
               <section class="quick-picker-group">
-                <h3>Capabilities</h3>
+                <h3>{t('workbench.capabilities')}</h3>
                 {capabilities.map(item => (
                   <PickerItem
                     item={item}
@@ -170,10 +171,10 @@ export const AutomationQuickPicker = defineSetupComponent<AutomationQuickPickerP
               </section>
             ) : null}
             {state.status === 'READY' && !filtered.value.length ? (
-              <p class="quick-picker-state">No controls or capabilities match “{query.value.trim()}”.</p>
+              <p class="quick-picker-state">{t('workbench.noControlsOrCapabilitiesMatch')}{query.value.trim()}”.</p>
             ) : null}
           </div>
-          <footer>Unavailable providers can still be composed in a Draft and resolved before publish.</footer>
+          <footer>{t('workbench.unavailableProvidersCanStillBeComposedInADraftAndResolvedBeforePublish')}</footer>
         </section>
       ) : null}
     </div>

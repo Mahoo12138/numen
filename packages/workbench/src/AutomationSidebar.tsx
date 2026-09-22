@@ -1,3 +1,4 @@
+import { diagnosticText, useWorkbenchI18n } from './i18n.js'
 import { Filter, MoreVertical, Network, Plus } from '@lucide/vue'
 import { computed, nextTick, onMounted, onScopeDispose, ref, watch } from 'vue'
 import type { WorkbenchAutomationsIndex } from './contracts.js'
@@ -30,6 +31,7 @@ interface AutomationSidebarItem {
 export const AutomationSidebar = defineSetupComponent<AutomationSidebarProps>('AutomationSidebar', [
   'activeId', 'onChange', 'onOpen', 'onCreate', 'onCreateDismiss', 'onReload', 'createError', 'creating', 'state',
 ], props => {
+  const { t } = useWorkbenchI18n()
   const createOpen = ref(false)
   const filterOpen = ref(false)
   const filterQuery = ref('')
@@ -64,7 +66,7 @@ export const AutomationSidebar = defineSetupComponent<AutomationSidebarProps>('A
           id: item.id,
           label: item.name,
           icon: Network,
-          meta: `Draft v${item.draftVersion} · ${item.revisionCount} revision${item.revisionCount === 1 ? '' : 's'}`,
+          meta: t(`workbench.projection.draft.${item.revisionCount === 1 ? 'one' : 'other'}`, { version: item.draftVersion, count: item.revisionCount }),
           enabled: item.enabled,
           published: item.revisionCount > 0,
         }))
@@ -94,13 +96,13 @@ export const AutomationSidebar = defineSetupComponent<AutomationSidebarProps>('A
   return () => {
   const preview = !props.state || props.state.status === 'DISABLED'
   return (
-    <aside class="primary-sidebar" aria-label="Automations">
+    <aside class="primary-sidebar" aria-label={t('workbench.automations2')}>
       <div class="sidebar-heading">
-        <span>AUTOMATIONS</span>
+        <span>{t('workbench.automations3')}</span>
         <div class="sidebar-actions">
           <button
             aria-expanded={createOpen.value}
-            aria-label="Create automation"
+            aria-label={t('workbench.createAutomation')}
             class="icon-button"
             disabled={!props.onCreate || props.creating}
             onClick={() => { createOpen.value = !createOpen.value; props.onCreateDismiss?.() }}
@@ -108,7 +110,7 @@ export const AutomationSidebar = defineSetupComponent<AutomationSidebarProps>('A
           ><Plus size={16} /></button>
           <button
             aria-expanded={filterOpen.value}
-            aria-label="Filter automations"
+            aria-label={t('workbench.filterAutomations')}
             class="icon-button"
             data-active={filterOpen.value || filtersActive.value}
             onClick={() => { filterOpen.value = !filterOpen.value }}
@@ -117,59 +119,59 @@ export const AutomationSidebar = defineSetupComponent<AutomationSidebarProps>('A
         </div>
       </div>
       {createOpen.value ? <form class="automation-create-form" onSubmit={event => { event.preventDefault(); void submit() }}>
-        <label for="automation-create-name">Automation name</label>
+        <label for="automation-create-name">{t('workbench.automationName')}</label>
         <input
           id="automation-create-name"
           maxlength="200"
           onInput={event => { name.value = (event.target as HTMLInputElement).value }}
-          placeholder="Morning heartbeat"
+          placeholder={t('workbench.morningHeartbeat')}
           ref={nameInput}
           value={name.value}
         />
         {props.createError ? <p role="alert">{props.createError}</p> : null}
         <div>
-          <button disabled={!name.value.trim() || props.creating} type="submit">{props.creating ? 'Creating…' : 'Create'}</button>
-          <button disabled={props.creating} onClick={closeCreate} type="button">Cancel</button>
+          <button disabled={!name.value.trim() || props.creating} type="submit">{props.creating ? t('workbench.creating') : t('workbench.create')}</button>
+          <button disabled={props.creating} onClick={closeCreate} type="button">{t('workbench.cancel')}</button>
         </div>
       </form> : null}
-      {filterOpen.value ? <section class="automation-filter-panel" aria-label="Automation filters">
-        <label><span>Search</span><input
-          aria-label="Search automations"
+      {filterOpen.value ? <section class="automation-filter-panel" aria-label={t('workbench.automationFilters')}>
+        <label><span>{t('workbench.search')}</span><input
+          aria-label={t('workbench.searchAutomations')}
           onInput={event => { filterQuery.value = (event.target as HTMLInputElement).value }}
-          placeholder="Name or ID"
+          placeholder={t('workbench.nameOrId')}
           value={filterQuery.value}
         /></label>
-        <label><span>Status</span><SelectMenu
-          ariaLabel="Automation status"
+        <label><span>{t('workbench.status')}</span><SelectMenu
+          ariaLabel={t('workbench.automationStatus')}
           options={[
-            { value: 'all', label: 'All automations' },
-            { value: 'enabled', label: 'Enabled' },
-            { value: 'disabled', label: 'Disabled' },
-            { value: 'published', label: 'Published' },
-            { value: 'draft', label: 'Draft only' },
+            { value: 'all', label: t('workbench.allAutomations') },
+            { value: 'enabled', label: t('workbench.enabled') },
+            { value: 'disabled', label: t('workbench.disabled') },
+            { value: 'published', label: t('workbench.published') },
+            { value: 'draft', label: t('workbench.draftOnly') },
           ]}
           value={filterStatus.value}
           onChange={value => { filterStatus.value = value }}
         /></label>
-        <footer><span>{items.value.length} shown</span><button
+        <footer><span>{items.value.length}{t('workbench.shown')}</span><button
           disabled={!filtersActive.value}
           onClick={() => { filterQuery.value = ''; filterStatus.value = 'all' }}
           type="button"
-        >Clear</button></footer>
+        >{t('workbench.clear')}</button></footer>
       </section> : null}
       <div class="automation-list">
-        {props.state?.status === 'LOADING' ? <p class="automation-sidebar-state" role="status">Loading automations…</p> : null}
+        {props.state?.status === 'LOADING' ? <p class="automation-sidebar-state" role="status">{t('workbench.loadingAutomations')}</p> : null}
         {props.state?.status === 'ERROR' ? (
           <div class="automation-sidebar-state" role="alert">
-            <strong>Automations unavailable</strong>
-            <span>{props.state.message}</span>
-            <button {...(props.onReload ? { onClick: props.onReload } : {})} type="button">Try again</button>
+            <strong>{t('workbench.automationsUnavailable')}</strong>
+            <span>{diagnosticText(props.state)}</span>
+            <button {...(props.onReload ? { onClick: props.onReload } : {})} type="button">{t('workbench.tryAgain')}</button>
           </div>
         ) : null}
         {props.state?.status === 'READY' && !props.state.data.items.length ? (
-          <p class="automation-sidebar-state">No automations yet.</p>
+          <p class="automation-sidebar-state">{t('workbench.noAutomationsYet2')}</p>
         ) : null}
-        {(preview || props.state?.status === 'READY') && !items.value.length && filtersActive.value ? <p class="automation-sidebar-state">No automations match these filters.</p> : null}
+        {(preview || props.state?.status === 'READY') && !items.value.length && filtersActive.value ? <p class="automation-sidebar-state">{t('workbench.noAutomationsMatchTheseFilters')}</p> : null}
         {(preview || props.state?.status === 'READY') ? items.value.map(item => {
           const Icon = item.icon
           const menuOpen = menuAutomationId.value === item.id
@@ -182,21 +184,21 @@ export const AutomationSidebar = defineSetupComponent<AutomationSidebarProps>('A
               <button
                 aria-expanded={menuOpen}
                 aria-haspopup="menu"
-                aria-label={`More actions for ${item.label}`}
+                aria-label={t('workbench.moreActionsForValue0', { value0: item.label })}
                 class="row-menu"
                 data-active={menuOpen}
                 onClick={() => { menuAutomationId.value = menuOpen ? undefined : item.id }}
                 type="button"
               ><MoreVertical size={16} /></button>
-              {menuOpen ? <div aria-label={`Actions for ${item.label}`} class="automation-row-menu" role="menu">
-                <button onClick={() => openAutomation(item.id, 'Editor')} role="menuitem" type="button">Open editor</button>
-                <button onClick={() => openAutomation(item.id, 'Runs')} role="menuitem" type="button">View runs</button>
+              {menuOpen ? <div aria-label={t('workbench.actionsForValue0', { value0: item.label })} class="automation-row-menu" role="menu">
+                <button onClick={() => openAutomation(item.id, 'Editor')} role="menuitem" type="button">{t('workbench.openEditor')}</button>
+                <button onClick={() => openAutomation(item.id, 'Runs')} role="menuitem" type="button">{t('workbench.viewRuns')}</button>
               </div> : null}
             </div>
           </div>
         }) : null}
       </div>
-      <button class="collapse-sidebar" type="button" aria-label="Collapse sidebar">‹‹</button>
+      <button class="collapse-sidebar" type="button" aria-label={t('workbench.collapseSidebar')}>‹‹</button>
     </aside>
   )
   }

@@ -1,3 +1,4 @@
+import { t } from './i18n.js'
 import { isNumenValue, type NumenValue } from '@numen/core'
 import { computed, onBeforeUnmount, ref } from 'vue'
 import { X } from '@lucide/vue'
@@ -22,13 +23,13 @@ interface Props {
 function message(error: unknown): string {
   const code = error && typeof error === 'object' && 'code' in error ? error.code : undefined
   switch (code) {
-    case 'CREDENTIAL_VERSION_CONFLICT': return 'This Credential changed elsewhere. Close and reopen it to use the current version.'
-    case 'CREDENTIAL_IN_USE': return 'Remove its Connection bindings before deleting this Credential.'
-    case 'CREDENTIAL_NOT_FOUND': return 'This Credential no longer exists. Close this panel and refresh the list.'
-    case 'CREDENTIAL_KEY_UNAVAILABLE': return 'Credential encryption is not configured.'
-    case 'CREDENTIAL_TYPE_UNAVAILABLE': return 'The Credential type is unavailable. Restore its plugin before rotating.'
-    case 'CREDENTIAL_INVALID': return 'Review the required fields and their formats, then try again.'
-    default: return 'The Credential request failed. Refresh the list before retrying if its outcome is uncertain.'
+    case 'CREDENTIAL_VERSION_CONFLICT': return 'workbench.credentialConflict'
+    case 'CREDENTIAL_IN_USE': return 'workbench.credentialBound'
+    case 'CREDENTIAL_NOT_FOUND': return 'workbench.credentialGone'
+    case 'CREDENTIAL_KEY_UNAVAILABLE': return 'workbench.credentialKeyMissing'
+    case 'CREDENTIAL_TYPE_UNAVAILABLE': return 'workbench.credentialTypeMissing'
+    case 'CREDENTIAL_INVALID': return 'workbench.credentialInvalid'
+    default: return 'workbench.credentialFailed'
   }
 }
 
@@ -43,6 +44,7 @@ export const CredentialConfigurationPanel = defineSetupComponent<Props>('Credent
     const values = ref<Record<string, string>>({})
     const pending = ref(false)
     const error = ref<string>()
+    const invalidField = ref('')
     const confirmDelete = ref(false)
     const lifecycle = new AbortController()
     onBeforeUnmount(() => { lifecycle.abort(); values.value = {} })
@@ -61,7 +63,8 @@ export const CredentialConfigurationPanel = defineSetupComponent<Props>('Credent
           if (!isNumenValue(value) || (field.type !== 'json' && typeof value !== field.type)) throw new Error()
           secret[field.name] = value
         } catch {
-          error.value = `${field.label}: enter ${field.type === 'number' ? 'a number' : field.type === 'boolean' ? 'true or false' : 'valid JSON'}.`
+          invalidField.value = field.label
+          error.value = `workbench.invalidCredentialField.${field.type === 'number' ? 'number' : field.type === 'boolean' ? 'boolean' : 'json'}`
           return
         }
       }
@@ -98,33 +101,33 @@ export const CredentialConfigurationPanel = defineSetupComponent<Props>('Credent
         if (!lifecycle.signal.aborted) { error.value = message(nextError); confirmDelete.value = false }
       } finally { pending.value = false }
     }
-    return () => <aside aria-label="Credential configuration" class="connection-config-panel credential-config-panel">
-      <header><div><h2>{original ? 'Manage Credential' : 'New Credential'}</h2><p>{original ? `${original.name} · version ${original.secretVersion}` : 'Store an encrypted secret for Connections.'}</p></div>
-        <button aria-label="Close Credential configuration" class="icon-button" onClick={props.onClose} type="button"><X size={16} /></button>
+    return () => <aside aria-label={t('workbench.credentialConfiguration')} class="connection-config-panel credential-config-panel">
+      <header><div><h2>{original ? t('workbench.manageCredential') : t('workbench.newCredential')}</h2><p>{original ? t('workbench.value0VersionValue1', { value0: original.name, value1: original.secretVersion }) : t('workbench.storeAnEncryptedSecretForConnections')}</p></div>
+        <button aria-label={t('workbench.closeCredentialConfiguration')} class="icon-button" onClick={props.onClose} type="button"><X size={16} /></button>
       </header>
       <form autocomplete="off" onSubmit={event => { event.preventDefault(); void save() }}>
-        <label class="connection-config-field"><span>Name</span><input aria-label="Credential name" autocomplete="off" disabled={!!original || pending.value} maxlength="120" value={name.value} onInput={event => { name.value = (event.target as HTMLInputElement).value }} type="text" /></label>
-        <label class="connection-config-field"><span>Credential type</span><select aria-label="Credential type" disabled={!!original || pending.value} value={selectedKey.value} onChange={event => { selectedKey.value = (event.target as HTMLSelectElement).value; values.value = {}; error.value = undefined }}>
-          {!selected.value ? <option value={selectedKey.value}>{original ? `${original.typeId}@${original.typeVersion} · unavailable` : 'No types available'}</option> : null}
+        <label class="connection-config-field"><span>{t('workbench.name')}</span><input aria-label={t('workbench.credentialName')} autocomplete="off" disabled={!!original || pending.value} maxlength="120" value={name.value} onInput={event => { name.value = (event.target as HTMLInputElement).value }} type="text" /></label>
+        <label class="connection-config-field"><span>{t('workbench.credentialType')}</span><select aria-label={t('workbench.credentialType')} disabled={!!original || pending.value} value={selectedKey.value} onChange={event => { selectedKey.value = (event.target as HTMLSelectElement).value; values.value = {}; error.value = undefined }}>
+          {!selected.value ? <option value={selectedKey.value}>{original ? t('workbench.value0Value1Unavailable', { value0: original.typeId, value1: original.typeVersion }) : t('workbench.noTypesAvailable')}</option> : null}
           {props.types.map(type => <option key={typeKey(type)} value={typeKey(type)}>{type.title} · v{type.version}</option>)}
         </select></label>
-        <p class="connection-config-notice">{original ? 'Enter a complete replacement secret. Current values cannot be read back.' : 'Secret fields are submitted only when you create this Credential.'}</p>
-        {!props.encryptionConfigured ? <p class="connection-config-notice">Configure runtime Credential encryption before creating or rotating secrets.</p> : null}
-        {!selected.value ? <p class="connection-config-notice">Restore the Credential type plugin to edit secrets.</p>
-          : !selected.value.secretSchemaSupported ? <p class="connection-config-notice">This type requires a plugin-provided editor.</p>
+        <p class="connection-config-notice">{original ? t('workbench.enterACompleteReplacementSecretCurrentValuesCannotBeReadBack') : t('workbench.secretFieldsAreSubmittedOnlyWhenYouCreateThisCredential')}</p>
+        {!props.encryptionConfigured ? <p class="connection-config-notice">{t('workbench.configureRuntimeCredentialEncryptionBeforeCreatingOrRotatingSecrets')}</p> : null}
+        {!selected.value ? <p class="connection-config-notice">{t('workbench.restoreTheCredentialTypePluginToEditSecrets')}</p>
+          : !selected.value.secretSchemaSupported ? <p class="connection-config-notice">{t('workbench.thisTypeRequiresAPluginProvidedEditor')}</p>
           : selected.value.secretFields.map(field => <label class="connection-config-field" key={`${selectedKey.value}:${field.name}`}>
-            <span>{field.label}{field.required ? <em>Required</em> : null}</span>
+            <span>{field.label}{field.required ? <em>{t('workbench.required')}</em> : null}</span>
             <input aria-label={field.label} autocomplete="new-password" spellcheck={false} type="password" disabled={pending.value || !props.encryptionConfigured}
               value={values.value[field.name] ?? ''} onInput={event => { values.value = { ...values.value, [field.name]: (event.target as HTMLInputElement).value } }} />
-            {field.type !== 'string' ? <small>{field.type === 'boolean' ? 'Enter true or false.' : field.type === 'number' ? 'Enter a number.' : 'Enter a JSON value.'}</small> : null}
+            {field.type !== 'string' ? <small>{field.type === 'boolean' ? t('workbench.enterTrueOrFalse') : field.type === 'number' ? t('workbench.enterANumber') : t('workbench.enterAJsonValue')}</small> : null}
           </label>)}
-        {error.value ? <p class="connection-config-error" role="alert">{error.value}</p> : null}
+        {error.value ? <p class="connection-config-error" role="alert">{t(error.value, { field: invalidField.value })}</p> : null}
         <footer>
-          {original ? confirmDelete.value ? <span class="connection-delete-confirm"><span>Delete this Credential permanently?</span><button disabled={pending.value} onClick={() => { confirmDelete.value = false }} type="button">Cancel</button><button class="danger-button" disabled={pending.value} onClick={() => { void remove() }} type="button">Delete Credential</button></span>
-            : <button class="danger-text-button" disabled={pending.value || original.connectionCount > 0} onClick={() => { confirmDelete.value = true }} type="button">Delete</button> : <span />}
-          {!confirmDelete.value ? <button class="primary-button" disabled={!canSave.value} type="submit">{pending.value ? 'Saving…' : original ? 'Rotate secret' : 'Create Credential'}</button> : null}
+          {original ? confirmDelete.value ? <span class="connection-delete-confirm"><span>{t('workbench.deleteThisCredentialPermanently')}</span><button disabled={pending.value} onClick={() => { confirmDelete.value = false }} type="button">{t('workbench.cancel')}</button><button class="danger-button" disabled={pending.value} onClick={() => { void remove() }} type="button">{t('workbench.deleteCredential')}</button></span>
+            : <button class="danger-text-button" disabled={pending.value || original.connectionCount > 0} onClick={() => { confirmDelete.value = true }} type="button">{t('workbench.delete')}</button> : <span />}
+          {!confirmDelete.value ? <button class="primary-button" disabled={!canSave.value} type="submit">{pending.value ? t('workbench.saving') : original ? t('workbench.rotateSecret') : t('workbench.createCredential')}</button> : null}
         </footer>
-        {original?.connectionCount ? <p class="connection-config-notice">Used by {original.connectionCount} Connection{original.connectionCount === 1 ? '' : 's'}. Remove those bindings before deletion.</p> : null}
+        {original?.connectionCount ? <p class="connection-config-notice">{t('workbench.usedBy')}{original.connectionCount}{t('workbench.connection2')}{original.connectionCount === 1 ? '' : 's'}{t('workbench.removeThoseBindingsBeforeDeletion')}</p> : null}
       </form>
     </aside>
   })

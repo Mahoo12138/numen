@@ -1,3 +1,4 @@
+import { diagnosticText, t } from './i18n.js'
 import type { AutomationSource, CompileDiagnostic, NumenValue, WaitSource, ValueExpr } from '@numen/core'
 import type { SchemaUIResolver } from '@numen/webui/schema-ui'
 import { ChevronDown, X } from '@lucide/vue'
@@ -80,7 +81,7 @@ function WaitConfiguration({
   const field: WorkbenchAutomationInputField = fieldName === 'durationMs'
     ? {
         name: 'durationMs',
-        label: 'Duration',
+        label: t('workbench.duration'),
         type: 'number',
         schemaType: 'number',
         required: true,
@@ -88,25 +89,25 @@ function WaitConfiguration({
         min: 0,
         step: 1,
         defaultValue: 60_000,
-        description: 'Evaluated when the Wait starts, then persisted as one durable wake time.',
+        description: t('workbench.waitDurationDescription'),
       }
     : {
         name: 'until',
-        label: 'Wake time',
+        label: t('workbench.wakeTime'),
         type: 'string',
         schemaType: 'string',
         required: true,
         role: 'numen/iso-date-time',
         defaultValue: '',
-        description: 'An ISO date-time or expression evaluated when the Wait starts.',
+        description: t('workbench.waitUntilDescription'),
       }
   const expression = control[fieldName]
   return (
     <>
       <label class="wait-source-field">
-        <span>Wake source</span>
+        <span>{t('workbench.wakeSource')}</span>
         <select
-          aria-label="Wait wake source"
+          aria-label={t('workbench.waitWakeSource')}
           disabled={!canEdit}
           onChange={event => {
             const next = (event.target as HTMLInputElement).value as 'durationMs' | 'until'
@@ -117,8 +118,8 @@ function WaitConfiguration({
           }}
           value={fieldName}
         >
-          <option value="durationMs">For a duration</option>
-          <option value="until">Until a date and time</option>
+          <option value="durationMs">{t('workbench.forADuration')}</option>
+          <option value="until">{t('workbench.untilADateAndTime')}</option>
         </select>
       </label>
       <ValueExpressionField
@@ -194,39 +195,39 @@ export function Inspector({
       : {})
     : {}
   return (
-    <aside class="inspector" data-open={open} aria-label="Inspector">
+    <aside class="inspector" data-open={open} aria-label={t('workbench.inspector')}>
       <header class="inspector-header">
-        <div><span>{step ? `STEP ${projectedSteps.indexOf(step) + 1}` : 'NO SELECTION'}</span><h2>{step?.label ?? 'Inspector'}</h2></div>
-        <button aria-label="Close inspector" class="icon-button inspector-close" onClick={onClose} type="button"><X size={17} /></button>
+        <div><span>{step ? t('workbench.stepValue0', { value0: projectedSteps.indexOf(step) + 1 }) : t('workbench.noSelection')}</span><h2>{step?.label ?? t('workbench.inspector')}</h2></div>
+        <button aria-label={t('workbench.closeInspector2')} class="icon-button inspector-close" onClick={onClose} type="button"><X size={17} /></button>
       </header>
       {!step ? (
-        <div class="inspector-empty">Select a projected Source step to inspect its configuration.</div>
+        <div class="inspector-empty">{t('workbench.selectAProjectedSourceStepToInspectItsConfiguration')}</div>
       ) : isNotification ? (
         <>
-          <InspectorGroup title="Connection">
-            <label>Provider<select value="Slack"><option>Slack</option></select></label>
-            <label>Connection<select value="Slack (Workspace)"><option>Slack (Workspace)</option></select></label>
-            <button class="secondary-button" type="button">Test connection</button>
+          <InspectorGroup title={t('workbench.connection3')}>
+            <label>{t('workbench.provider')}<select value="Slack"><option>Slack</option></select></label>
+            <label>{t('workbench.connection3')}<select value="Slack (Workspace)"><option>Slack (Workspace)</option></select></label>
+            <button class="secondary-button" type="button">{t('workbench.testConnection')}</button>
           </InspectorGroup>
-          <InspectorGroup title="Message">
-            <label>Channel<select value="#morning-brief"><option>#morning-brief</option></select></label>
-            <label>Message template<textarea value={'{{ summary }}'} /></label>
-            <button class="secondary-button compact" type="button">Insert variable <ChevronDown size={14} /></button>
+          <InspectorGroup title={t('workbench.message2')}>
+            <label>{t('workbench.channel')}<select value="#morning-brief"><option>#morning-brief</option></select></label>
+            <label>{t('workbench.messageTemplate')}<textarea value={'{{ summary }}'} /></label>
+            <button class="secondary-button compact" type="button">{t('workbench.insertVariable')}<ChevronDown size={14} /></button>
           </InspectorGroup>
-          <InspectorGroup title="Execution policy">
-            <label>On failure<select value="Continue to next step"><option>Continue to next step</option></select></label>
-            <label>Retry<select value="3 attempts"><option>3 attempts</option></select></label>
-            <label>Timeout<span class="input-with-unit"><input value="30" /><span>s</span></span></label>
+          <InspectorGroup title={t('workbench.executionPolicy')}>
+            <label>{t('workbench.onFailure')}<select value="Continue to next step"><option>{t('workbench.continueToNextStep')}</option></select></label>
+            <label>{t('workbench.retry')}<select value="3 attempts"><option>{t('workbench.3Attempts')}</option></select></label>
+            <label>{t('workbench.timeout')}<span class="input-with-unit"><input value="30" /><span>s</span></span></label>
             <label class="checkbox-row">
               <input checked type="checkbox" />
-              <span>Run step only if previous steps succeeded</span>
+              <span>{t('workbench.runStepOnlyIfPreviousStepsSucceeded')}</span>
             </label>
           </InspectorGroup>
         </>
       ) : trigger && step.sourceId ? (
         <>
           {triggerDefinition?.connectionRequirements.length ? (
-            <InspectorGroup title="Connection">
+            <InspectorGroup title={t('workbench.connection3')}>
               <CapabilityConnectionFields
                 bindings={connectionBindings}
                 canEdit={canEdit}
@@ -238,7 +239,7 @@ export function Inspector({
               />
             </InspectorGroup>
           ) : null}
-          <InspectorGroup title="Trigger configuration">
+          <InspectorGroup title={t('workbench.triggerConfiguration')}>
             {triggerDefinition ? <TriggerConfigurationFields
               canEdit={canEdit}
               definition={triggerDefinition}
@@ -247,21 +248,21 @@ export function Inspector({
               problems={stepProblems}
               {...(schemaUI ? { schemaUI } : {})}
               trigger={trigger}
-            /> : <p class="inspector-schema-notice">The Trigger contract is unavailable. Restore {trigger.capability.id}@{trigger.capability.version} to edit or publish.</p>}
+            /> : <p class="inspector-schema-notice">{t('workbench.theTriggerContractIsUnavailableRestore')}{trigger.capability.id}@{trigger.capability.version}{t('workbench.toEditOrPublish')}</p>}
           </InspectorGroup>
-          <InspectorGroup title="Source">
+          <InspectorGroup title={t('workbench.source')}>
             <p class="inspector-summary">{step.summary}</p>
             <dl class="inspector-source-fields">
-              <div><dt>Source ID</dt><dd>{step.sourceId}</dd></div>
-              <div><dt>Trigger</dt><dd>{trigger.capability.id}@{trigger.capability.version}</dd></div>
+              <div><dt>{t('workbench.sourceId')}</dt><dd>{step.sourceId}</dd></div>
+              <div><dt>{t('workbench.trigger')}</dt><dd>{trigger.capability.id}@{trigger.capability.version}</dd></div>
             </dl>
           </InspectorGroup>
-          {stepProblems.length ? <InspectorGroup title="Diagnostics"><div class="inspector-diagnostics">
-            {stepProblems.map(problem => <p key={`${problem.code}:${problem.source?.fieldPath ?? ''}`}>{problem.message}</p>)}
+          {stepProblems.length ? <InspectorGroup title={t('workbench.diagnostics')}><div class="inspector-diagnostics">
+            {stepProblems.map(problem => <p key={`${problem.code}:${problem.source?.fieldPath ?? ''}`}>{diagnosticText(problem)}</p>)}
           </div></InspectorGroup> : null}
         </>
       ) : control?.type === 'extension' && step.sourceId ? (
-        <InspectorGroup title="Configuration">
+        <InspectorGroup title={t('workbench.configuration')}>
           {extensionDefinition ? <CapabilityInputFields
             nodeId={step.sourceId} definition={extensionDefinition} control={control} problems={stepProblems} canEdit={canEdit}
             {...(source ? { source } : {})}
@@ -269,11 +270,11 @@ export function Inspector({
             {...(schemaUI ? { schemaUI } : {})}
             {...(onExtensionInputChange ? { onChange: onExtensionInputChange } : {})}
             {...(fieldFocus?.nodeId === step.sourceId && fieldFocus.fieldPath ? { focusFieldPath: fieldFocus.fieldPath, focusRequest: fieldFocus.request } : {})}
-          /> : <p class="inspector-schema-notice">Unknown Control. Restore {control.control.id}@{control.control.version} to edit or publish. Saved inputs are preserved.</p>}
-          <dl class="inspector-source-fields"><div><dt>Source ID</dt><dd>{step.sourceId}</dd></div><div><dt>Control</dt><dd>{control.control.id}@{control.control.version}</dd></div></dl>
+          /> : <p class="inspector-schema-notice">{t('workbench.unknownControlRestore')}{control.control.id}@{control.control.version}{t('workbench.toEditOrPublishSavedInputsArePreserved')}</p>}
+          <dl class="inspector-source-fields"><div><dt>{t('workbench.sourceId')}</dt><dd>{step.sourceId}</dd></div><div><dt>{t('workbench.control')}</dt><dd>{control.control.id}@{control.control.version}</dd></div></dl>
         </InspectorGroup>
       ) : control?.type === 'wait' && step.sourceId ? (
-        <InspectorGroup title="Configuration">
+        <InspectorGroup title={t('workbench.configuration')}>
           <WaitConfiguration
             canEdit={canEdit}
             control={control}
@@ -288,22 +289,22 @@ export function Inspector({
             {...(variableCatalog ? { variableCatalog } : {})}
           />
           <dl class="inspector-source-fields">
-            <div><dt>Source ID</dt><dd>{step.sourceId}</dd></div>
-            <div><dt>Kind</dt><dd>wait</dd></div>
+            <div><dt>{t('workbench.sourceId')}</dt><dd>{step.sourceId}</dd></div>
+            <div><dt>{t('workbench.kind')}</dt><dd>wait</dd></div>
           </dl>
         </InspectorGroup>
       ) : (control?.type === 'if' || control?.type === 'foreach') && step.sourceId ? (
-        <InspectorGroup title="Configuration">
+        <InspectorGroup title={t('workbench.configuration')}>
           <ValueExpressionField
             canEdit={canEdit}
             field={control.type === 'if' ? {
-              name: 'condition', label: 'Condition', type: 'boolean', schemaType: 'boolean',
+              name: 'condition', label: t('workbench.condition'), type: 'boolean', schemaType: 'boolean',
               required: true, defaultValue: true,
-              description: 'Evaluated before choosing the Then or Else branch.',
+              description: t('workbench.conditionDescription'),
             } : {
-              name: 'items', label: 'Items', type: 'json', schemaType: 'array',
+              name: 'items', label: t('workbench.items'), type: 'json', schemaType: 'array',
               required: true, defaultValue: [],
-              description: 'An array evaluated once and saved for iteration. The body can reference loop.item and loop.index.',
+              description: t('workbench.foreachDescription'),
             }}
             expression={control.type === 'if' ? control.condition : control.items}
             nodeId={step.sourceId}
@@ -318,18 +319,18 @@ export function Inspector({
               ? { focusRequest: fieldFocus.request } : {})}
           />
           <dl class="inspector-source-fields">
-            <div><dt>Source ID</dt><dd>{step.sourceId}</dd></div>
-            <div><dt>Kind</dt><dd>{control.type}</dd></div>
-            {control.type === 'foreach' ? <div><dt>Concurrency</dt><dd>{control.concurrency ?? 1}</dd></div> : null}
+            <div><dt>{t('workbench.sourceId')}</dt><dd>{step.sourceId}</dd></div>
+            <div><dt>{t('workbench.kind')}</dt><dd>{control.type}</dd></div>
+            {control.type === 'foreach' ? <div><dt>{t('workbench.concurrency')}</dt><dd>{control.concurrency ?? 1}</dd></div> : null}
           </dl>
           {stepProblems.length ? <div class="inspector-diagnostics">
-            {stepProblems.map(problem => <p key={`${problem.code}:${problem.source?.fieldPath ?? ''}`}>{problem.message}</p>)}
+            {stepProblems.map(problem => <p key={`${problem.code}:${problem.source?.fieldPath ?? ''}`}>{diagnosticText(problem)}</p>)}
           </div> : null}
         </InspectorGroup>
       ) : control?.type === 'capability' && step.sourceId ? (
         <>
           {capabilityDefinition?.connectionRequirements.length ? (
-            <InspectorGroup title="Connection">
+            <InspectorGroup title={t('workbench.connection3')}>
               <CapabilityConnectionFields
                 bindings={connectionBindings}
                 canEdit={canEdit}
@@ -341,7 +342,7 @@ export function Inspector({
               />
             </InspectorGroup>
           ) : null}
-          <InspectorGroup title="Input">
+          <InspectorGroup title={t('workbench.input2')}>
             {capabilityDefinition ? (
               <CapabilityInputFields
                 canEdit={canEdit}
@@ -359,36 +360,34 @@ export function Inspector({
                 {...(schemaUI ? { schemaUI } : {})}
               />
             ) : (
-              <div class="inspector-schema-notice">
-                The Capability contract is unavailable. The Draft reference and existing inputs are preserved.
-              </div>
+              <div class="inspector-schema-notice">{t('workbench.theCapabilityContractIsUnavailableTheDraftReferenceAndExistingInputsArePreserved')}</div>
             )}
           </InspectorGroup>
-          <InspectorGroup title="Source">
+          <InspectorGroup title={t('workbench.source')}>
             <p class="inspector-summary">{step.summary}</p>
             <dl class="inspector-source-fields">
-              <div><dt>Source ID</dt><dd>{step.sourceId}</dd></div>
-              <div><dt>Capability</dt><dd>{control.capability.id}@{control.capability.version}</dd></div>
+              <div><dt>{t('workbench.sourceId')}</dt><dd>{step.sourceId}</dd></div>
+              <div><dt>{t('workbench.capability')}</dt><dd>{control.capability.id}@{control.capability.version}</dd></div>
             </dl>
           </InspectorGroup>
           {stepProblems.length ? (
-            <InspectorGroup title="Diagnostics">
+            <InspectorGroup title={t('workbench.diagnostics')}>
               <div class="inspector-diagnostics">
-                {stepProblems.map(problem => <p key={`${problem.code}:${problem.source?.fieldPath ?? ''}`}>{problem.message}</p>)}
+                {stepProblems.map(problem => <p key={`${problem.code}:${problem.source?.fieldPath ?? ''}`}>{diagnosticText(problem)}</p>)}
               </div>
             </InspectorGroup>
           ) : null}
         </>
       ) : (
-        <InspectorGroup title="Configuration">
+        <InspectorGroup title={t('workbench.configuration')}>
           <p class="inspector-summary">{step.summary}</p>
           <dl class="inspector-source-fields">
-            <div><dt>Source ID</dt><dd>{step.sourceId ?? step.id}</dd></div>
-            <div><dt>Kind</dt><dd>{step.kind ?? 'step'}</dd></div>
+            <div><dt>{t('workbench.sourceId')}</dt><dd>{step.sourceId ?? step.id}</dd></div>
+            <div><dt>{t('workbench.kind')}</dt><dd>{step.kind ?? t('workbench.step')}</dd></div>
           </dl>
           {stepProblems.length ? (
             <div class="inspector-diagnostics">
-              {stepProblems.map(problem => <p key={`${problem.code}:${problem.source?.fieldPath ?? ''}`}>{problem.message}</p>)}
+              {stepProblems.map(problem => <p key={`${problem.code}:${problem.source?.fieldPath ?? ''}`}>{diagnosticText(problem)}</p>)}
             </div>
           ) : null}
         </InspectorGroup>

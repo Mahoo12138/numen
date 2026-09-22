@@ -1,3 +1,4 @@
+import { diagnosticText, t } from './i18n.js'
 import { KeyRound, Plus } from '@lucide/vue'
 import { shallowRef } from 'vue'
 import { CredentialConfigurationPanel } from './CredentialConfigurationPanel.js'
@@ -14,26 +15,26 @@ export const CredentialsPage = defineSetupComponent<WorkbenchPageProps>('Credent
   )
   const configuration = shallowRef<'create' | WorkbenchCredential>()
   return () => <main class="main-workbench core-page">
-    <header class="core-page-header"><KeyRound size={22} /><div><h1>Credentials</h1><p>Manage encrypted secrets used by Connections.</p></div></header>
-    <div class="credential-navigation"><button class="secondary-button" disabled={!props.navigation} onClick={() => props.navigation?.navigate(coreWorkbenchRoutes.connections)} type="button">Back to Connections</button></div>
-    {state.status === 'DISABLED' ? <section class="core-page-section core-page-empty"><p>Open Workbench from a running Numen Runtime to manage Credentials.</p></section>
-      : state.status === 'LOADING' ? <section class="core-page-section core-page-empty" aria-busy="true"><p>Loading Credential metadata…</p></section>
-      : state.status === 'ERROR' ? <section class="core-page-section core-page-empty"><p role="alert">Credentials unavailable. {state.message}</p><button class="secondary-button" onClick={reload} type="button">Try again</button></section>
+    <header class="core-page-header"><KeyRound size={22} /><div><h1>{t('workbench.credentials')}</h1><p>{t('workbench.manageEncryptedSecretsUsedByConnections')}</p></div></header>
+    <div class="credential-navigation"><button class="secondary-button" disabled={!props.navigation} onClick={() => props.navigation?.navigate(coreWorkbenchRoutes.connections)} type="button">{t('workbench.backToConnections')}</button></div>
+    {state.status === 'DISABLED' ? <section class="core-page-section core-page-empty"><p>{t('workbench.openWorkbenchFromARunningNumenRuntimeToManageCredentials')}</p></section>
+      : state.status === 'LOADING' ? <section class="core-page-section core-page-empty" aria-busy="true"><p>{t('workbench.loadingCredentialMetadata')}</p></section>
+      : state.status === 'ERROR' ? <section class="core-page-section core-page-empty"><p role="alert">{t('workbench.credentialsUnavailable')}{diagnosticText(state)}</p><button class="secondary-button" onClick={reload} type="button">{t('workbench.tryAgain')}</button></section>
       : <>
-        {!state.data.encryptionConfigured ? <p class="credential-notice">Credential encryption is not configured. Existing metadata is available; configure the runtime master key to create or rotate secrets.</p> : null}
+        {!state.data.encryptionConfigured ? <p class="credential-notice">{t('workbench.credentialEncryptionIsNotConfiguredExistingMetadataIsAvailableConfigureTheRuntimeMasterKeyTo')}</p> : null}
         <div class="connections-workspace" data-configuring={!!configuration.value}>
           <section class="core-page-section connections-section">
-            <div class="runs-section-heading connection-section-heading"><div><h2>Stored Credentials</h2><span>{state.data.items.length} configured · metadata only</span></div>
-              <button class="secondary-button" disabled={!state.data.encryptionConfigured || !state.data.types.length} onClick={() => { configuration.value = 'create' }} type="button"><Plus size={14} />New Credential</button></div>
+            <div class="runs-section-heading connection-section-heading"><div><h2>{t('workbench.storedCredentials')}</h2><span>{state.data.items.length}{t('workbench.configuredMetadataOnly')}</span></div>
+              <button class="secondary-button" disabled={!state.data.encryptionConfigured || !state.data.types.length} onClick={() => { configuration.value = 'create' }} type="button"><Plus size={14} />{t('workbench.newCredential')}</button></div>
             {state.data.items.length ? <div class="runs-table-wrap credentials-table-wrap"><table class="runs-table credentials-table">
-              <thead><tr><th>Credential</th><th>Type</th><th>Version</th><th>Connections</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+              <thead><tr><th>{t('workbench.credential')}</th><th>{t('workbench.type')}</th><th>{t('workbench.version')}</th><th>{t('workbench.connections')}</th><th><span class="visually-hidden">{t('workbench.actions')}</span></th></tr></thead>
               <tbody>{state.data.items.map(credential => <tr key={credential.id}>
-                <td><strong>{credential.name}</strong><small>{credential.typeAvailable ? 'Configured' : 'Type unavailable'}</small></td>
+                <td><strong>{credential.name}</strong><small>{credential.typeAvailable ? t('workbench.configured') : t('workbench.typeUnavailable')}</small></td>
                 <td><strong>{credential.typeTitle}</strong><small>{credential.typeId}@{credential.typeVersion}</small></td>
                 <td>v{credential.secretVersion}</td><td>{credential.connectionCount}</td>
-                <td><button class="secondary-button" aria-label={`Manage ${credential.name}`} onClick={() => { configuration.value = credential }} type="button">Manage</button></td>
+                <td><button class="secondary-button" aria-label={t('workbench.manageValue0', { value0: credential.name })} onClick={() => { configuration.value = credential }} type="button">{t('workbench.manage')}</button></td>
               </tr>)}</tbody>
-            </table></div> : <div class="connection-empty"><p>No Credentials stored yet.</p>{!state.data.types.length ? <p>Enable a plugin that defines a Credential type to get started.</p> : null}</div>}
+            </table></div> : <div class="connection-empty"><p>{t('workbench.noCredentialsStoredYet')}</p>{!state.data.types.length ? <p>{t('workbench.enableAPluginThatDefinesACredentialTypeToGetStarted')}</p> : null}</div>}
           </section>
           {configuration.value ? <CredentialConfigurationPanel key={configuration.value === 'create' ? 'create' : configuration.value.id}
             {...(props.consoleClient ? { client: props.consoleClient } : {})}
