@@ -1,3 +1,4 @@
+import { Button, Input } from '@numenjs/components'
 import { diagnosticText, t } from './i18n.js'
 import {
   Braces,
@@ -105,33 +106,33 @@ export const AutomationQuickPicker = defineSetupComponent<AutomationQuickPickerP
     const triggers = filtered.value.filter(item => item.kind === 'trigger')
     const capabilities = filtered.value.filter(item => item.kind === 'capability')
     if (!live) {
-      return <button class="add-step-button" disabled={props.disabled ?? false} type="button"><Plus size={15} />{t('workbench.addStep')}</button>
+      return <Button class="add-step-button" disabled={props.disabled ?? false} type="button"><Plus size={15} />{t('workbench.addStep')}</Button>
     }
     return (
     <div class="quick-picker-anchor" onKeydown={event => {
       if (event.key === 'Escape') open.value = false
     }}>
-      <button
+      <Button
         aria-expanded={open.value}
         aria-haspopup="dialog"
         class="add-step-button"
         disabled={props.disabled ?? false}
         onClick={() => { open.value = !open.value }}
         type="button"
-      ><Plus size={15} />{t('workbench.addStep')}</button>
+      ><Plus size={15} />{t('workbench.addStep')}</Button>
       {open.value ? (
         <section aria-label={t('workbench.addAutomationStep')} class="quick-picker" role="dialog">
           <header>
             <div><strong>{t('workbench.addStep2')}</strong><small>{t('workbench.controlsAndRegisteredCapabilities')}</small></div>
-            <button aria-label={t('workbench.closeStepPicker')} onClick={() => { open.value = false }} type="button"><X size={16} /></button>
+            <Button aria-label={t('workbench.closeStepPicker')} onClick={() => { open.value = false }} type="button"><X size={16} /></Button>
           </header>
           <label class="quick-picker-search">
             <Search aria-hidden="true" size={15} />
-            <input
+            <Input
               aria-label={t('workbench.searchControlsAndCapabilities')}
               onInput={event => { query.value = (event.target as HTMLInputElement).value }}
               placeholder={t('workbench.searchControlsAndCapabilities2')}
-              ref={inputRef}
+              inputRef={inputRef}
               value={query.value}
             />
           </label>
@@ -141,7 +142,7 @@ export const AutomationQuickPicker = defineSetupComponent<AutomationQuickPickerP
               <div class="quick-picker-state" role="alert">
                 <Braces size={18} />
                 <p>{diagnosticText(state)}</p>
-                {props.onReload ? <button onClick={props.onReload} type="button">{t('workbench.tryAgain')}</button> : null}
+                {props.onReload ? <Button onClick={props.onReload} type="button">{t('workbench.tryAgain')}</Button> : null}
               </div>
             ) : null}
             {state.status === 'READY' && controls.length ? (

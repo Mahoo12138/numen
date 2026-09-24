@@ -18,7 +18,7 @@ describe('Credential configuration UI', () => {
     expect(markup).toMatch(/type="password"[^>]*value(?:="")?[ >]/)
     expect(markup).toContain('autocomplete="new-password"')
     expect(markup).toContain('Used by 1 Connection.')
-    expect(markup).toMatch(/disabled[^>]*>Delete<\/button>/)
+    expect(markup.replace(/<!--.*?-->/g, '')).toMatch(/disabled[^>]*>Delete<\/button>/)
   })
   it('explains unavailable type and encryption while retaining metadata', async () => {
     const markup = await renderToMarkup(<CredentialConfigurationPanel

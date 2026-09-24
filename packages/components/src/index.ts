@@ -1,4 +1,5 @@
 import './style.css'
+export * from './Input.js'
 export * from './Button.js'
 export * from './SelectMenu.js'
 export * from './StatePanel.js'

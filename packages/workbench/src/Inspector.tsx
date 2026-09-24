@@ -1,4 +1,4 @@
-import { FormSection as InspectorGroup } from '@numenjs/components'
+import { Textarea, Input, Button, SelectMenu, FormSection as InspectorGroup } from '@numenjs/components'
 import { diagnosticText, t } from './i18n.js'
 import type { AutomationSource, CompileDiagnostic, NumenValue, WaitSource, ValueExpr } from '@numenjs/core'
 import type { SchemaUIResolver } from '@numenjs/webui/schema-ui'
@@ -92,21 +92,17 @@ function WaitConfiguration({
     <>
       <label class="wait-source-field">
         <span>{t('workbench.wakeSource')}</span>
-        <select
-          aria-label={t('workbench.waitWakeSource')}
-          disabled={!canEdit}
-          onChange={event => {
-            const next = (event.target as HTMLInputElement).value as 'durationMs' | 'until'
+        <SelectMenu ariaLabel={t('workbench.waitWakeSource')} disabled={!canEdit}
+          onChange={value => {
+            const next = value as 'durationMs' | 'until'
             if (next === fieldName) return
             onChange?.(nodeId, next, next === 'durationMs'
               ? { type: 'literal', value: 60_000 }
               : { type: 'literal', value: new Date(Date.now() + 60 * 60 * 1_000).toISOString() })
-          }}
-          value={fieldName}
-        >
-          <option value="durationMs">{t('workbench.forADuration')}</option>
-          <option value="until">{t('workbench.untilADateAndTime')}</option>
-        </select>
+          }} value={fieldName} options={[
+            { value: 'durationMs', label: t('workbench.forADuration') },
+            { value: 'until', label: t('workbench.untilADateAndTime') },
+          ]} />
       </label>
       <ValueExpressionField
         canEdit={canEdit}
@@ -184,28 +180,28 @@ export function Inspector({
     <aside class="inspector" data-open={open} aria-label={t('workbench.inspector')}>
       <header class="inspector-header">
         <div><span>{step ? t('workbench.stepValue0', { value0: projectedSteps.indexOf(step) + 1 }) : t('workbench.noSelection')}</span><h2>{step?.label ?? t('workbench.inspector')}</h2></div>
-        <button aria-label={t('workbench.closeInspector2')} class="icon-button inspector-close" onClick={onClose} type="button"><X size={17} /></button>
+        <Button variant="ghost" size="icon" aria-label={t('workbench.closeInspector2')} class="icon-button inspector-close" onClick={onClose} type="button"><X size={17} /></Button>
       </header>
       {!step ? (
         <div class="inspector-empty">{t('workbench.selectAProjectedSourceStepToInspectItsConfiguration')}</div>
       ) : isNotification ? (
         <>
           <InspectorGroup title={t('workbench.connection3')}>
-            <label>{t('workbench.provider')}<select value="Slack"><option>Slack</option></select></label>
-            <label>{t('workbench.connection3')}<select value="Slack (Workspace)"><option>Slack (Workspace)</option></select></label>
-            <button class="secondary-button" type="button">{t('workbench.testConnection')}</button>
+            <label>{t('workbench.provider')}<SelectMenu ariaLabel={t('workbench.provider')} value="Slack" options={[{ value: 'Slack', label: 'Slack' }]} disabled onChange={() => {}} /></label>
+            <label>{t('workbench.connection3')}<SelectMenu ariaLabel={t('workbench.connection3')} value="Slack (Workspace)" options={[{ value: 'Slack (Workspace)', label: 'Slack (Workspace)' }]} disabled onChange={() => {}} /></label>
+            <Button variant="secondary" class="secondary-button" type="button">{t('workbench.testConnection')}</Button>
           </InspectorGroup>
           <InspectorGroup title={t('workbench.message2')}>
-            <label>{t('workbench.channel')}<select value="#morning-brief"><option>#morning-brief</option></select></label>
-            <label>{t('workbench.messageTemplate')}<textarea value={'{{ summary }}'} /></label>
-            <button class="secondary-button compact" type="button">{t('workbench.insertVariable')}<ChevronDown size={14} /></button>
+            <label>{t('workbench.channel')}<SelectMenu ariaLabel={t('workbench.channel')} value="#morning-brief" options={[{ value: '#morning-brief', label: '#morning-brief' }]} disabled onChange={() => {}} /></label>
+            <label>{t('workbench.messageTemplate')}<Textarea value={'{{ summary }}'} /></label>
+            <Button variant="secondary" class="secondary-button compact" type="button">{t('workbench.insertVariable')}<ChevronDown size={14} /></Button>
           </InspectorGroup>
           <InspectorGroup title={t('workbench.executionPolicy')}>
-            <label>{t('workbench.onFailure')}<select value="Continue to next step"><option>{t('workbench.continueToNextStep')}</option></select></label>
-            <label>{t('workbench.retry')}<select value="3 attempts"><option>{t('workbench.3Attempts')}</option></select></label>
-            <label>{t('workbench.timeout')}<span class="input-with-unit"><input value="30" /><span>s</span></span></label>
+            <label>{t('workbench.onFailure')}<SelectMenu ariaLabel={t('workbench.onFailure')} value="continue" options={[{ value: 'continue', label: t('workbench.continueToNextStep') }]} disabled onChange={() => {}} /></label>
+            <label>{t('workbench.retry')}<SelectMenu ariaLabel={t('workbench.retry')} value="3" options={[{ value: '3', label: t('workbench.3Attempts') }]} disabled onChange={() => {}} /></label>
+            <label>{t('workbench.timeout')}<span class="input-with-unit"><Input value="30" /><span>s</span></span></label>
             <label class="checkbox-row">
-              <input checked type="checkbox" />
+              <Input checked type="checkbox" />
               <span>{t('workbench.runStepOnlyIfPreviousStepsSucceeded')}</span>
             </label>
           </InspectorGroup>

@@ -1,4 +1,4 @@
-import { StatePanel } from '@numenjs/components'
+import { Button, StatePanel } from '@numenjs/components'
 import { LogsView } from './LogsView.js'
 import { diagnosticText, t, metadataText, formatDateTime, statusLabel } from './i18n.js'
 import type { Context } from 'cordis'
@@ -218,8 +218,8 @@ function RunsIndex({ state, canGoPrevious, onNext, onPrevious, onReload, onOpenR
           </div>
         ) : <p class="home-empty">{t('workbench.noRunsHaveBeenAcceptedYet')}</p>}
         <nav aria-label={t('workbench.runPages')} class="runs-pagination">
-          <button disabled={!canGoPrevious} onClick={onPrevious} type="button">{t('workbench.previous')}</button>
-          <button disabled={!nextCursor} onClick={onNext} type="button">{t('workbench.next')}</button>
+          <Button disabled={!canGoPrevious} onClick={onPrevious} type="button">{t('workbench.previous')}</Button>
+          <Button disabled={!nextCursor} onClick={onNext} type="button">{t('workbench.next')}</Button>
         </nav>
       </section>
     </div>
@@ -252,7 +252,7 @@ const ConnectionsPage = defineSetupComponent<WorkbenchPageProps>('ConnectionsPag
   return () => (
     <main class="main-workbench core-page">
       <header class="core-page-header"><Cable size={22} /><div><h1>{t('workbench.connections')}</h1><p>{t('workbench.manageTheSystemsAndAccountsAvailableToAutomations')}</p></div></header>
-      <div class="credential-navigation"><button class="secondary-button" disabled={!props.navigation} onClick={() => props.navigation?.navigate(coreWorkbenchCredentialsRoute)} type="button">{t('workbench.manageCredentials')}</button></div>
+      <div class="credential-navigation"><Button variant="secondary" class="secondary-button" disabled={!props.navigation} onClick={() => props.navigation?.navigate(coreWorkbenchCredentialsRoute)} type="button">{t('workbench.manageCredentials')}</Button></div>
       <ConnectionsIndex
         {...(props.consoleClient ? { client: props.consoleClient } : {})}
         {...(configuration.value ? { configuration: configuration.value } : {})}
@@ -306,7 +306,7 @@ function ConnectionsIndex({ state, desiredState, client, schemaUI, configuration
       </section>
       <div class="connections-workspace" data-configuring={!!configuration}>
         <section class="core-page-section connections-section">
-          <div class="runs-section-heading connection-section-heading"><div><h2>{t('workbench.configuredConnections')}</h2><span>{t('workbench.desiredAndLiveStateAreShownSeparately')}</span></div><button class="secondary-button" disabled={!state.data.adapters.length} onClick={() => onConfigure()} type="button"><Plus size={14} />{t('workbench.newConnection')}</button></div>
+          <div class="runs-section-heading connection-section-heading"><div><h2>{t('workbench.configuredConnections')}</h2><span>{t('workbench.desiredAndLiveStateAreShownSeparately')}</span></div><Button variant="secondary" class="secondary-button" disabled={!state.data.adapters.length} onClick={() => onConfigure()} type="button"><Plus size={14} />{t('workbench.newConnection')}</Button></div>
           {items.length ? (
           <div class="runs-table-wrap connections-table-wrap">
             <table class="runs-table connections-table">
@@ -338,18 +338,18 @@ function ConnectionsIndex({ state, desiredState, client, schemaUI, configuration
                       {desired.error ? (
                         <span class="connection-action-error" role="alert">
                           {desired.error}
-                          <button onClick={() => desiredState.retry(connection)} type="button">{t('workbench.tryAgain')}</button>
+                          <Button onClick={() => desiredState.retry(connection)} type="button">{t('workbench.tryAgain')}</Button>
                         </span>
                       ) : null}
                     </td>
                     <td>{formatTime(connection.updatedAt)}</td>
-                    <td><button aria-label={t('workbench.editValue0', { value0: connection.name })} class="table-action-button" disabled={!state.data.adapters.some(adapter => adapter.id === connection.adapterId && adapter.version === connection.adapterVersion)} onClick={() => onConfigure(connection.id)} type="button"><Pencil size={14} /></button></td>
+                    <td><Button aria-label={t('workbench.editValue0', { value0: connection.name })} class="table-action-button" disabled={!state.data.adapters.some(adapter => adapter.id === connection.adapterId && adapter.version === connection.adapterVersion)} onClick={() => onConfigure(connection.id)} type="button"><Pencil size={14} /></Button></td>
                   </tr>
                 })}
               </tbody>
             </table>
           </div>
-          ) : <div class="connection-empty"><p>{t('workbench.noConnectionsAreConfiguredYet')}</p><button class="secondary-button" disabled={!state.data.adapters.length} onClick={() => onConfigure()} type="button"><Plus size={14} />{t('workbench.createTheFirstConnection')}</button></div>}
+          ) : <div class="connection-empty"><p>{t('workbench.noConnectionsAreConfiguredYet')}</p><Button variant="secondary" class="secondary-button" disabled={!state.data.adapters.length} onClick={() => onConfigure()} type="button"><Plus size={14} />{t('workbench.createTheFirstConnection')}</Button></div>}
         </section>
         {configuration ? <ConnectionConfigurationPanel
           adapters={state.data.adapters}

@@ -1,3 +1,4 @@
+import { Button, Input } from '@numenjs/components'
 import { t } from './i18n.js'
 import { Braces, Search, X } from '@lucide/vue'
 import { computed, nextTick, ref, watch } from 'vue'
@@ -58,15 +59,15 @@ export const MagicVariablePicker = defineSetupComponent<MagicVariablePickerProps
         <section aria-label={t('workbench.availableVariables')} class="magic-variable-picker">
           <header>
             <strong>{t('workbench.insertVariable2')}</strong>
-            <button aria-label={t('workbench.closeVariablePicker')} onClick={() => { open.value = false }} type="button"><X size={14} /></button>
+            <Button aria-label={t('workbench.closeVariablePicker')} onClick={() => { open.value = false }} type="button"><X size={14} /></Button>
           </header>
           <label class="magic-variable-search">
             <Search aria-hidden="true" size={13} />
-            <input
+            <Input
               aria-label={t('workbench.searchAvailableVariables')}
               onInput={event => { query.value = (event.target as HTMLInputElement).value }}
               placeholder={t('workbench.searchByNameOrPath')}
-              ref={inputRef}
+              inputRef={inputRef}
               value={query.value}
             />
           </label>

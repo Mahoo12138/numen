@@ -1,16 +1,17 @@
-import { defineComponent, type PropType } from 'vue'
+import type { ButtonHTMLAttributes } from 'vue'
+import { defineSetupComponent } from './vue-component.js'
 
-export const Button = defineComponent({
-  name: 'NumenButton',
-  props: {
-    variant: { type: String as PropType<'primary' | 'secondary' | 'danger' | 'ghost'>, default: 'secondary' },
-    type: { type: String as PropType<'button' | 'submit' | 'reset'>, default: 'button' },
-    disabled: Boolean,
-    busy: Boolean,
-    onClick: Function as PropType<(event: MouseEvent) => void>,
-  },
-  setup(props, { slots }) {
-    return () => <button class="n-button" data-variant={props.variant} type={props.type}
-      onClick={event => { if (!props.disabled && !props.busy) props.onClick?.(event) }} disabled={props.disabled || props.busy} aria-busy={props.busy}>{slots.default?.()}</button>
-  },
-})
+export interface ButtonProps extends Omit<ButtonHTMLAttributes, 'disabled' | 'onClick'> {
+  variant?: 'primary' | 'secondary' | 'danger' | 'ghost'
+  size?: 'default' | 'icon'
+  disabled?: boolean | undefined
+  busy?: boolean
+  onClick?: (event: MouseEvent) => void
+}
+
+export const Button = defineSetupComponent<ButtonProps>('NumenButton', [
+  'variant', 'size', 'type', 'disabled', 'busy', 'onClick',
+], (props, { slots, attrs }) => () => <button {...attrs} class={['n-button', attrs.class]}
+  data-variant={props.variant ?? 'secondary'} data-size={props.size ?? 'default'} type={props.type ?? 'button'}
+  onClick={event => { if (!props.disabled && !props.busy) props.onClick?.(event) }}
+  disabled={props.disabled || props.busy} aria-busy={!!props.busy}>{slots.default?.()}</button>)

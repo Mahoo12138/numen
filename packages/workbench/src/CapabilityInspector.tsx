@@ -1,3 +1,4 @@
+import { SelectMenu } from '@numenjs/components'
 import { diagnosticText, t } from './i18n.js'
 import type { AutomationSource, CapabilitySource, CompileDiagnostic, NumenValue, TriggerSource, ValueExpr } from '@numenjs/core'
 import type { SchemaUIResolver } from '@numenjs/webui/schema-ui'
@@ -75,18 +76,13 @@ export function CapabilityConnectionFields({
       <div class="connection-binding-field" data-invalid={!!problem} key={slot.name}>
         <label>
           <span>{slot.name}{slot.required ? <em>{t('workbench.required')}</em> : null}</span>
-          <select
-            aria-describedby={problem ? problemId : undefined}
-            aria-invalid={!!problem}
-            aria-label={t('workbench.value0Connection', { value0: slot.name })}
-            disabled={!canEdit}
-            onChange={event => onChange?.(nodeId, slot.name, (event.target as HTMLInputElement).value || undefined)}
-            value={selected}
-          >
-            <option value="">{slot.required ? t('workbench.selectAConnection') : t('workbench.noConnection')}</option>
-            {missingSelection ? <option value={selected}>{t('workbench.missing')}{selected}</option> : null}
-            {options.map(connection => <option key={connection.id} value={connection.id}>{connectionLabel(connection)}</option>)}
-          </select>
+          <SelectMenu aria-describedby={problem ? problemId : undefined} aria-invalid={!!problem}
+            ariaLabel={t('workbench.value0Connection', { value0: slot.name })} disabled={!canEdit}
+            onChange={value => onChange?.(nodeId, slot.name, value || undefined)} value={selected} options={[
+              { value: '', label: slot.required ? t('workbench.selectAConnection') : t('workbench.noConnection') },
+              ...(missingSelection ? [{ value: selected, label: t('workbench.missing') + selected, disabled: true }] : []),
+              ...options.map(connection => ({ value: connection.id, label: connectionLabel(connection) })),
+            ]} />
         </label>
         <p class="inspector-field-help">
           {options.length

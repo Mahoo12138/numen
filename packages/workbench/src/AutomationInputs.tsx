@@ -1,3 +1,4 @@
+import { Input, Button, SelectMenu } from '@numenjs/components'
 import { diagnosticText, t } from './i18n.js'
 import { automationInputTypes, isAutomationInputName, validateAutomationInputDeclarations, type AutomationInputDeclaration, type AutomationSource, type CompileDiagnostic, type NumenValue } from '@numenjs/core'
 import type { SchemaUIResolver } from '@numenjs/webui/schema-ui'
@@ -56,17 +57,17 @@ export const AutomationInputs = defineSetupComponent<InputsProps>('AutomationInp
     <p class="activation-help">{t('workbench.declareTheValuesThisAutomationAcceptsPublishAndActivateARevisionToUseTheseInputs')}</p>
     {props.inputs === undefined ? <p>{t('workbench.thisAutomationAcceptsUndeclaredInputsAddADeclarationToDefineItsParameterContract')}</p> : !Object.keys(props.inputs ?? {}).length ? <p>{t('workbench.noInputsAreAcceptedByThisContract')}</p> : null}
     {Object.entries(props.inputs ?? {}).map(([key, field]) => field && typeof field === 'object' ? <article class="automation-input-declaration" key={key}>
-      <header><code>input.{key}</code><button class="secondary-button" disabled={!props.canEdit} aria-label={t('workbench.removeInputValue0', { value0: key })} onClick={() => remove(key)} type="button">{t('workbench.remove')}</button></header>
+      <header><code>input.{key}</code><Button variant="secondary" class="secondary-button" disabled={!props.canEdit} aria-label={t('workbench.removeInputValue0', { value0: key })} onClick={() => remove(key)} type="button">{t('workbench.remove')}</Button></header>
       <div class="automation-input-metadata">
-        <label>{t('workbench.label')}<input aria-label={t('workbench.labelForValue0', { value0: key })} disabled={!props.canEdit} value={field.title ?? ''} placeholder={key} onChange={event => update(key, { ...field, title: (event.target as HTMLInputElement).value })} /></label>
-        <label>{t('workbench.type')}<select aria-label={t('workbench.typeForValue0', { value0: key })} disabled={!props.canEdit} value={field.type} onChange={event => {
+        <label>{t('workbench.label')}<Input aria-label={t('workbench.labelForValue0', { value0: key })} disabled={!props.canEdit} value={field.title ?? ''} placeholder={key} onChange={event => update(key, { ...field, title: (event.target as HTMLInputElement).value })} /></label>
+        <label>{t('workbench.type')}<SelectMenu ariaLabel={t('workbench.typeForValue0', { value0: key })} disabled={!props.canEdit} value={field.type} onChange={value => {
           const { default: _default, ...rest } = field
-          update(key, { ...rest, type: (event.target as HTMLSelectElement).value as AutomationInputDeclaration['type'] })
-        }}>{automationInputTypes.map(type => <option key={type} value={type}>{t(`workbench.valueType.${type}`)}</option>)}</select></label>
-        <label class="automation-input-checkbox"><input aria-label={t('workbench.requiredValue0', { value0: key })} type="checkbox" disabled={!props.canEdit} checked={!!field.required} onChange={event => update(key, { ...field, required: (event.target as HTMLInputElement).checked })} />{t('workbench.required')}</label>
+          update(key, { ...rest, type: value as AutomationInputDeclaration['type'] })
+        }} options={automationInputTypes.map(type => ({ value: type, label: t(`workbench.valueType.${type}`) }))} /></label>
+        <label class="automation-input-checkbox"><Input aria-label={t('workbench.requiredValue0', { value0: key })} type="checkbox" disabled={!props.canEdit} checked={!!field.required} onChange={event => update(key, { ...field, required: (event.target as HTMLInputElement).checked })} />{t('workbench.required')}</label>
       </div>
-      <label>{t('workbench.description')}<input aria-label={t('workbench.descriptionForValue0', { value0: key })} disabled={!props.canEdit} value={field.description ?? ''} onChange={event => update(key, { ...field, description: (event.target as HTMLInputElement).value })} /></label>
-      <label class="automation-input-checkbox"><input aria-label={t('workbench.useDefaultForValue0', { value0: key })} type="checkbox" disabled={!props.canEdit} checked={Object.hasOwn(field, 'default')} onChange={event => {
+      <label>{t('workbench.description')}<Input aria-label={t('workbench.descriptionForValue0', { value0: key })} disabled={!props.canEdit} value={field.description ?? ''} onChange={event => update(key, { ...field, description: (event.target as HTMLInputElement).value })} /></label>
+      <label class="automation-input-checkbox"><Input aria-label={t('workbench.useDefaultForValue0', { value0: key })} type="checkbox" disabled={!props.canEdit} checked={Object.hasOwn(field, 'default')} onChange={event => {
         const { default: _default, ...rest } = field
         const defaults = { string: '', number: 0, boolean: false, object: {}, array: [] }
         update(key, (event.target as HTMLInputElement).checked ? { ...rest, default: defaults[field.type] } : rest)
@@ -74,13 +75,13 @@ export const AutomationInputs = defineSetupComponent<InputsProps>('AutomationInp
       {Object.hasOwn(field, 'default') ? <AutomationInputValue name={key} declaration={{ ...field, title: t('workbench.defaultValue'), required: true }} prefix="default-input" disabled={!props.canEdit}
         {...(props.schemaUI ? { schemaUI: props.schemaUI } : {})} {...(field.default !== undefined ? { value: field.default } : {})}
         onChange={value => { const { default: _default, ...rest } = field; update(key, value === undefined ? rest : { ...rest, default: value }) }} /> : null}
-    </article> : <p key={key}>{t('workbench.input')}{key}{t('workbench.hasAnInvalidDeclaration')}<button disabled={!props.canEdit} onClick={() => remove(key)} type="button">{t('workbench.removeInput')}{key}</button></p>)}
+    </article> : <p key={key}>{t('workbench.input')}{key}{t('workbench.hasAnInvalidDeclaration')}<Button disabled={!props.canEdit} onClick={() => remove(key)} type="button">{t('workbench.removeInput')}{key}</Button></p>)}
     <form class="automation-input-add" onSubmit={event => { event.preventDefault(); add() }}>
-      <label>{t('workbench.inputName')}<input aria-label={t('workbench.newInputName')} disabled={!props.canEdit} value={name.value} onInput={event => { name.value = (event.target as HTMLInputElement).value }} placeholder={t('workbench.message')} /></label>
-      <button class="primary-button" disabled={!props.canEdit || Object.keys(props.inputs ?? {}).length >= 64} type="submit">{t('workbench.addInput')}</button>
+      <label>{t('workbench.inputName')}<Input aria-label={t('workbench.newInputName')} disabled={!props.canEdit} value={name.value} onInput={event => { name.value = (event.target as HTMLInputElement).value }} placeholder={t('workbench.message')} /></label>
+      <Button variant="primary" class="primary-button" disabled={!props.canEdit || Object.keys(props.inputs ?? {}).length >= 64} type="submit">{t('workbench.addInput')}</Button>
     </form>
     {error.value ? <p class="inspector-field-error" role="alert">{error.value}</p> : null}
-    {props.inputs !== undefined ? <button class="secondary-button" disabled={!props.canEdit} onClick={() => props.onChange(undefined)} type="button">{t('workbench.allowUndeclaredInputs')}</button> : null}
+    {props.inputs !== undefined ? <Button variant="secondary" class="secondary-button" disabled={!props.canEdit} onClick={() => props.onChange(undefined)} type="button">{t('workbench.allowUndeclaredInputs')}</Button> : null}
     {[...validateAutomationInputDeclarations(props.inputs), ...props.problems.filter(problem => problem.source?.nodeId === '__inputs')].map((problem, i) => <p key={i} class="inspector-field-error" role="alert">{problem.source?.fieldPath}: {diagnosticText(problem)}</p>)}
   </section>
 })

@@ -260,6 +260,48 @@ describe('Numen runtime', () => {
     })
     expect(browserSession.status).toBe(200)
     const sessionCookie = browserSession.headers.get('set-cookie')!.split(';')[0]!
+    // Drive the real authenticated transport after Loader startup, not a manually
+    // assembled provider fixture: a missing runtime definition must fail here.
+    const lifecycleCall = async (procedure: string, input: unknown, status = 200) => {
+      const response = await fetch(`${baseUrl}/api/console/call`, {
+        method: 'POST',
+        headers: { cookie: sessionCookie, origin: baseUrl, 'content-type': 'application/json' },
+        body: JSON.stringify({ kind: 'action', procedure, input }),
+      })
+      const body = await response.json()
+      expect(response.status, JSON.stringify(body)).toBe(status)
+      return body
+    }
+    const lifecycle = await lifecycleCall('numen:automation-create@1', { name: 'Lifecycle startup regression' })
+    const lifecycleId = lifecycle.result.automation.id as string
+    const currentLifecycle = () => application.context.automations.get(lifecycleId)!
+    expect(await lifecycleCall('numen:automation-archive@1', {
+      automationId: lifecycleId, expectedActivationGeneration: 99,
+    }, 409)).toMatchObject({ error: { code: 'AUTOMATION_ACTIVATION_CONFLICT' } })
+    expect(currentLifecycle().archivedAt).toBeUndefined()
+    await lifecycleCall('numen:automation-archive@1', {
+      automationId: lifecycleId, expectedActivationGeneration: currentLifecycle().activationGeneration,
+    })
+    const firstArchive = currentLifecycle().archivedAt!
+    expect(firstArchive).toEqual(expect.any(String))
+    await lifecycleCall('numen:automation-restore@1', {
+      automationId: lifecycleId, expectedActivationGeneration: currentLifecycle().activationGeneration,
+    })
+    expect(currentLifecycle().archivedAt).toBeUndefined()
+    expect(await lifecycleCall('numen:automation-remove-archived@1', {
+      automationId: lifecycleId, expectedArchivedAt: firstArchive,
+    }, 409)).toMatchObject({ error: { code: 'AUTOMATION_ARCHIVE_CONFLICT' } })
+    await lifecycleCall('numen:automation-archive@1', {
+      automationId: lifecycleId, expectedActivationGeneration: currentLifecycle().activationGeneration,
+    })
+    const removeInput = { automationId: lifecycleId, expectedArchivedAt: currentLifecycle().archivedAt! }
+    expect(await lifecycleCall('numen:automation-remove-archived@1', removeInput)).toMatchObject({
+      result: { automationId: lifecycleId, removedRuns: 0 },
+    })
+    expect(application.context.automations.get(lifecycleId)).toBeUndefined()
+    expect(await lifecycleCall('numen:automation-remove-archived@1', removeInput, 404)).toMatchObject({
+      error: { code: 'AUTOMATION_NOT_FOUND' },
+    })
     const cookieConsole = await fetch(`${baseUrl}/api/console/call`, {
       method: 'POST',
       headers: {

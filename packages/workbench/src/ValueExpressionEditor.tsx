@@ -1,3 +1,4 @@
+import { Button, Input, Textarea, SelectMenu } from '@numenjs/components'
 import { diagnosticText, t } from './i18n.js'
 import {
   coreExpressionFunctions,
@@ -203,7 +204,7 @@ const ReferenceEditor = defineSetupComponent<ValueExpressionFieldProps>('Referen
     const value = props.expression?.type === 'ref' ? props.expression.path : 'trigger.value'
     return <>
       <div class="magic-variable-editor">
-        <input
+        <Input
           aria-describedby={[props.problem ? problemId : undefined, localError.value ? localProblemId : undefined].filter(Boolean).join(' ') || undefined}
           aria-invalid={!!props.problem || !!localError.value}
           autofocus={props.focusRequest !== undefined}
@@ -253,7 +254,7 @@ const TemplateEditor = defineSetupComponent<ValueExpressionFieldProps>('Template
     }
     return <>
       <div class="magic-variable-editor magic-variable-template-editor">
-        <textarea
+        <Textarea
           aria-describedby={[props.problem ? problemId : undefined, localError.value ? localProblemId : undefined].filter(Boolean).join(' ') || undefined}
           aria-invalid={!!props.problem || !!localError.value}
           autofocus={props.focusRequest !== undefined}
@@ -274,7 +275,7 @@ const TemplateEditor = defineSetupComponent<ValueExpressionFieldProps>('Template
             }
           }}
           placeholder={t('workbench.helloTriggerName')}
-          ref={textareaRef}
+          inputRef={textareaRef}
           rows={3}
         />
         <MagicVariablePicker
@@ -317,18 +318,12 @@ function CallExpressionEditor(props: Readonly<ValueExpressionFieldProps> & {
     <div class="structured-call-editor">
       <label class="structured-call-function">
         <span>{t('workbench.function')}</span>
-        <select
-          aria-label={t('workbench.value0ExpressionFunction', { value0: props.field.label })}
-          disabled={!props.canEdit}
-          onChange={event => {
-            const next = getCoreExpressionFunction((event.target as HTMLInputElement).value)
-            if (next) props.onChange(createCallExpression(props.field, next))
-          }}
-          value={props.expression.function}
-        >
-          {!definition ? <option value={props.expression.function}>{t('workbench.unavailable')}{props.expression.function}</option> : null}
-          {selectable.map(item => <option key={item.id} value={item.id}>{item.title}</option>)}
-        </select>
+        <SelectMenu ariaLabel={t('workbench.value0ExpressionFunction', { value0: props.field.label })} disabled={!props.canEdit}
+          onChange={value => { const next = getCoreExpressionFunction(value); if (next) props.onChange(createCallExpression(props.field, next)) }}
+          value={props.expression.function} options={[
+            ...(!definition ? [{ value: props.expression.function, label: t('workbench.unavailable') + props.expression.function, disabled: true }] : []),
+            ...selectable.map(item => ({ value: item.id, label: item.title })),
+          ]} />
       </label>
       {definition ? <p>{definition.description}</p> : (
         <div class="inspector-schema-notice"><AlertCircle size={15} /><span>{t('workbench.thisFunctionIsUnavailableItsSourceIsPreservedUntilYouChooseACoreFunction')}</span></div>
@@ -343,7 +338,7 @@ function CallExpressionEditor(props: Readonly<ValueExpressionFieldProps> & {
             if (!argument) {
               return <div class="structured-call-extra" key={index}>
                 <code>{t('workbench.unexpectedArgument')}{index + 1}</code>
-                <button
+                <Button
                   aria-label={t('workbench.removeUnexpectedArgumentValue0', { value0: index + 1 })}
                   disabled={!props.canEdit}
                   onClick={() => props.onChange({
@@ -351,7 +346,7 @@ function CallExpressionEditor(props: Readonly<ValueExpressionFieldProps> & {
                     arguments: props.expression.arguments.filter((_item, itemIndex) => itemIndex !== index),
                   })}
                   type="button"
-                ><Trash2 aria-hidden="true" size={13} /></button>
+                ><Trash2 aria-hidden="true" size={13} /></Button>
               </div>
             }
             const argumentField = expressionTypeField(props.field, definition, argument, index)
@@ -372,7 +367,7 @@ function CallExpressionEditor(props: Readonly<ValueExpressionFieldProps> & {
                 {...(argumentExpression ? { expression: argumentExpression } : {})}
               />
               {definition.variadic && index >= definition.arguments.length ? (
-                <button
+                <Button
                   aria-label={t('workbench.removeValue0', { value0: argumentField.label })}
                   class="structured-call-remove"
                   disabled={!props.canEdit}
@@ -381,12 +376,12 @@ function CallExpressionEditor(props: Readonly<ValueExpressionFieldProps> & {
                     arguments: props.expression.arguments.filter((_item, itemIndex) => itemIndex !== index),
                   })}
                   type="button"
-                ><Trash2 aria-hidden="true" size={13} /></button>
+                ><Trash2 aria-hidden="true" size={13} /></Button>
               ) : null}
             </div>
           })}
           {definition.variadic ? (
-            <button
+            <Button
               class="structured-call-add"
               disabled={!props.canEdit}
               onClick={() => props.onChange({
@@ -397,7 +392,7 @@ function CallExpressionEditor(props: Readonly<ValueExpressionFieldProps> & {
                 ],
               })}
               type="button"
-            ><Plus aria-hidden="true" size={13} />{t('workbench.addArgument')}</button>
+            ><Plus aria-hidden="true" size={13} />{t('workbench.addArgument')}</Button>
           ) : null}
         </div>
       ) : null}
@@ -483,19 +478,13 @@ const FieldShell = defineSetupComponent<FieldShellProps>('FieldShell', ['field',
           {field.role ? <code>{field.role}</code> : null}
         </span>
         <span class="schema-value-editor">
-          <select
-            aria-label={t('workbench.value0ValueMode', { value0: field.label })}
-            class="schema-value-mode"
-            disabled={!canEdit}
-            onChange={event => onModeChange((event.target as HTMLInputElement).value as EditableValueMode)}
-            value={mode}
-          >
-            <option value="literal">{t('workbench.literal')}</option>
-            <option value="reference">{t('workbench.reference')}</option>
-            {field.type === 'string' ? <option value="template">{t('workbench.template')}</option> : null}
-            {props.supportsExpression || mode === 'expression' ? <option value="expression">{t('workbench.expression')}</option> : null}
-            {mode === 'preserved' ? <option disabled value="preserved">{t('workbench.structuredValue')}</option> : null}
-          </select>
+          <SelectMenu ariaLabel={t('workbench.value0ValueMode', { value0: field.label })} class="schema-value-mode" disabled={!canEdit}
+            onChange={value => onModeChange(value as EditableValueMode)} value={mode} options={[
+              { value: 'literal', label: t('workbench.literal') }, { value: 'reference', label: t('workbench.reference') },
+              ...(field.type === 'string' ? [{ value: 'template', label: t('workbench.template') }] : []),
+              ...(props.supportsExpression || mode === 'expression' ? [{ value: 'expression', label: t('workbench.expression') }] : []),
+              ...(mode === 'preserved' ? [{ value: 'preserved', label: t('workbench.structuredValue'), disabled: true }] : []),
+            ]} />
           <span class="schema-value-control">{context.slots.default?.()}</span>
         </span>
       </div>

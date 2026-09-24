@@ -1,3 +1,5 @@
+import { Input, Textarea } from './Input.js'
+import { SelectMenu } from './SelectMenu.js'
 import { componentText as t } from './i18n.js'
 import { isSchemaValue, type SchemaValue, type SchemaField } from './schema.js'
 import { ref, watch, type Component } from 'vue'
@@ -32,7 +34,7 @@ export const StringLiteralEditor = defineSetupComponent<SchemaLiteralRendererPro
   const draft = useTextDraft(() => typeof props.value === 'string' ? props.value : '')
   return () => {
     const value = typeof props.value === 'string' ? props.value : ''
-    return <input
+    return <Input
       {...inputAccessibility(props)}
       onInput={draft.onInput}
       value={draft.text.value}
@@ -54,7 +56,7 @@ export const NumberLiteralEditor = defineSetupComponent<SchemaLiteralRendererPro
   const draft = useTextDraft(() => typeof props.value === 'number' ? String(props.value) : '')
   return () => {
     const value = typeof props.value === 'number' ? props.value : undefined
-    return <input
+    return <Input
       {...inputAccessibility(props)}
       onInput={draft.onInput}
       value={draft.text.value}
@@ -86,40 +88,24 @@ export const NumberLiteralEditor = defineSetupComponent<SchemaLiteralRendererPro
 
 export function BooleanLiteralEditor(props: SchemaLiteralRendererProps) {
   const value = typeof props.value === 'boolean' ? String(props.value) : ''
-  return <select
-    {...inputAccessibility(props)}
-    disabled={!props.canEdit}
-    onChange={event => {
-      if (!(event.target as HTMLInputElement).value) props.onCommit()
-      else props.onCommit((event.target as HTMLInputElement).value === 'true')
-    }}
-    value={value}
-  >
-    {!props.field.required ? <option value="">{t('notSet')}</option> : null}
-    {props.field.required && !value ? <option disabled value="">{t('select')}</option> : null}
-    <option value="true">{t('true')}</option>
-    <option value="false">{t('false')}</option>
-  </select>
+  return <SelectMenu {...inputAccessibility(props)} class="schema-select" ariaLabel={props.field.label}
+    disabled={!props.canEdit} onChange={value => { if (!value) props.onCommit(); else props.onCommit(value === 'true') }}
+    value={value} options={[
+      ...(!props.field.required ? [{ value: '', label: t('notSet') }] : !value ? [{ value: '', label: t('select'), disabled: true }] : []),
+      { value: 'true', label: t('true') }, { value: 'false', label: t('false') },
+    ]} />
 }
 
 export function EnumLiteralEditor(props: SchemaLiteralRendererProps) {
   const options = props.field.options ?? []
   const literalValue = props.value === undefined ? undefined : JSON.stringify(props.value)
   const selectedIndex = options.findIndex(option => JSON.stringify(option.value) === literalValue)
-  return <select
-    {...inputAccessibility(props)}
-    disabled={!props.canEdit}
-    onChange={event => {
-      if (!(event.target as HTMLInputElement).value) props.onCommit()
-      else props.onCommit(options[Number((event.target as HTMLInputElement).value)]!.value)
-    }}
-    value={selectedIndex < 0 ? '' : String(selectedIndex)}
-  >
-    {!props.field.required || selectedIndex < 0
-      ? <option value="">{props.field.required ? t('select') : t('notSet')}</option>
-      : null}
-    {options.map((option, index) => <option key={`${index}:${option.label}`} value={index}>{option.label}</option>)}
-  </select>
+  return <SelectMenu {...inputAccessibility(props)} class="schema-select" ariaLabel={props.field.label}
+    disabled={!props.canEdit} onChange={value => { if (!value) props.onCommit(); else props.onCommit(options[Number(value)]!.value) }}
+    value={selectedIndex < 0 ? '' : String(selectedIndex)} options={[
+      ...(!props.field.required || selectedIndex < 0 ? [{ value: '', label: props.field.required ? t('select') : t('notSet'), disabled: props.field.required }] : []),
+      ...options.map((option, index) => ({ value: String(index), label: option.label })),
+    ]} />
 }
 
 export const JsonLiteralEditor = defineSetupComponent<SchemaLiteralRendererProps>('JsonLiteralEditor', ['canEdit', 'autofocus', 'controlId', 'describedBy', 'field', 'inputId', 'invalid', 'value', 'onCommit', 'onValidationChange'], props => {
@@ -131,7 +117,7 @@ export const JsonLiteralEditor = defineSetupComponent<SchemaLiteralRendererProps
     const storedValue = props.value === undefined ? '' : JSON.stringify(props.value, null, 2)
     const value = draftText.value ?? storedValue
     return <>
-    <textarea
+    <Textarea
       class="n-schema-input"
       aria-describedby={[props.describedBy, localError.value ? localProblemId : undefined].filter(Boolean).join(' ') || undefined}
       aria-invalid={props.invalid || !!localError.value}
@@ -173,7 +159,7 @@ export const DurationLiteralEditor = defineSetupComponent<SchemaLiteralRendererP
     const value = typeof props.value === 'number' ? props.value : undefined
     const seconds = value === undefined ? '' : String(value / 1_000)
     return <span class="input-with-unit expression-duration-input">
-      <input
+      <Input
         {...inputAccessibility(props)}
       onInput={draft.onInput}
         aria-label={t('waitDurationInSeconds')}
@@ -215,7 +201,7 @@ export const IsoDateTimeLiteralEditor = defineSetupComponent<SchemaLiteralRender
   return () => {
     const value = typeof props.value === 'string' ? props.value : undefined
     const localValue = localDateTimeValue(value)
-    return <input
+    return <Input
       {...inputAccessibility(props)}
       onInput={draft.onInput}
       aria-label={t('waitUntilDateAndTime')}

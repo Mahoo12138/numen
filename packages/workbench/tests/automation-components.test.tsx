@@ -454,7 +454,7 @@ describe('live Automation workspace projections', () => {
     />)
 
     expect(markup).toContain('aria-label="Message value mode"')
-    expect(markup).toContain('value="expression"')
+    expect(markup).toMatch(/aria-label="Message value mode"[^>]*><span>Expression<\/span>/)
     expect(markup).toContain('aria-label="Message expression function"')
     expect(markup).toContain('First available value')
     expect(markup).toContain('Convert to text')
@@ -492,7 +492,7 @@ describe('live Automation workspace projections', () => {
     />)
 
     expect(markup).toContain('aria-label="Wait wake source"')
-    expect(markup).toContain('value="until"')
+    expect(markup).toMatch(/aria-label="Wait wake source"[^>]*><span>Until a date and time<\/span>/)
     expect(markup).toContain('aria-label="Wake time value mode"')
     expect(markup).toContain('aria-label="Wake time expression function"')
     expect(markup).toContain('First available value')

@@ -1,3 +1,4 @@
+import { Input, Button, SelectMenu } from '@numenjs/components'
 import { t } from './i18n.js'
 import type { NumenValue } from '@numenjs/core'
 import type { SchemaUIResolver } from '@numenjs/webui/schema-ui'
@@ -189,34 +190,29 @@ export const ConnectionConfigurationPanel = defineSetupComponent<ConnectionConfi
       return <aside aria-label={t('workbench.connectionConfiguration')} class="connection-config-panel">
         <header>
           <div><h2>{mode === 'create' ? t('workbench.newConnection') : t('workbench.connectionSettings')}</h2><p>{mode === 'create' ? t('workbench.chooseAnAdapterAndConfigureOneDurableConnection') : props.connection?.name}</p></div>
-          <button aria-label={t('workbench.closeConnectionConfiguration')} class="icon-button" onClick={props.onClose} type="button"><X size={16} /></button>
+          <Button variant="ghost" size="icon" aria-label={t('workbench.closeConnectionConfiguration')} class="icon-button" onClick={props.onClose} type="button"><X size={16} /></Button>
         </header>
         <form onSubmit={event => { event.preventDefault(); void save() }}>
           <label class="connection-config-field">
             <span>{t('workbench.name')}<em>{t('workbench.required')}</em></span>
-            <input autofocus value={name.value} disabled={pending.value} maxlength="120" onInput={event => { name.value = (event.target as HTMLInputElement).value }} placeholder={t('workbench.personalWorkspace')} type="text" />
+            <Input autofocus value={name.value} disabled={pending.value} maxlength="120" onInput={event => { name.value = (event.target as HTMLInputElement).value }} placeholder={t('workbench.personalWorkspace')} type="text" />
           </label>
           <label class="connection-config-field">
             <span>{t('workbench.adapter')}<em>{t('workbench.required')}</em></span>
-            <select
+            <SelectMenu ariaLabel={t('workbench.adapter')}
               disabled={mode === 'edit' || pending.value}
-              onChange={event => {
-                const next = props.adapters.find(item => adapterKey(item) === (event.target as HTMLInputElement).value)
-                if (next) resetForAdapter(next)
-              }}
-              value={selectedAdapterKey.value}
-            >
-              {!props.adapters.length ? <option value="">{t('workbench.noAdaptersAvailable')}</option> : null}
-              {props.adapters.map(item => <option key={adapterKey(item)} value={adapterKey(item)}>{item.title}</option>)}
-            </select>
+              onChange={value => { const next = props.adapters.find(item => adapterKey(item) === value); if (next) resetForAdapter(next) }}
+              value={selectedAdapterKey.value} options={props.adapters.length
+                ? props.adapters.map(item => ({ value: adapterKey(item), label: item.title }))
+                : [{ value: '', label: t('workbench.noAdaptersAvailable'), disabled: true }]} />
             {selected ? <small>{selected.id}@{selected.version}{selected.providerAvailable ? '' : t('workbench.providerUnavailable2')}</small> : null}
           </label>
           {selected?.credentialType ? <label class="connection-config-field">
             <span>{t('workbench.credential')}<em>{t('workbench.required')}</em></span>
-            <select disabled={pending.value || !selected.credentials.length} onChange={event => { credentialId.value = (event.target as HTMLInputElement).value }} value={credentialId.value}>
-              {!selected.credentials.length ? <option value="">{t('workbench.noCompatibleCredentials')}</option> : null}
-              {selected.credentials.map(credential => <option key={credential.id} value={credential.id}>{credential.name} · v{credential.secretVersion}</option>)}
-            </select>
+            <SelectMenu ariaLabel={t('workbench.credential')} disabled={pending.value || !selected.credentials.length}
+              onChange={value => { credentialId.value = value }} value={credentialId.value}
+              options={selected.credentials.length ? selected.credentials.map(credential => ({ value: credential.id, label: `${credential.name} · v${credential.secretVersion}` }))
+                : [{ value: '', label: t('workbench.noCompatibleCredentials'), disabled: true }]} />
             <small>{t('workbench.onlyMetadataIsShownSecretMaterialNeverEntersWorkbenchReads')}</small>
           </label> : null}
           {selected?.configSchemaSupported ? <div class="connection-config-fields">{selected.configFields.map(renderField)}</div> : selected ? (
@@ -225,10 +221,10 @@ export const ConnectionConfigurationPanel = defineSetupComponent<ConnectionConfi
           {error.value ? <p class="connection-config-error" role="alert"><AlertCircle size={15} />{t(error.value)}</p> : null}
           <footer>
             {mode === 'edit' ? (
-              confirmDelete.value ? <span class="connection-delete-confirm"><span>{t('workbench.deleteThisConnectionConfiguration')}</span><button disabled={pending.value} onClick={() => { confirmDelete.value = false }} type="button">{t('workbench.cancel')}</button><button class="danger-button" disabled={pending.value} onClick={() => { void remove() }} type="button">{t('workbench.deleteConnection')}</button></span>
-                : <button class="danger-text-button" disabled={pending.value} onClick={() => { confirmDelete.value = true }} type="button"><Trash2 size={14} />{t('workbench.delete')}</button>
+              confirmDelete.value ? <span class="connection-delete-confirm"><span>{t('workbench.deleteThisConnectionConfiguration')}</span><Button disabled={pending.value} onClick={() => { confirmDelete.value = false }} type="button">{t('workbench.cancel')}</Button><Button variant="danger" class="danger-button" disabled={pending.value} onClick={() => { void remove() }} type="button">{t('workbench.deleteConnection')}</Button></span>
+                : <Button variant="ghost" class="danger-text-button" disabled={pending.value} onClick={() => { confirmDelete.value = true }} type="button"><Trash2 size={14} />{t('workbench.delete')}</Button>
             ) : <span />}
-            {!confirmDelete.value ? <button class="primary-button connection-save-button" disabled={!canSave.value} type="submit"><Save size={14} />{pending.value ? t('workbench.saving') : mode === 'create' ? t('workbench.createConnection') : t('workbench.saveChanges')}</button> : null}
+            {!confirmDelete.value ? <Button variant="primary" class="primary-button connection-save-button" disabled={!canSave.value} type="submit"><Save size={14} />{pending.value ? t('workbench.saving') : mode === 'create' ? t('workbench.createConnection') : t('workbench.saveChanges')}</Button> : null}
           </footer>
         </form>
       </aside>

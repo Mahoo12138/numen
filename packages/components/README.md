@@ -15,7 +15,8 @@ createApp({ render: () => h(Button, { onClick: () => console.log('save') }, () =
 | API | Purpose |
 | --- | --- |
 | `Button` | Primary, secondary, danger, ghost; disabled/busy; defaults to `type="button"` |
-| `SelectMenu` | Controlled `value`, `options`, `onChange`; keyboard navigation; outside-click/Escape dismissal |
+| `Input`, `Textarea` | Native attributes/events, shared tokens and focus/error/disabled styles; `inputRef` provides the native element for focus/selection |
+| `SelectMenu` | Controlled string `value`, `options`, `onChange`; disabled options; keyboard navigation; outside-click/Escape dismissal; viewport-aware popup outside scroll containers |
 | `StatePanel` | Loading, empty, unavailable, or error state; optional retry action |
 | `FormSection` | Native accessible collapsible section with a default slot |
 | `StringLiteralEditor`, `NumberLiteralEditor`, `BooleanLiteralEditor`, `EnumLiteralEditor`, `JsonLiteralEditor` | Schema-driven literal inputs |
@@ -83,3 +84,7 @@ when that language changes.
 From the monorepo root: `pnpm install`, `pnpm --filter @numenjs/components build`,
 `pnpm test`, `pnpm test:e2e`, `pnpm release:check`. Published archives contain compiled
 ESM, declarations and CSS; consumers do not need Vue JSX compilation.
+
+`SelectMenu` forwards `id`, `aria-describedby`, `aria-invalid`, and other button attributes to its trigger; `class` and `style` apply to the wrapper. Options use `{ value, label, description?, disabled? }`. Values remain strings; schema Boolean/Enum editors map them back to their original data types. The popup is portaled to `document.body`, closes on focus leaving, and restores focus after selection or Escape. Arrow keys, Home/End and Tab work without selecting disabled options.
+
+`Input` and `Textarea` preserve native `onInput` versus `onChange` behavior. Keep parsing, commit timing and draft ownership in the caller (or use a schema editor); the primitive does not coerce values. Use `inputRef` rather than a component `ref` when manipulating native focus or text selection.

@@ -1,3 +1,4 @@
+import { Button, Input, SelectMenu } from '@numenjs/components'
 import { LogsView } from './LogsView.js'
 import { t, provideWorkbenchI18n, pageTitle } from './i18n.js'
 import type { BrowserLocaleService } from '@numenjs/webui/i18n'
@@ -129,25 +130,24 @@ export const WorkbenchShell = defineSetupComponent<WorkbenchShellProps>('Workben
         <div class="brand"><span class="brand-mark">N</span><strong>Numen Workbench</strong></div>
         <label class="command-center">
           <Search aria-hidden="true" size={17} />
-          <input aria-label={t('workbench.commandCenter')} placeholder={t('workbench.commandCenter')} />
+          <Input aria-label={t('workbench.commandCenter')} placeholder={t('workbench.commandCenter')} />
           <kbd>⌘K</kbd>
         </label>
         <div class="top-actions">
           {props.localeService ? <label class="language-switcher">
             <span class="visually-hidden">{t('workbench.language')}</span>
-            <select aria-label={t('workbench.language')} value={language.preferredLocale.value ?? ''}
-              onChange={event => language.setLocale((event.target as HTMLSelectElement).value || undefined)}>
-              <option value="">{t('workbench.systemLanguage')}</option>
-              <option value="en-US">English</option>
-              <option value="zh-CN">简体中文</option>
-            </select>
+            <SelectMenu ariaLabel={t('workbench.language')} value={language.preferredLocale.value ?? ''}
+              onChange={value => language.setLocale(value || undefined)} options={[
+                { value: '', label: t('workbench.systemLanguage') },
+                { value: 'en-US', label: 'English' }, { value: 'zh-CN', label: '简体中文' },
+              ]} />
           </label> : null}
-          <button aria-label={t('workbench.runAutomation')} class="icon-button" type="button"><Play size={17} /></button>
-          <button aria-label={t('workbench.recentActivity')} class="icon-button" type="button"><Clock3 size={17} /></button>
-          <button aria-label={t('workbench.create')} class="icon-button" type="button"><Plus size={18} /></button>
+          <Button variant="ghost" size="icon" aria-label={t('workbench.runAutomation')} class="icon-button" type="button"><Play size={17} /></Button>
+          <Button variant="ghost" size="icon" aria-label={t('workbench.recentActivity')} class="icon-button" type="button"><Clock3 size={17} /></Button>
+          <Button variant="ghost" size="icon" aria-label={t('workbench.create')} class="icon-button" type="button"><Plus size={18} /></Button>
           <span class="top-divider" />
-          <button aria-label={t('workbench.settings')} class="icon-button" type="button"><Settings size={17} /></button>
-          <button aria-label={t('workbench.help')} class="icon-button" type="button"><CircleHelp size={17} /></button>
+          <Button variant="ghost" size="icon" aria-label={t('workbench.settings')} class="icon-button" type="button"><Settings size={17} /></Button>
+          <Button variant="ghost" size="icon" aria-label={t('workbench.help')} class="icon-button" type="button"><CircleHelp size={17} /></Button>
         </div>
       </header>
       <ActivityRail activeId={activityId} onChange={onActivityChange} />

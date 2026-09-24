@@ -1,3 +1,4 @@
+import { Button } from '@numenjs/components'
 import { diagnosticText, t, statusLabel, formatDateTime } from './i18n.js'
 import { computed, reactive } from 'vue'
 import { workbenchRunsIndexQueryRef, type WorkbenchRunsIndex, type WorkbenchRunsQueryInput, type WorkbenchRunStatus } from './contracts.js'
@@ -47,7 +48,7 @@ export const AutomationRuns = defineSetupComponent<AutomationRunsProps>('Automat
     </details> : null}
     <section aria-label={t('workbench.automationRunHistory')}>
       <div class="automation-run-heading"><div><h2>{t('workbench.runHistory')}</h2><p>{t('workbench.allRevisionsNewestFirst20PerPage')}</p></div>
-        <button class="secondary-button" disabled={index.status === 'LOADING'} onClick={() => { delete position.cursor; position.history = []; reload() }} type="button">{t('workbench.latestRuns')}</button>
+        <Button variant="secondary" class="secondary-button" disabled={index.status === 'LOADING'} onClick={() => { delete position.cursor; position.history = []; reload() }} type="button">{t('workbench.latestRuns')}</Button>
       </div>
       <div class="automation-run-filter"><span id="run-status-label">{t('workbench.status')}</span><SelectMenu
         ariaLabel={t('workbench.runStatus')}
@@ -66,11 +67,11 @@ export const AutomationRuns = defineSetupComponent<AutomationRunsProps>('Automat
             <td>{run.executionCount}{t('workbench.executions')}{run.attemptCount}{t('workbench.attempts')}</td>
           </tr>)}</tbody>
         </table></div> : <p class="home-empty">{position.status ? t('workbench.noRunsMatchThisStatusOnThisPage') : position.cursor ? t('workbench.noRunsRemainOnThisPage') : t('workbench.thisAutomationHasNoRunsYet')}</p>}
-      </> : index.status === 'ERROR' ? <p role="alert">{diagnosticText(index)} <button class="secondary-button" onClick={reload} type="button">{t('workbench.tryAgain')}</button></p>
+      </> : index.status === 'ERROR' ? <p role="alert">{diagnosticText(index)} <Button variant="secondary" class="secondary-button" onClick={reload} type="button">{t('workbench.tryAgain')}</Button></p>
         : <p role="status">{index.status === 'LOADING' ? t('workbench.loadingRunHistory') : t('workbench.connectToARuntimeToViewRuns')}</p>}
       <nav class="runs-pagination" aria-label={t('workbench.automationRunPages')}>
-        <button disabled={!position.history.length || index.status === 'LOADING'} onClick={() => previousRunHistory(position)} type="button">{t('workbench.previous')}</button>
-        <button disabled={index.status !== 'READY' || !index.data.nextCursor} onClick={() => { if (index.status === 'READY' && index.data.nextCursor) advanceRunHistory(position, index.data.nextCursor) }} type="button">{t('workbench.next')}</button>
+        <Button disabled={!position.history.length || index.status === 'LOADING'} onClick={() => previousRunHistory(position)} type="button">{t('workbench.previous')}</Button>
+        <Button disabled={index.status !== 'READY' || !index.data.nextCursor} onClick={() => { if (index.status === 'READY' && index.data.nextCursor) advanceRunHistory(position, index.data.nextCursor) }} type="button">{t('workbench.next')}</Button>
       </nav>
     </section>
   </section>

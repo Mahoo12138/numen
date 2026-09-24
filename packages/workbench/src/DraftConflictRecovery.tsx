@@ -1,3 +1,4 @@
+import { Button, Input } from '@numenjs/components'
 import { t } from './i18n.js'
 import { computed, ref, shallowRef, watch } from 'vue'
 import { compareAutomationDrafts } from './draft-comparison.js'
@@ -42,7 +43,7 @@ export const DraftConflictRecovery = defineSetupComponent<Props>('DraftConflictR
       {open.value ? <div class="draft-recovery-content">
         <div class="draft-recovery-heading">
           <div><h2>{t('workbench.compareDrafts')}</h2><p>{t('workbench.localChangesStayPausedUntilYouChooseHowToRecover')}</p></div>
-          <button disabled={state.comparing} onClick={() => void controller.compare()} type="button">{state.comparing ? t('workbench.loadingServerDraft') : t('workbench.refreshComparison')}</button>
+          <Button disabled={state.comparing} onClick={() => void controller.compare()} type="button">{state.comparing ? t('workbench.loadingServerDraft') : t('workbench.refreshComparison')}</Button>
         </div>
         {state.compareError ? <p role="alert">{state.compareError}</p> : null}
         {comparison.value && state.server ? <>
@@ -62,15 +63,15 @@ export const DraftConflictRecovery = defineSetupComponent<Props>('DraftConflictR
           <div>
             <h3>{t('workbench.keepLocalChangesAsACopy')}</h3>
             <p>{t('workbench.theNewAutomationStartsDisabledWithNoPublishedRevisions')}</p>
-            <label>{t('workbench.copyName')}<input aria-label={t('workbench.draftCopyName')} maxlength={200} disabled={!!state.request} value={name.value} onInput={event => { name.value = (event.target as HTMLInputElement).value }} /></label>
-            {state.copy ? <p role="status">{t('workbench.saved2')}{state.copy.name}”. <button onClick={() => props.onOpenCopy(state.copy!.automationId)} type="button">{t('workbench.openSavedCopy')}</button></p>
-              : <button disabled={state.saving || !name.value.trim()} onClick={() => void controller.saveCopy(name.value)} type="button">{state.saving ? t('workbench.savingCopy') : state.copyError && state.request ? t('workbench.retrySavingCopy') : t('workbench.saveLocalAsCopy')}</button>}
+            <label>{t('workbench.copyName')}<Input aria-label={t('workbench.draftCopyName')} maxlength={200} disabled={!!state.request} value={name.value} onInput={event => { name.value = (event.target as HTMLInputElement).value }} /></label>
+            {state.copy ? <p role="status">{t('workbench.saved2')}{state.copy.name}”. <Button onClick={() => props.onOpenCopy(state.copy!.automationId)} type="button">{t('workbench.openSavedCopy')}</Button></p>
+              : <Button disabled={state.saving || !name.value.trim()} onClick={() => void controller.saveCopy(name.value)} type="button">{state.saving ? t('workbench.savingCopy') : state.copyError && state.request ? t('workbench.retrySavingCopy') : t('workbench.saveLocalAsCopy')}</Button>}
             {state.copyError ? <p role="alert">{state.copyError}</p> : null}
           </div>
           <div>
             <h3>{t('workbench.continueFromTheServer')}</h3>
             <p>{t('workbench.thisDiscardsThisTabSLocalEditsAndUndoHistoryThenLoadsTheLatestServer')}</p>
-            <button disabled={!state.server || state.comparing || state.saving} onClick={props.onReload} type="button">{t('workbench.discardLocalAndReloadLatest')}</button>
+            <Button disabled={!state.server || state.comparing || state.saving} onClick={props.onReload} type="button">{t('workbench.discardLocalAndReloadLatest')}</Button>
           </div>
         </div>
       </div> : null}

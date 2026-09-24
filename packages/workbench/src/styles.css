@@ -978,21 +978,13 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .automation-runs .run-detail-link { max-width: 190px; }
 }
 
-.language-switcher select {
-  max-width: 130px;
-  min-height: 30px;
-  padding: 3px 7px;
-  border: 1px solid var(--border, #dfe3e6);
-  border-radius: 5px;
-  color: inherit;
-  background: transparent;
-  font: inherit;
-  font-size: 12px;
-}
-
-@media (max-width: 640px) {
-  .language-switcher select { max-width: 108px; }
-}
+.language-switcher .select-menu { width: 130px; }
+.language-switcher .select-menu-trigger { min-height: 30px; font-size: 12px; }
+@media (max-width: 640px) { .language-switcher .select-menu { width: 108px; } }
+.mobile-automation-switcher .select-menu { flex: 1; }
+.automation-run-filter .select-menu { width: 140px; }
+.logs-toolbar .select-menu { min-width: 100px; }
+.schema-value-mode .select-menu-trigger { gap: 4px; padding-inline: 6px; font-size: 10px; }
 
 .system-logs-page { display: block; overflow: auto; padding: 24px; text-align: left; }
 .system-logs-page > header { margin-bottom: 20px; }

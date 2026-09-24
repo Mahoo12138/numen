@@ -1,3 +1,4 @@
+import { Input, Button, SelectMenu } from '@numenjs/components'
 import { t } from './i18n.js'
 import { isNumenValue, type NumenValue } from '@numenjs/core'
 import { computed, onBeforeUnmount, ref } from 'vue'
@@ -103,29 +104,30 @@ export const CredentialConfigurationPanel = defineSetupComponent<Props>('Credent
     }
     return () => <aside aria-label={t('workbench.credentialConfiguration')} class="connection-config-panel credential-config-panel">
       <header><div><h2>{original ? t('workbench.manageCredential') : t('workbench.newCredential')}</h2><p>{original ? t('workbench.value0VersionValue1', { value0: original.name, value1: original.secretVersion }) : t('workbench.storeAnEncryptedSecretForConnections')}</p></div>
-        <button aria-label={t('workbench.closeCredentialConfiguration')} class="icon-button" onClick={props.onClose} type="button"><X size={16} /></button>
+        <Button variant="ghost" size="icon" aria-label={t('workbench.closeCredentialConfiguration')} class="icon-button" onClick={props.onClose} type="button"><X size={16} /></Button>
       </header>
       <form autocomplete="off" onSubmit={event => { event.preventDefault(); void save() }}>
-        <label class="connection-config-field"><span>{t('workbench.name')}</span><input aria-label={t('workbench.credentialName')} autocomplete="off" disabled={!!original || pending.value} maxlength="120" value={name.value} onInput={event => { name.value = (event.target as HTMLInputElement).value }} type="text" /></label>
-        <label class="connection-config-field"><span>{t('workbench.credentialType')}</span><select aria-label={t('workbench.credentialType')} disabled={!!original || pending.value} value={selectedKey.value} onChange={event => { selectedKey.value = (event.target as HTMLSelectElement).value; values.value = {}; error.value = undefined }}>
-          {!selected.value ? <option value={selectedKey.value}>{original ? t('workbench.value0Value1Unavailable', { value0: original.typeId, value1: original.typeVersion }) : t('workbench.noTypesAvailable')}</option> : null}
-          {props.types.map(type => <option key={typeKey(type)} value={typeKey(type)}>{type.title} · v{type.version}</option>)}
-        </select></label>
+        <label class="connection-config-field"><span>{t('workbench.name')}</span><Input aria-label={t('workbench.credentialName')} autocomplete="off" disabled={!!original || pending.value} maxlength="120" value={name.value} onInput={event => { name.value = (event.target as HTMLInputElement).value }} type="text" /></label>
+        <label class="connection-config-field"><span>{t('workbench.credentialType')}</span><SelectMenu ariaLabel={t('workbench.credentialType')} disabled={!!original || pending.value} value={selectedKey.value}
+          onChange={value => { selectedKey.value = value; values.value = {}; error.value = undefined }} options={[
+            ...(!selected.value ? [{ value: selectedKey.value, label: original ? t('workbench.value0Value1Unavailable', { value0: original.typeId, value1: original.typeVersion }) : t('workbench.noTypesAvailable'), disabled: true }] : []),
+            ...props.types.map(type => ({ value: typeKey(type), label: `${type.title} · v${type.version}` })),
+          ]} /></label>
         <p class="connection-config-notice">{original ? t('workbench.enterACompleteReplacementSecretCurrentValuesCannotBeReadBack') : t('workbench.secretFieldsAreSubmittedOnlyWhenYouCreateThisCredential')}</p>
         {!props.encryptionConfigured ? <p class="connection-config-notice">{t('workbench.configureRuntimeCredentialEncryptionBeforeCreatingOrRotatingSecrets')}</p> : null}
         {!selected.value ? <p class="connection-config-notice">{t('workbench.restoreTheCredentialTypePluginToEditSecrets')}</p>
           : !selected.value.secretSchemaSupported ? <p class="connection-config-notice">{t('workbench.thisTypeRequiresAPluginProvidedEditor')}</p>
           : selected.value.secretFields.map(field => <label class="connection-config-field" key={`${selectedKey.value}:${field.name}`}>
             <span>{field.label}{field.required ? <em>{t('workbench.required')}</em> : null}</span>
-            <input aria-label={field.label} autocomplete="new-password" spellcheck={false} type="password" disabled={pending.value || !props.encryptionConfigured}
+            <Input aria-label={field.label} autocomplete="new-password" spellcheck={false} type="password" disabled={pending.value || !props.encryptionConfigured}
               value={values.value[field.name] ?? ''} onInput={event => { values.value = { ...values.value, [field.name]: (event.target as HTMLInputElement).value } }} />
             {field.type !== 'string' ? <small>{field.type === 'boolean' ? t('workbench.enterTrueOrFalse') : field.type === 'number' ? t('workbench.enterANumber') : t('workbench.enterAJsonValue')}</small> : null}
           </label>)}
         {error.value ? <p class="connection-config-error" role="alert">{t(error.value, { field: invalidField.value })}</p> : null}
         <footer>
-          {original ? confirmDelete.value ? <span class="connection-delete-confirm"><span>{t('workbench.deleteThisCredentialPermanently')}</span><button disabled={pending.value} onClick={() => { confirmDelete.value = false }} type="button">{t('workbench.cancel')}</button><button class="danger-button" disabled={pending.value} onClick={() => { void remove() }} type="button">{t('workbench.deleteCredential')}</button></span>
-            : <button class="danger-text-button" disabled={pending.value || original.connectionCount > 0} onClick={() => { confirmDelete.value = true }} type="button">{t('workbench.delete')}</button> : <span />}
-          {!confirmDelete.value ? <button class="primary-button" disabled={!canSave.value} type="submit">{pending.value ? t('workbench.saving') : original ? t('workbench.rotateSecret') : t('workbench.createCredential')}</button> : null}
+          {original ? confirmDelete.value ? <span class="connection-delete-confirm"><span>{t('workbench.deleteThisCredentialPermanently')}</span><Button disabled={pending.value} onClick={() => { confirmDelete.value = false }} type="button">{t('workbench.cancel')}</Button><Button variant="danger" class="danger-button" disabled={pending.value} onClick={() => { void remove() }} type="button">{t('workbench.deleteCredential')}</Button></span>
+            : <Button variant="ghost" class="danger-text-button" disabled={pending.value || original.connectionCount > 0} onClick={() => { confirmDelete.value = true }} type="button">{t('workbench.delete')}</Button> : <span />}
+          {!confirmDelete.value ? <Button variant="primary" class="primary-button" disabled={!canSave.value} type="submit">{pending.value ? t('workbench.saving') : original ? t('workbench.rotateSecret') : t('workbench.createCredential')}</Button> : null}
         </footer>
         {original?.connectionCount ? <p class="connection-config-notice">{t('workbench.usedBy')}{original.connectionCount}{t('workbench.connection2')}{original.connectionCount === 1 ? '' : 's'}{t('workbench.removeThoseBindingsBeforeDeletion')}</p> : null}
       </form>

@@ -1,3 +1,4 @@
+import { Button } from '@numenjs/components'
 import { diagnosticText, t, metadataText, formatDateTime, statusLabel } from './i18n.js'
 import { Ban, Braces, ChevronLeft, Clock3, GitBranch, ListTree, RotateCcw, ScrollText } from '@lucide/vue'
 import { computed, onScopeDispose, reactive, shallowReactive, watch } from 'vue'
@@ -172,14 +173,14 @@ function RunDetailHeader({ state, cancellation, onBack, onCancel, onLogs }: {
       </div>
       {run ? (
         <div class="run-detail-actions">
-          <button class="secondary-button" type="button" onClick={onLogs}>{t('workbench.logs.viewRun')}</button>
+          <Button variant="secondary" class="secondary-button" type="button" onClick={onLogs}>{t('workbench.logs.viewRun')}</Button>
           {cancellable ? (
-            <button
+            <Button
               class="run-cancel-button"
               disabled={cancellation.pending || status === 'CANCELLING'}
               onClick={onCancel}
               type="button"
-            ><Ban aria-hidden="true" size={14} />{cancellation.pending ? t('workbench.cancelling') : status === 'CANCELLING' ? t('workbench.cancellationPending') : t('workbench.cancelRun')}</button>
+            ><Ban aria-hidden="true" size={14} />{cancellation.pending ? t('workbench.cancelling') : status === 'CANCELLING' ? t('workbench.cancellationPending') : t('workbench.cancelRun')}</Button>
           ) : null}
           <em class="run-detail-status" data-status={status}>{statusLabel(status ?? run.status)}</em>
         </div>
@@ -408,8 +409,8 @@ function PageControls({ canGoNewer, canGoOlder, label, onNewer, onOlder }: {
   if (!canGoNewer && !canGoOlder) return null
   return (
     <nav aria-label={label} class="run-detail-pagination">
-      <button disabled={!canGoNewer} onClick={onNewer} type="button">{t('workbench.newer')}</button>
-      <button disabled={!canGoOlder} onClick={onOlder} type="button">{t('workbench.older')}</button>
+      <Button disabled={!canGoNewer} onClick={onNewer} type="button">{t('workbench.newer')}</Button>
+      <Button disabled={!canGoOlder} onClick={onOlder} type="button">{t('workbench.older')}</Button>
     </nav>
   )
 }
@@ -426,7 +427,7 @@ function RunDetailState({ title, message, busy = false, tone = 'default', action
     <section aria-busy={busy} class="run-detail-state" data-tone={tone} role={tone === 'error' ? 'alert' : 'status'}>
       <Clock3 aria-hidden="true" size={18} />
       <div><strong>{title}</strong><p>{message}</p></div>
-      {action ? <button {...(onAction ? { onClick: onAction } : {})} type="button">{action}</button> : null}
+      {action ? <Button {...(onAction ? { onClick: onAction } : {})} type="button">{action}</Button> : null}
     </section>
   )
 }

@@ -1,3 +1,4 @@
+import { Button, SelectMenu } from '@numenjs/components'
 import { diagnosticText, t } from './i18n.js'
 import { automationStepEditOptions } from './automation-source-editing.js'
 import {
@@ -77,7 +78,7 @@ function ToolbarButton({ label, disabled = false, onClick }: {
   disabled?: boolean
   onClick?(): void
 }, context: SetupContext) {
-  return <button aria-label={label} class="toolbar-button" disabled={disabled} {...(onClick ? { onClick } : {})} title={label} type="button">{context.slots.default?.()}</button>
+  return <Button variant="ghost" size="icon" aria-label={label} class="toolbar-button" disabled={disabled} {...(onClick ? { onClick } : {})} title={label} type="button">{context.slots.default?.()}</Button>
 }
 
 export function AutomationEditor({
@@ -152,29 +153,28 @@ export function AutomationEditor({
               type="button"
             >{activation.pending && !activation.activatingRevisionId ? t('workbench.updating') : detail.automation.enabled ? t('workbench.disable') : t('workbench.enable')}</button> : null}
             {authoring && onPublish ? (
-              <button
+              <Button variant="primary"
                 class="publish-button"
                 disabled={!authoring.canPublish}
                 onClick={onPublish}
                 type="button"
-              >{authoring.publishPending ? t('workbench.publishing') : t('workbench.publish')}</button>
+              >{authoring.publishPending ? t('workbench.publishing') : t('workbench.publish')}</Button>
             ) : null}
-            <button
+            <Button
               aria-expanded={inspectorOpen ?? false}
               aria-label={inspectorOpen ? t('workbench.closeInspector') : t('workbench.openInspector')}
               class="mobile-inspector-button"
               data-active={inspectorOpen ?? false}
               onClick={onOpenInspector}
               type="button"
-            ><PanelRight aria-hidden="true" size={14} /><span>{t('workbench.inspector')}</span></button>
+            ><PanelRight aria-hidden="true" size={14} /><span>{t('workbench.inspector')}</span></Button>
           </div>
         </div>
         {liveAutomations?.length && automationId && onAutomationChange ? (
           <label class="mobile-automation-switcher">
             <span>{t('workbench.automation')}</span>
-            <select aria-label={t('workbench.selectAutomation')} onChange={event => onAutomationChange((event.target as HTMLInputElement).value)} value={automationId}>
-              {liveAutomations.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-            </select>
+            <SelectMenu ariaLabel={t('workbench.selectAutomation')} onChange={onAutomationChange} value={automationId}
+              options={liveAutomations.map(item => ({ value: item.id, label: item.name }))} />
           </label>
         ) : null}
         <nav class="context-tabs" aria-label={t('workbench.automationSections')}>
@@ -196,12 +196,12 @@ export function AutomationEditor({
       {authoring?.conflict ? (conflictRecovery ??
         <section class="authoring-notice" data-tone="conflict" role="alert">
           <span><strong>{t('workbench.draftChangedElsewhere')}</strong>{t('workbench.localVersion')}{authoring.conflict.expectedVersion}{t('workbench.cannotOverwriteServerVersion')}{authoring.conflict.actualVersion}.</span>
-          {onReloadDraft ? <button onClick={onReloadDraft} type="button">{t('workbench.reloadServerDraft')}</button> : null}
+          {onReloadDraft ? <Button onClick={onReloadDraft} type="button">{t('workbench.reloadServerDraft')}</Button> : null}
         </section>
       ) : authoring?.saveError ? (
         <section class="authoring-notice" data-tone="error" role="alert">
           <span><strong>{t('workbench.autosaveFailed')}</strong> {authoring.saveError}</span>
-          {onRetrySave ? <button onClick={onRetrySave} type="button">{t('workbench.retryAutosave')}</button> : null}
+          {onRetrySave ? <Button onClick={onRetrySave} type="button">{t('workbench.retryAutosave')}</Button> : null}
         </section>
       ) : authoring?.publishError ? (
         <section class="authoring-notice" data-tone="error" role="alert">
@@ -275,9 +275,9 @@ export function AutomationEditor({
                       <ChevronDown aria-hidden="true" class="step-menu" size={18} />
                     </button>
                     {selected && detail && step.sourceId ? <div class="step-edit-actions" role="group" aria-label={t('workbench.actionsForValue0', { value0: step.label })}>
-                      <button disabled={!canEdit || !editOptions?.canMoveUp || !onMoveStep} aria-label={t('workbench.moveValue0Up', { value0: step.label })} onClick={() => onMoveStep?.(step.sourceId!, 'up')} type="button"><ArrowUp size={14} />{t('workbench.moveUp2')}</button>
-                      <button disabled={!canEdit || !editOptions?.canMoveDown || !onMoveStep} aria-label={t('workbench.moveValue0Down', { value0: step.label })} onClick={() => onMoveStep?.(step.sourceId!, 'down')} type="button"><ArrowDown size={14} />{t('workbench.moveDown2')}</button>
-                      <button disabled={!canEdit || !editOptions?.canDelete || !onDeleteStep} aria-label={t('workbench.deleteValue0', { value0: step.label })} title={t('workbench.deleteThisStepAndItsContentsUndoRestoresIt')} onClick={() => onDeleteStep?.(step.sourceId!)} type="button"><Trash2 size={14} />{t('workbench.delete2')}</button>
+                      <Button disabled={!canEdit || !editOptions?.canMoveUp || !onMoveStep} aria-label={t('workbench.moveValue0Up', { value0: step.label })} onClick={() => onMoveStep?.(step.sourceId!, 'up')} type="button"><ArrowUp size={14} />{t('workbench.moveUp2')}</Button>
+                      <Button disabled={!canEdit || !editOptions?.canMoveDown || !onMoveStep} aria-label={t('workbench.moveValue0Down', { value0: step.label })} onClick={() => onMoveStep?.(step.sourceId!, 'down')} type="button"><ArrowDown size={14} />{t('workbench.moveDown2')}</Button>
+                      <Button disabled={!canEdit || !editOptions?.canDelete || !onDeleteStep} aria-label={t('workbench.deleteValue0', { value0: step.label })} title={t('workbench.deleteThisStepAndItsContentsUndoRestoresIt')} onClick={() => onDeleteStep?.(step.sourceId!)} type="button"><Trash2 size={14} />{t('workbench.delete2')}</Button>
                       <p>{editOptions?.canDelete ? t('workbench.moveWithinThisSequenceDeleteIncludesNestedStepsReferencesAreKeptAsWritten') : t('workbench.thisContainerOrTriggerCannotBeRemovedAsASequenceStep')}</p>
                     </div> : null}
                     {index < steps.length - 1 ? (
@@ -307,13 +307,13 @@ export function AutomationEditor({
                   <div><strong>{t('workbench.revision')}{revision.number}</strong>{revision.active ? <em>{t('workbench.active')}</em> : null}</div>
                   <small>{revision.contentHash}</small>
                   <time datetime={revision.createdAt}>{revision.createdAt}</time>
-                  {activation && onActivateRevision ? <button
+                  {activation && onActivateRevision ? <Button
                     aria-label={t('workbench.activateRevisionValue0', { value0: revision.number })}
                     class="revision-activate-button"
                     disabled={revision.active || activation.pending}
                     onClick={() => onActivateRevision(revision.id)}
                     type="button"
-                  >{activation.activatingRevisionId === revision.id ? t('workbench.activating') : revision.active ? t('workbench.active') : t('workbench.activate')}</button> : null}
+                  >{activation.activatingRevisionId === revision.id ? t('workbench.activating') : revision.active ? t('workbench.active') : t('workbench.activate')}</Button> : null}
                 </article>
               ))}
             </div>
@@ -329,7 +329,7 @@ export function AutomationEditor({
           <p>{!activeRevision ? t('workbench.publishAndActivateARevisionBeforeEnablingThisAutomation')
             : detail.automation.enabled ? t('workbench.triggerSubscriptionsFollowTheActiveRevisionEventDeliveryDependsOnAvailableProvidersAndConnections')
               : t('workbench.triggerSubscriptionsAreDisabledExistingRunsContinueWithTheirOriginalRevision')}</p>
-          <button class="revision-activate-button" onClick={() => onTabChange('Revisions')} type="button">{t('workbench.manageRevisions')}</button>
+          <Button class="revision-activate-button" onClick={() => onTabChange('Revisions')} type="button">{t('workbench.manageRevisions')}</Button>
         </section>
       ) : (
         <section class="secondary-view">
@@ -353,7 +353,7 @@ function AutomationState({ title, message, busy = false, tone = 'default', actio
     <section aria-busy={busy} class="automation-state" data-tone={tone} role={tone === 'error' ? 'alert' : 'status'}>
       <strong>{title}</strong>
       <p>{message}</p>
-      {action ? <button class="secondary-button" {...(onAction ? { onClick: onAction } : {})} type="button">{action}</button> : null}
+      {action ? <Button variant="secondary" class="secondary-button" {...(onAction ? { onClick: onAction } : {})} type="button">{action}</Button> : null}
     </section>
   )
 }

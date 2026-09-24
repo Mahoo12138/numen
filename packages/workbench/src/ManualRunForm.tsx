@@ -1,3 +1,4 @@
+import { Button } from '@numenjs/components'
 import { t } from './i18n.js'
 import { AutomationInputValidationError, resolveAutomationInputs, type AutomationInputIssue, type NumenValue } from '@numenjs/core'
 import { onScopeDispose, ref, shallowRef } from 'vue'
@@ -103,13 +104,13 @@ export const ManualRunForm = defineSetupComponent<ManualRunProps>('ManualRunForm
           onChange={value => { values.value = value as Record<string, NumenValue> ?? {} }} onValidationChange={value => { invalid.value.parameters = value }} />}
       {form.value.inputs && !Object.keys(form.value.inputs).length ? <p>{t('workbench.noParametersAreRequired')}</p> : null}
       <div class="manual-run-actions">
-        <button class="primary-button" type="submit" disabled={pending.value || requiresReload.value || Object.values(invalid.value).some(Boolean)}>{pending.value ? t('workbench.starting') : uncertain.value ? t('workbench.retryStartRun') : t('workbench.startRun')}</button>
-        <button class="secondary-button" disabled={pending.value || loading.value} onClick={() => void load()} type="button">{t('workbench.reloadParameters')}</button>
+        <Button variant="primary" class="primary-button" type="submit" disabled={pending.value || requiresReload.value || Object.values(invalid.value).some(Boolean)}>{pending.value ? t('workbench.starting') : uncertain.value ? t('workbench.retryStartRun') : t('workbench.startRun')}</Button>
+        <Button variant="secondary" class="secondary-button" disabled={pending.value || loading.value} onClick={() => void load()} type="button">{t('workbench.reloadParameters')}</Button>
       </div>
     </form> : null}
     {issues.value.filter(issue => !form.value?.inputs || !Object.hasOwn(form.value.inputs, issue.field)).map((issue, i) => <p class="inspector-field-error" key={i} role="alert">{issue.field}: {issue.message}</p>)}
     {message.value ? <p role={runId.value ? 'status' : 'alert'}>{t(message.value)}</p> : null}
-    {runId.value && props.navigation ? <div class="manual-run-result-actions"><button class="secondary-button" onClick={() => props.navigation?.navigate(coreWorkbenchRunFlowRoute, { parameters: { id: runId.value! } })} type="button">{t('workbench.viewRun')}</button></div> : null}
-    {!form.value ? <div class="manual-run-actions"><button class="secondary-button" disabled={pending.value || loading.value} onClick={() => void load()} type="button">{t('workbench.reloadParameters')}</button></div> : null}
+    {runId.value && props.navigation ? <div class="manual-run-result-actions"><Button variant="secondary" class="secondary-button" onClick={() => props.navigation?.navigate(coreWorkbenchRunFlowRoute, { parameters: { id: runId.value! } })} type="button">{t('workbench.viewRun')}</Button></div> : null}
+    {!form.value ? <div class="manual-run-actions"><Button variant="secondary" class="secondary-button" disabled={pending.value || loading.value} onClick={() => void load()} type="button">{t('workbench.reloadParameters')}</Button></div> : null}
   </section>
 })
