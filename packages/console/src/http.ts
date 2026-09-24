@@ -1,3 +1,4 @@
+import { withLogContext } from '@numenjs/logging'
 import type { Request, Response } from '@cordisjs/plugin-server'
 import type { Context } from 'cordis'
 import { randomUUID } from 'node:crypto'
@@ -153,7 +154,7 @@ async function handleCall(ctx: Context, request: Request, response: Response): P
     } else if (error instanceof z.ValidationError) {
       respondError(response, requestId, 422, 'PROCEDURE_VALIDATION_FAILED', error.message)
     } else {
-      logger.error(error)
+      withLogContext({ requestId, traceId: requestId }, () => logger.error(error))
       respondError(response, requestId, 500, 'INTERNAL_ERROR', 'Console procedure failed')
     }
   } finally {

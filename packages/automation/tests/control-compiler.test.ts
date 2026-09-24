@@ -1,4 +1,4 @@
-import type { AutomationSource, CoreControlSource, ExtensionControlDefinition } from '@numen/core'
+import type { AutomationSource, CoreControlSource, ExtensionControlDefinition } from '@numenjs/core'
 import z from 'schemastery'
 import { describe, expect, it } from 'vitest'
 import { AutomationCompileError, compileAutomation } from '../src/index.js'

@@ -9,8 +9,8 @@ import {
   type CoreExpressionValueType,
   type NumenValue,
   type ValueExpr,
-} from '@numen/core'
-import type { SchemaUIResolver } from '@numen/webui/schema-ui'
+} from '@numenjs/core'
+import type { SchemaUIResolver } from '@numenjs/webui/schema-ui'
 import { AlertCircle, Plus, Trash2 } from '@lucide/vue'
 import { h, nextTick, ref, watch, watchEffect, type VNodeChild } from 'vue'
 import {

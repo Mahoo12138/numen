@@ -1,24 +1,71 @@
 {
   "files": [],
   "references": [
-    { "path": "packages/i18n" },
-    { "path": "packages/config" },
-    { "path": "packages/console" },
-    { "path": "packages/core" },
-    { "path": "packages/database" },
-    { "path": "packages/http" },
-    { "path": "packages/connections" },
-    { "path": "packages/integration-demo" },
-    { "path": "packages/integration-http" },
-    { "path": "packages/integration-schedule" },
-    { "path": "packages/credentials" },
-    { "path": "packages/resources" },
-    { "path": "packages/automation" },
-    { "path": "packages/scheduler" },
-    { "path": "packages/triggers" },
-    { "path": "packages/webui" },
-    { "path": "packages/workbench" },
-    { "path": "packages/runtime" },
-    { "path": "packages/cli" }
+    {
+      "path": "packages/components"
+    },
+    {
+      "path": "packages/logging"
+    },
+    {
+      "path": "packages/i18n"
+    },
+    {
+      "path": "packages/config"
+    },
+    {
+      "path": "packages/console"
+    },
+    {
+      "path": "packages/core"
+    },
+    {
+      "path": "packages/database"
+    },
+    {
+      "path": "packages/http"
+    },
+    {
+      "path": "packages/connections"
+    },
+    {
+      "path": "packages/integration-demo"
+    },
+    {
+      "path": "packages/integration-http"
+    },
+    {
+      "path": "packages/integration-schedule"
+    },
+    {
+      "path": "packages/credentials"
+    },
+    {
+      "path": "packages/resources"
+    },
+    {
+      "path": "packages/automation"
+    },
+    {
+      "path": "packages/scheduler"
+    },
+    {
+      "path": "packages/triggers"
+    },
+    {
+      "path": "packages/webui"
+    },
+    {
+      "path": "packages/workbench"
+    },
+    {
+      "path": "packages/runtime"
+    },
+    {
+      "path": "packages/cli"
+    },
+    {
+      "path": "examples/components-plugin"
+    }
   ]
 }

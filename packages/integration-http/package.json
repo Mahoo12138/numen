@@ -1,5 +1,5 @@
 {
-  "name": "@numen/integration-http",
+  "name": "@numenjs/integration-http",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -12,17 +12,17 @@
     }
   },
   "peerDependencies": {
-    "cordis": "^4.0.0-rc.8"
+    "cordis": "4.0.0-rc.8"
   },
   "dependencies": {
-    "@numen/core": "workspace:*",
-    "@numen/http": "workspace:*",
+    "@numenjs/core": "workspace:*",
+    "@numenjs/http": "workspace:*",
     "schemastery": "^3.18.0"
   },
   "devDependencies": {
-    "@numen/automation": "workspace:*",
-    "@numen/database": "workspace:*",
-    "@numen/resources": "workspace:*",
-    "@numen/scheduler": "workspace:*"
+    "@numenjs/automation": "workspace:*",
+    "@numenjs/database": "workspace:*",
+    "@numenjs/resources": "workspace:*",
+    "@numenjs/scheduler": "workspace:*"
   }
 }

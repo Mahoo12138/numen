@@ -1,0 +1,44 @@
+{
+  "name": "@numenjs/logging",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./contracts": {
+      "types": "./dist/contracts.d.ts",
+      "default": "./dist/contracts.js"
+    },
+    "./config": {
+      "types": "./dist/config.d.ts",
+      "default": "./dist/config.js"
+    }
+  },
+  "dependencies": {
+    "@cordisjs/plugin-logger-console": "^1.0.0"
+  },
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "prepack": "pnpm build"
+  },
+  "peerDependencies": {
+    "cordis": "4.0.0-rc.8"
+  },
+  "devDependencies": {
+    "cordis": "4.0.0-rc.8"
+  },
+  "description": "Contextual logging services and contracts for Numen"
+}

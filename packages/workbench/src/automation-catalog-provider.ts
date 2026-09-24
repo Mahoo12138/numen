@@ -1,5 +1,5 @@
-import type { ConsoleQueryDefinition } from '@numen/console'
-import { coreControlDefinitions, type ControlDefinition, type CapabilityStatus } from '@numen/core'
+import type { ConsoleQueryDefinition } from '@numenjs/console'
+import { coreControlDefinitions, type ControlDefinition, type CapabilityStatus } from '@numenjs/core'
 import type { Context } from 'cordis'
 import type Schema from 'schemastery'
 import z from 'schemastery'

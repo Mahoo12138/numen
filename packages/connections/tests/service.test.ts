@@ -1,5 +1,6 @@
-import { DatabaseService } from '@numen/database'
-import { CredentialService, type CredentialTypeDefinition } from '@numen/credentials'
+import { LoggingService } from '@numenjs/logging'
+import { DatabaseService } from '@numenjs/database'
+import { CredentialService, type CredentialTypeDefinition } from '@numenjs/credentials'
 import { Context } from 'cordis'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -55,6 +56,55 @@ async function createContext(path: string, defineAdapter = true): Promise<Contex
 }
 
 describe('ConnectionService', () => {
+  it('associates asynchronous adapter logs with the connection and redacts its decrypted credential', async () => {
+    process.env[masterKeyEnv] = randomBytes(32).toString('base64')
+    const root = await createContext(':memory:', false)
+    await root.plugin(LoggingService, { console: false })
+    try {
+      root.credentials.defineType(root, credentialType)
+      const protectedAdapter = { ...adapter, credentialType: credentialType.id }
+      root.connections.defineAdapter(root, protectedAdapter)
+      root.connections.provideAdapter(root, protectedAdapter, { async open({ credential }) {
+        await new Promise<void>(resolve => setImmediate(resolve))
+        root.logger('adapter').info('using %s', credential!.value.token)
+        throw new Error('connection unavailable')
+      } })
+      const credential = root.credentials.create('API token', credentialType, { token: 'decrypted-token-never-shown' })
+      const connection = root.connections.create({ name: 'API', adapter: protectedAdapter, credentialId: credential.id, config: { baseUrl: 'https://example.test' }, enabled: true })
+      await root.connections.reconcile()
+      expect(root.connections.getRuntimeState(connection.id)?.status).toBe('ERROR')
+      const records = root.logs.query({ connectionId: connection.id }).records
+      expect(records.some(record => record.namespace === 'adapter' && record.message.includes('[REDACTED]'))).toBe(true)
+      expect(records.some(record => record.message === 'Connection failed to open')).toBe(true)
+      expect(JSON.stringify(records)).not.toContain('decrypted-token-never-shown')
+    } finally { await root.fiber.dispose() }
+  })
+
+  it('preserves credential redaction and connection context during asynchronous close', async () => {
+    process.env[masterKeyEnv] = randomBytes(32).toString('base64')
+    const root = await createContext(':memory:', false)
+    await root.plugin(LoggingService, { console: false })
+    try {
+      root.credentials.defineType(root, credentialType)
+      const protectedAdapter = { ...adapter, credentialType: credentialType.id }
+      root.connections.defineAdapter(root, protectedAdapter)
+      root.connections.provideAdapter(root, protectedAdapter, { async open({ credential }) {
+        return { value: {}, async close() {
+          await new Promise<void>(resolve => setImmediate(resolve))
+          root.logger('adapter').info('closing %s', credential!.value.token)
+        } }
+      } })
+      const credential = root.credentials.create('API token', credentialType, { token: 'private-close-token' })
+      const connection = root.connections.create({ name: 'API', adapter: protectedAdapter, credentialId: credential.id, config: { baseUrl: 'https://example.test' }, enabled: true })
+      await root.connections.reconcile()
+      root.connections.remove(connection.id, connection.generation)
+      await root.connections.reconcile()
+      const records = root.logs.query({ connectionId: connection.id, namespace: 'adapter' }).records
+      expect(records).toHaveLength(1)
+      expect(records[0]!.message).toBe('closing [REDACTED]')
+    } finally { await root.fiber.dispose() }
+  })
+
   it('persists validated desired state with optimistic generation changes', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'numen-connections-'))
     directories.push(directory)

@@ -1,5 +1,5 @@
-import type { ResourceRef } from '@numen/core'
-import '@numen/database'
+import type { ResourceRef } from '@numenjs/core'
+import '@numenjs/database'
 import { Service, type Context } from 'cordis'
 import { randomUUID } from 'node:crypto'
 import { isAbsolute, resolve, sep } from 'node:path'

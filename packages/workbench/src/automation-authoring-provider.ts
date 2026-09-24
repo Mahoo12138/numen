@@ -1,11 +1,12 @@
 import {
+  AutomationArchivedError,
   AutomationCompileError,
   AutomationNotFoundError,
   DraftConflictError,
   DraftCopyRequestConflictError,
-} from '@numen/automation'
-import { ConsoleProcedureError, type ConsoleActionDefinition } from '@numen/console'
-import type { AutomationDraft, AutomationRevision, AutomationSource, NumenValue } from '@numen/core'
+} from '@numenjs/automation'
+import { ConsoleProcedureError, type ConsoleActionDefinition } from '@numenjs/console'
+import type { AutomationDraft, AutomationRevision, AutomationSource, NumenValue } from '@numenjs/core'
 import type { Context } from 'cordis'
 import z from 'schemastery'
 import {
@@ -48,6 +49,9 @@ function projectRevision(revision: AutomationRevision): WorkbenchAutomationRevis
 }
 
 function raisePublicAutomationError(error: unknown): never {
+  if (error instanceof AutomationArchivedError) {
+    throw new ConsoleProcedureError(409, 'AUTOMATION_ARCHIVED', 'Restore this Automation before editing or publishing it.')
+  }
   if (error instanceof DraftCopyRequestConflictError) {
     throw new ConsoleProcedureError(409, 'DRAFT_COPY_REQUEST_CONFLICT', 'This copy request was already used for different content.')
   }

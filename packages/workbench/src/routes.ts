@@ -1,4 +1,4 @@
-import type { FrontendExtensionRef } from '@numen/webui/extensions'
+import type { FrontendExtensionRef } from '@numenjs/webui/extensions'
 
 export const coreWorkbenchRoutes = {
   home: { id: 'numen:home', version: 1 },

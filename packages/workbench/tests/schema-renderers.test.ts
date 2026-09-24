@@ -1,6 +1,6 @@
-import { BrowserExtensionRegistry, SchemaUIRegistry } from '@numen/webui'
+import { BrowserExtensionRegistry, SchemaUIRegistry } from '@numenjs/webui'
 import { Context } from 'cordis'
-import { I18nService } from '@numen/i18n'
+import { I18nService } from '@numenjs/i18n'
 import { describe, expect, it } from 'vitest'
 import {
   parseAutomationTemplate,

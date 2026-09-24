@@ -2,7 +2,7 @@ import type {
   ConsoleEntryManifest,
   ConsoleProcedureRef,
   ConsoleSessionDocument,
-} from '@numen/console'
+} from '@numenjs/console'
 import { Service, type Context } from 'cordis'
 import {
   BrowserConsoleSubscriptions,

@@ -8,6 +8,9 @@ importers:
 
   .:
     devDependencies:
+      '@changesets/cli':
+        specifier: ^3.0.3
+        version: 3.0.3
       '@playwright/test':
         specifier: ^1.63.0
         version: 1.63.0
@@ -35,17 +38,45 @@ importers:
       vitest:
         specifier: ^4.1.5
         version: 4.1.10(@types/node@22.20.1)(@vitest/coverage-v8@4.1.10)(vite@7.3.6(@cordiverse/tsx@4.19.3-fix.3)(@types/node@22.20.1)(yaml@2.9.0))
+      vue:
+        specifier: ^3.5.0
+        version: 3.5.41(typescript@5.9.3)
+
+  examples/components-plugin:
+    dependencies:
+      '@numenjs/components':
+        specifier: workspace:*
+        version: link:../../packages/components
+      '@numenjs/console':
+        specifier: workspace:*
+        version: link:../../packages/console
+      '@numenjs/webui':
+        specifier: workspace:*
+        version: link:../../packages/webui
+      cordis:
+        specifier: 4.0.0-rc.8
+        version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
+      vue:
+        specifier: ^3.5.0
+        version: 3.5.41(typescript@5.9.3)
+    devDependencies:
+      '@vitejs/plugin-vue-jsx':
+        specifier: 5.1.6
+        version: 5.1.6(vite@7.3.6(@cordiverse/tsx@4.19.3-fix.3)(@types/node@22.20.1)(yaml@2.9.0))(vue@3.5.41(typescript@5.9.3))
+      vite:
+        specifier: ^7.3.2
+        version: 7.3.6(@cordiverse/tsx@4.19.3-fix.3)(@types/node@22.20.1)(yaml@2.9.0)
 
   packages/automation:
     dependencies:
-      '@numen/core':
+      '@numenjs/core':
         specifier: workspace:*
         version: link:../core
-      '@numen/database':
+      '@numenjs/database':
         specifier: workspace:*
         version: link:../database
       cordis:
-        specifier: ^4.0.0-rc.8
+        specifier: 4.0.0-rc.8
         version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
     devDependencies:
       schemastery:
@@ -54,32 +85,53 @@ importers:
 
   packages/cli:
     dependencies:
-      '@numen/config':
+      '@numenjs/config':
         specifier: workspace:*
         version: link:../config
-      '@numen/runtime':
+      '@numenjs/runtime':
         specifier: workspace:*
         version: link:../runtime
 
+  packages/components:
+    devDependencies:
+      '@lucide/vue':
+        specifier: ^1.33.0
+        version: 1.33.0(vue@3.5.41(typescript@5.9.3))
+      '@vue/server-renderer':
+        specifier: ^3.5.0
+        version: 3.5.41
+      vite:
+        specifier: ^7.3.2
+        version: 7.3.6(@cordiverse/tsx@4.19.3-fix.3)(@types/node@22.20.1)(yaml@2.9.0)
+      vue:
+        specifier: ^3.5.0
+        version: 3.5.41(typescript@5.9.3)
+
   packages/config:
     dependencies:
+      '@numenjs/logging':
+        specifier: workspace:*
+        version: link:../logging
       yaml:
         specifier: ^2.9.0
         version: 2.9.0
 
   packages/connections:
     dependencies:
-      '@numen/core':
+      '@numenjs/core':
         specifier: workspace:*
         version: link:../core
-      '@numen/credentials':
+      '@numenjs/credentials':
         specifier: workspace:*
         version: link:../credentials
-      '@numen/database':
+      '@numenjs/database':
         specifier: workspace:*
         version: link:../database
+      '@numenjs/logging':
+        specifier: workspace:*
+        version: link:../logging
       cordis:
-        specifier: ^4.0.0-rc.8
+        specifier: 4.0.0-rc.8
         version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
     devDependencies:
       schemastery:
@@ -91,9 +143,9 @@ importers:
       '@cordisjs/plugin-server':
         specifier: ^1.7.0
         version: 1.7.0(cordis@4.0.0-rc.8)
-      cordis:
-        specifier: ^4.0.0-rc.8
-        version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
+      '@numenjs/logging':
+        specifier: workspace:*
+        version: link:../logging
       schemastery:
         specifier: ^3.18.0
         version: 3.18.0
@@ -104,11 +156,14 @@ importers:
       '@types/ws':
         specifier: ^8.18.1
         version: 8.18.1
+      cordis:
+        specifier: 4.0.0-rc.8
+        version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
 
   packages/core:
     dependencies:
       cordis:
-        specifier: ^4.0.0-rc.8
+        specifier: 4.0.0-rc.8
         version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
       schemastery:
         specifier: ^3.18.0
@@ -116,14 +171,14 @@ importers:
 
   packages/credentials:
     dependencies:
-      '@numen/core':
+      '@numenjs/core':
         specifier: workspace:*
         version: link:../core
-      '@numen/database':
+      '@numenjs/database':
         specifier: workspace:*
         version: link:../database
       cordis:
-        specifier: ^4.0.0-rc.8
+        specifier: 4.0.0-rc.8
         version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
     devDependencies:
       schemastery:
@@ -136,7 +191,7 @@ importers:
         specifier: ^13.0.3
         version: 13.0.3
       cordis:
-        specifier: ^4.0.0-rc.8
+        specifier: 4.0.0-rc.8
         version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
 
   packages/http:
@@ -148,7 +203,7 @@ importers:
         specifier: ^1.0.0
         version: 1.0.0(@cordisjs/plugin-http@1.5.2(cordis@4.0.0-rc.8)(undici@7.29.1))(cordis@4.0.0-rc.8)
       cordis:
-        specifier: ^4.0.0-rc.8
+        specifier: 4.0.0-rc.8
         version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
       schemastery:
         specifier: ^3.18.0
@@ -162,107 +217,118 @@ importers:
       '@koishijs/i18n-utils':
         specifier: 1.0.1
         version: 1.0.1
+    devDependencies:
       cordis:
-        specifier: ^4.0.0-rc.8
+        specifier: 4.0.0-rc.8
         version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
 
   packages/integration-demo:
     dependencies:
-      '@numen/core':
+      '@numenjs/core':
         specifier: workspace:*
         version: link:../core
       cordis:
-        specifier: ^4.0.0-rc.8
+        specifier: 4.0.0-rc.8
         version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
       schemastery:
         specifier: ^3.18.0
         version: 3.18.0
     devDependencies:
-      '@numen/automation':
+      '@numenjs/automation':
         specifier: workspace:*
         version: link:../automation
-      '@numen/database':
+      '@numenjs/database':
         specifier: workspace:*
         version: link:../database
-      '@numen/resources':
+      '@numenjs/resources':
         specifier: workspace:*
         version: link:../resources
-      '@numen/scheduler':
+      '@numenjs/scheduler':
         specifier: workspace:*
         version: link:../scheduler
 
   packages/integration-http:
     dependencies:
-      '@numen/core':
+      '@numenjs/core':
         specifier: workspace:*
         version: link:../core
-      '@numen/http':
+      '@numenjs/http':
         specifier: workspace:*
         version: link:../http
       cordis:
-        specifier: ^4.0.0-rc.8
+        specifier: 4.0.0-rc.8
         version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
       schemastery:
         specifier: ^3.18.0
         version: 3.18.0
     devDependencies:
-      '@numen/automation':
+      '@numenjs/automation':
         specifier: workspace:*
         version: link:../automation
-      '@numen/database':
+      '@numenjs/database':
         specifier: workspace:*
         version: link:../database
-      '@numen/resources':
+      '@numenjs/resources':
         specifier: workspace:*
         version: link:../resources
-      '@numen/scheduler':
+      '@numenjs/scheduler':
         specifier: workspace:*
         version: link:../scheduler
 
   packages/integration-schedule:
     dependencies:
-      '@numen/core':
+      '@numenjs/core':
         specifier: workspace:*
         version: link:../core
       cordis:
-        specifier: ^4.0.0-rc.8
+        specifier: 4.0.0-rc.8
         version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
       schemastery:
         specifier: ^3.18.0
         version: 3.18.0
     devDependencies:
-      '@numen/automation':
+      '@numenjs/automation':
         specifier: workspace:*
         version: link:../automation
-      '@numen/connections':
+      '@numenjs/connections':
         specifier: workspace:*
         version: link:../connections
-      '@numen/credentials':
+      '@numenjs/credentials':
         specifier: workspace:*
         version: link:../credentials
-      '@numen/database':
+      '@numenjs/database':
         specifier: workspace:*
         version: link:../database
-      '@numen/resources':
+      '@numenjs/resources':
         specifier: workspace:*
         version: link:../resources
-      '@numen/scheduler':
+      '@numenjs/scheduler':
         specifier: workspace:*
         version: link:../scheduler
-      '@numen/triggers':
+      '@numenjs/triggers':
         specifier: workspace:*
         version: link:../triggers
 
+  packages/logging:
+    dependencies:
+      '@cordisjs/plugin-logger-console':
+        specifier: ^1.0.0
+        version: 1.0.0(cordis@4.0.0-rc.8)
+    devDependencies:
+      cordis:
+        specifier: 4.0.0-rc.8
+        version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
+
   packages/resources:
     dependencies:
-      '@numen/core':
+      '@numenjs/core':
         specifier: workspace:*
         version: link:../core
-      '@numen/database':
+      '@numenjs/database':
         specifier: workspace:*
         version: link:../database
       cordis:
-        specifier: ^4.0.0-rc.8
+        specifier: 4.0.0-rc.8
         version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
 
   packages/runtime:
@@ -276,56 +342,59 @@ importers:
       '@cordisjs/plugin-server':
         specifier: ^1.7.0
         version: 1.7.0(cordis@4.0.0-rc.8)
-      '@numen/automation':
+      '@numenjs/automation':
         specifier: workspace:*
         version: link:../automation
-      '@numen/config':
+      '@numenjs/config':
         specifier: workspace:*
         version: link:../config
-      '@numen/connections':
+      '@numenjs/connections':
         specifier: workspace:*
         version: link:../connections
-      '@numen/console':
+      '@numenjs/console':
         specifier: workspace:*
         version: link:../console
-      '@numen/core':
+      '@numenjs/core':
         specifier: workspace:*
         version: link:../core
-      '@numen/credentials':
+      '@numenjs/credentials':
         specifier: workspace:*
         version: link:../credentials
-      '@numen/database':
+      '@numenjs/database':
         specifier: workspace:*
         version: link:../database
-      '@numen/http':
+      '@numenjs/http':
         specifier: workspace:*
         version: link:../http
-      '@numen/i18n':
+      '@numenjs/i18n':
         specifier: workspace:*
         version: link:../i18n
-      '@numen/integration-demo':
+      '@numenjs/integration-demo':
         specifier: workspace:*
         version: link:../integration-demo
-      '@numen/integration-http':
+      '@numenjs/integration-http':
         specifier: workspace:*
         version: link:../integration-http
-      '@numen/integration-schedule':
+      '@numenjs/integration-schedule':
         specifier: workspace:*
         version: link:../integration-schedule
-      '@numen/resources':
+      '@numenjs/logging':
+        specifier: workspace:*
+        version: link:../logging
+      '@numenjs/resources':
         specifier: workspace:*
         version: link:../resources
-      '@numen/scheduler':
+      '@numenjs/scheduler':
         specifier: workspace:*
         version: link:../scheduler
-      '@numen/triggers':
+      '@numenjs/triggers':
         specifier: workspace:*
         version: link:../triggers
-      '@numen/workbench':
+      '@numenjs/workbench':
         specifier: workspace:*
         version: link:../workbench
       cordis:
-        specifier: ^4.0.0-rc.8
+        specifier: 4.0.0-rc.8
         version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
     devDependencies:
       schemastery:
@@ -334,26 +403,29 @@ importers:
 
   packages/scheduler:
     dependencies:
-      '@numen/automation':
+      '@numenjs/automation':
         specifier: workspace:*
         version: link:../automation
-      '@numen/connections':
+      '@numenjs/connections':
         specifier: workspace:*
         version: link:../connections
-      '@numen/core':
+      '@numenjs/core':
         specifier: workspace:*
         version: link:../core
-      '@numen/database':
+      '@numenjs/database':
         specifier: workspace:*
         version: link:../database
-      '@numen/resources':
+      '@numenjs/logging':
+        specifier: workspace:*
+        version: link:../logging
+      '@numenjs/resources':
         specifier: workspace:*
         version: link:../resources
       cordis:
-        specifier: ^4.0.0-rc.8
+        specifier: 4.0.0-rc.8
         version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
     devDependencies:
-      '@numen/credentials':
+      '@numenjs/credentials':
         specifier: workspace:*
         version: link:../credentials
       schemastery:
@@ -362,29 +434,32 @@ importers:
 
   packages/triggers:
     dependencies:
-      '@numen/automation':
+      '@numenjs/automation':
         specifier: workspace:*
         version: link:../automation
-      '@numen/connections':
+      '@numenjs/connections':
         specifier: workspace:*
         version: link:../connections
-      '@numen/core':
+      '@numenjs/core':
         specifier: workspace:*
         version: link:../core
-      '@numen/scheduler':
+      '@numenjs/logging':
+        specifier: workspace:*
+        version: link:../logging
+      '@numenjs/scheduler':
         specifier: workspace:*
         version: link:../scheduler
       cordis:
-        specifier: ^4.0.0-rc.8
+        specifier: 4.0.0-rc.8
         version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
     devDependencies:
-      '@numen/credentials':
+      '@numenjs/credentials':
         specifier: workspace:*
         version: link:../credentials
-      '@numen/database':
+      '@numenjs/database':
         specifier: workspace:*
         version: link:../database
-      '@numen/resources':
+      '@numenjs/resources':
         specifier: workspace:*
         version: link:../resources
       schemastery:
@@ -393,15 +468,12 @@ importers:
 
   packages/webui:
     dependencies:
-      '@numen/console':
+      '@numenjs/console':
         specifier: workspace:*
         version: link:../console
-      '@numen/i18n':
+      '@numenjs/i18n':
         specifier: workspace:*
         version: link:../i18n
-      cordis:
-        specifier: ^4.0.0-rc.8
-        version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
     devDependencies:
       '@cordisjs/plugin-server':
         specifier: ^1.7.0
@@ -409,6 +481,9 @@ importers:
       '@types/ws':
         specifier: ^8.18.1
         version: 8.18.1
+      cordis:
+        specifier: 4.0.0-rc.8
+        version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
       schemastery:
         specifier: ^3.18.0
         version: 3.18.0
@@ -424,32 +499,38 @@ importers:
       '@lucide/vue':
         specifier: ^1.33.0
         version: 1.33.0(vue@3.5.41(typescript@5.9.3))
-      '@numen/automation':
+      '@numenjs/automation':
         specifier: workspace:*
         version: link:../automation
-      '@numen/connections':
+      '@numenjs/components':
+        specifier: workspace:*
+        version: link:../components
+      '@numenjs/connections':
         specifier: workspace:*
         version: link:../connections
-      '@numen/console':
+      '@numenjs/console':
         specifier: workspace:*
         version: link:../console
-      '@numen/core':
+      '@numenjs/core':
         specifier: workspace:*
         version: link:../core
-      '@numen/credentials':
+      '@numenjs/credentials':
         specifier: workspace:*
         version: link:../credentials
-      '@numen/i18n':
+      '@numenjs/i18n':
         specifier: workspace:*
         version: link:../i18n
-      '@numen/scheduler':
+      '@numenjs/logging':
+        specifier: workspace:*
+        version: link:../logging
+      '@numenjs/scheduler':
         specifier: workspace:*
         version: link:../scheduler
-      '@numen/webui':
+      '@numenjs/webui':
         specifier: workspace:*
         version: link:../webui
       cordis:
-        specifier: ^4.0.0-rc.8
+        specifier: 4.0.0-rc.8
         version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
       schemastery:
         specifier: ^3.18.0
@@ -590,6 +671,75 @@ packages:
 
   '@borewit/text-codec@0.2.2':
     resolution: {integrity: sha512-DDaRehssg1aNrH4+2hnj1B7vnUGEjU6OIlyRdkMd0aUdIUvKXrJfXsy8LVtXAy7DRvYVluWbMspsRhz2lcW0mQ==}
+
+  '@changesets/apply-release-plan@8.1.1':
+    resolution: {integrity: sha512-nk2Hbq3M9NeHMdaIRBDvawKrQJzXB9sGyBUE5yWnIKtvdcNCPj75zBekJYr0gTT2ecJH3eFeTrc8eisPImcv0Q==}
+    engines: {node: ^22.11 || ^24 || >=26}
+
+  '@changesets/assemble-release-plan@7.0.0':
+    resolution: {integrity: sha512-oEW8BxdA604kGGtDSCiHr5w9Tv4UWe9I2k61IBNZzCOE1kbYaJj4v+lFQNgcEZFkUc2pV/+hASErGDvpJOZCTg==}
+    engines: {node: ^22.11 || ^24 || >=26}
+
+  '@changesets/changelog-git@1.0.0':
+    resolution: {integrity: sha512-3Dst2Ime2Op5nd4XmWJLPIgp11ZFqJqSkVug9izK6TDcIV4YlhPS4ECbEVR+eGI0bk0r1ItogD4j2Oli87bJrA==}
+    engines: {node: ^22.11 || ^24 || >=26}
+
+  '@changesets/cli@3.0.3':
+    resolution: {integrity: sha512-L1i67bMfkK6iC/kDejuNO4pFgTRcWIObsD6Qof2woP1I4M8tj17DGlcpRaTzTv1DYSP5EMwWdEtR8X0Pj5Jg3Q==}
+    engines: {node: ^22.11 || ^24 || >=26, npm: '>=10.9.0', pnpm: '>=10.0.0', yarn: '>=4.5.2'}
+    hasBin: true
+
+  '@changesets/config@4.0.1':
+    resolution: {integrity: sha512-PxpxSQLQSLDjceAgRq+4FWlU+HflDIw03mmPVipxoQx9xrXFUjmqTy3SE+n/2t+DqPdpPiLWVr5NRiLZvjyLwg==}
+    engines: {node: ^22.11 || ^24 || >=26}
+
+  '@changesets/errors@1.0.0':
+    resolution: {integrity: sha512-ElN/mEzn6zmETgjwf5MclCMa9ef59sAR0lfO8VSYIsiRvbC2FbLB/92EoYw10Sl0kGixxHFiJZUSv7dA+YpR8g==}
+    engines: {node: ^22.11 || ^24 || >=26}
+
+  '@changesets/format@0.1.2':
+    resolution: {integrity: sha512-Caez5XtNXCFS/G5bwyav3wuXL0tMxVd2ZGbaumWbzN08tyzO21asCw7JZhNtVsAZDCvDRUzZN+Iit9SyRITSYA==}
+    engines: {node: ^22.11 || ^24 || >=26}
+
+  '@changesets/get-dependents-graph@3.0.0':
+    resolution: {integrity: sha512-ji/t5wFA1zREKXRUePE6Qi+Qu2UgxCeSSGQrphezwvQZrp49B7sJ+8+wvM0tA7zPeSxYKCojDy3WWgrl+s+awg==}
+    engines: {node: ^22.11 || ^24 || >=26}
+
+  '@changesets/git@4.0.1':
+    resolution: {integrity: sha512-6vWpIAC4LkpmlqaIu37ViT5enyd9+uBwAiGqCGhASvkSHBgx4PrtTGXWTMFYpDmZbjgyonyVgMciPrW4MqtJsA==}
+    engines: {node: ^22.11 || ^24 || >=26}
+
+  '@changesets/parse@1.0.0':
+    resolution: {integrity: sha512-P0iaMb9p9CRYZiTgAllEIF9AUMQHIy1G72tKlcIqJp61icZSsKQNiOPdxAMZG8m/DvZwt/oz5xEbTpike//dWg==}
+    engines: {node: ^22.11 || ^24 || >=26}
+
+  '@changesets/pre@3.0.0':
+    resolution: {integrity: sha512-Zm/6YliV/a2oeWTqHJf6KxLrQwgcK1i/BRDl2m0EKZvbnxV5fG9QRhwJJGshjsZTUTS6dkfURQ2K6aAvgNw/3Q==}
+    engines: {node: ^22.11 || ^24 || >=26}
+
+  '@changesets/read@1.0.1':
+    resolution: {integrity: sha512-nzvSC6RcTiWf/dsuwZFXpLzGGsRHYCL68U3uHV7srsulU93aVWY7u2GEJiDZ+4GIIElfaW5EqtKC0UHroY+LTQ==}
+    engines: {node: ^22.11 || ^24 || >=26}
+
+  '@changesets/should-skip-package@1.0.0':
+    resolution: {integrity: sha512-pwqoJmbONn1XgXmZXPEExgAaT+HdZLjALFTDgIm+PnS5KeO2nLtzA2/Q+4aMFY14kFMuXKG30MObhvDzWgzDgg==}
+    engines: {node: ^22.11 || ^24 || >=26}
+
+  '@changesets/types@7.0.0':
+    resolution: {integrity: sha512-c5GoiQyt3pxiXjrWSNoP8/GRf4kG+VnKzovx1OQM8dYYALlSwgedmkPmJ+ZqGxqwg9D3Bkj85Uo4KLd5BN3A0w==}
+    engines: {node: ^22.11 || ^24 || >=26}
+
+  '@changesets/write@1.0.1':
+    resolution: {integrity: sha512-q/ThtP9gcnEP6xlv7LrY26C2mHqdGBti/MmOVngt/M/oIGYkssmQGxPK9WzBNt2juVcH/vml2WQ+ra8LXYOTaA==}
+    engines: {node: ^22.11 || ^24 || >=26}
+
+  '@clack/core@1.5.1':
+    resolution: {integrity: sha512-iHTrHA8MtVuLl2TfZySmcKv1qO2PoyC9Z7pfSDozEuV5vtY3/wcOPKJXlqJ5Oq2Cx5DDGQGAMVx6HZfRRoVEbQ==}
+    engines: {node: '>= 20.12.0'}
+
+  '@clack/prompts@1.8.1':
+    resolution: {integrity: sha512-dlT1m5e/0yUL0kRNcQn7yGLVThkgbB0Ga/1AmfDDC/8ik6AIiSf2QLQO2zPYvefsHP0aFgxO93cVLCCfDp7kzQ==}
+    engines: {node: '>= 20.12.0'}
 
   '@cordisjs/fetch-file@1.0.3':
     resolution: {integrity: sha512-Uo4OFSvfMlBuPNR/7qzzWs5ltnoeuU7eA2eJt5kke8TJ7SKs/IXnsZVT29nSzecg6xs+gS/fuQAZ5T8G9oYxVQ==}
@@ -969,6 +1119,18 @@ packages:
     peerDependencies:
       vue: '>=3.0.1'
 
+  '@manypkg/find-root@3.1.0':
+    resolution: {integrity: sha512-BcSqCyKhBVZ5YkSzOiheMCV41kqAFptW6xGqYSTjkVTl9XQpr+pqHhwgGCOHQtjDCv7Is6EFyA14Sm5GVbVABA==}
+    engines: {node: '>=20.0.0'}
+
+  '@manypkg/get-packages@3.1.0':
+    resolution: {integrity: sha512-0TbBVyvPrP7xGYBI/cP8UP+yl/z+HtbTttAD7FMAJgn/kXOTwh5/60TsqP9ZYY710forNfyV0N8P/IE/ujGZJg==}
+    engines: {node: '>=20.0.0'}
+
+  '@manypkg/tools@2.1.2':
+    resolution: {integrity: sha512-6QEf6yqFbETdwGITKq57aYoPfX/3K8XFNwsAlx0C1M7o8cb79sv1M3w+tWuWvIcSbNqrLF7OD7YpZMVVz335hQ==}
+    engines: {node: '>=20.0.0'}
+
   '@napi-rs/lzma-linux-x64-gnu@1.5.1':
     resolution: {integrity: sha512-oTXEIha4SsuXdTA4Iyskj0kpdx2yVXdhd75c2v3xGrHFfVMsbhTPZU/nMPL4sWKo4pBHm3aucLaqGlF696dTyQ==}
     engines: {node: ^22.20 || ^24.12 || >=25}
@@ -979,6 +1141,10 @@ packages:
     resolution: {integrity: sha512-oxMK4vllB9RK5NQ2l1pq1IfOf2AvnEuj/vYGDj0H2nMtmtZpKtCwt/l00GEO6xjGfpBNAvjovvYdCm50dRQkpQ==}
     engines: {node: '>=20'}
     hasBin: true
+
+  '@pnpm/deps.graph-sequencer@1100.0.1':
+    resolution: {integrity: sha512-pOr5+q1fLYKwFN3LAJuGZEnfXDcQ73zqgDHMtGy+K+uIoUqyY+6MeDCWFwfu+4EFuq76I5EPFofoNAI+Bmmq4A==}
+    engines: {node: '>=22.13'}
 
   '@rolldown/pluginutils@1.0.1':
     resolution: {integrity: sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw==}
@@ -1249,6 +1415,10 @@ packages:
     engines: {node: ^6 || ^7 || ^8 || ^9 || ^10 || ^11 || ^12 || >=13.7}
     hasBin: true
 
+  cac@7.0.0:
+    resolution: {integrity: sha512-tixWYgm5ZoOD+3g6UTea91eow5z6AAHaho3g0V9CNSNb45gM8SmflpAc+GRd1InC4AqN/07Unrgp56Y94N9hJQ==}
+    engines: {node: '>=20.19.0'}
+
   caniuse-lite@1.0.30001809:
     resolution: {integrity: sha512-xxWVywk6a6Arlk+hymeycyn/VgqEfLDxupvhH/xiY5SJ/18kmi9o6MiO320DCUzypORHLtvh0I4i04tUhCNHNQ==}
 
@@ -1320,6 +1490,15 @@ packages:
     resolution: {integrity: sha512-KfYbmpRm0VbLjEvVa9yGwCi9GI34xvi7A/HXYWQO65CSD2u3MczUJSuwXKFIxlGsgBQizV9q5J9NHj4VG0n+pA==}
     engines: {node: '>=12.0.0'}
 
+  fast-string-truncated-width@3.0.3:
+    resolution: {integrity: sha512-0jjjIEL6+0jag3l2XWWizO64/aZVtpiGE3t0Zgqxv0DPuxiMjvB3M24fCyhZUO4KomJQPj3LTSUnDP3GpdwC0g==}
+
+  fast-string-width@3.0.2:
+    resolution: {integrity: sha512-gX8LrtNEI5hq8DVUfRQMbr5lpaS4nMIWV+7XEbXk2b8kiQIizgnlr12B4dA3ZEx3308ze0O4Q1R+cHts8kyUJg==}
+
+  fast-wrap-ansi@0.2.2:
+    resolution: {integrity: sha512-7F2Fl+TjRSenLqlU3UjSH0iyqopqoZIu7eZVpEirP2g1GtWa2G/ecEmBdgz31+Mxr+ELclgg6sokpSFIQiZ02Q==}
+
   fdir@6.5.0:
     resolution: {integrity: sha512-tIbYtZbucOs0BRGqPJkshJUYdL+SDH7dVM8gjy+ERp3WAUjLEFJE+02kanyHtwjWOnwrKYBiwAmM0p4kLJAnXg==}
     engines: {node: '>=12.0.0'}
@@ -1355,8 +1534,15 @@ packages:
   html-escaper@2.0.2:
     resolution: {integrity: sha512-H2iMtd0I4Mt5eYiapRdIDjp+XzelXQ0tFE4JS7YFwFevXXMmOp9myNrUvCg0D6ws8iqkRPBfKHgbwig1SmlLfg==}
 
+  human-id@4.2.1:
+    resolution: {integrity: sha512-zPGsiS+dWoTZtZ4AtpA9Y+BdSFSNWvnouNlWNoUFyAM6xHOHmdCvqO3k8AIbdamCOv4gUFUVNPf6rJFfc4UiJw==}
+    hasBin: true
+
   ieee754@1.2.1:
     resolution: {integrity: sha512-dcyqhDvX1C46lXZcVqCpK+FtMRQVdIMN6/Df5js2zouUsqG7I6sFxitIC+7KYK29KdXOLHdu9zL4sFnoVQnqaA==}
+
+  import-meta-resolve@4.2.0:
+    resolution: {integrity: sha512-Iqv2fzaTQN28s/FwZAoFq0ZSs/7hMAHJVX+w8PZl3cY19Pxk6jFFalxQoIfW2826i/fDLXv8IiEZRIT0lDuWcg==}
 
   ip-address@10.7.2:
     resolution: {integrity: sha512-7H/2gFSIitxc0hG3nOI1glS8QLo/EHBFFLk8vEUjXY/xu0AdL8jZ9U1IzO2PUm0d2D/ofQcAifb0g6OBkt8U7w==}
@@ -1374,6 +1560,9 @@ packages:
     resolution: {integrity: sha512-HGYWWS/ehqTV3xN10i23tkPkpH46MLCIMFNCaaKNavAXTF1RkqxawEPtnjnGZ6XKSInBKkiOA5BKS+aZiY3AvA==}
     engines: {node: '>=8'}
 
+  jju@1.4.0:
+    resolution: {integrity: sha512-8wb9Yw966OSxApiCt0K3yNJL8pnNeIv+OEq2YMidz4FKP6nonSRoOXc80iXY4JaN2FC11B9qsNmDsm+ZOfMROA==}
+
   js-tokens@10.0.0:
     resolution: {integrity: sha512-lM/UBzQmfJRo9ABXbPWemivdCW8V2G8FHaHdypQaIy523snUjog0W71ayWXTjiR+ixeMyVHN2XcpnTd/liPg/Q==}
 
@@ -1389,6 +1578,12 @@ packages:
     resolution: {integrity: sha512-XmOWe7eyHYH14cLdVPoyg+GOH3rYX++KpzrylJwSW98t3Nk+U8XOl8FWKOgwtzdb8lXGf6zYwDUzeHMWfxasyg==}
     engines: {node: '>=6'}
     hasBin: true
+
+  jsonc-parser@3.3.1:
+    resolution: {integrity: sha512-HUgH65KyejrUFPvHFPbqOY0rsFip3Bo5wb4ngvdi1EpCYWUQDC5V+Y7mZws+DLkr4M//zQJoanu1SP+87Dv1oQ==}
+
+  launch-editor@2.14.1:
+    resolution: {integrity: sha512-QWBrQsMpH7gPr965dsKD/3cKWiNoTjpATQf++Xq63N6sKRGMwlVXz41O1IZTMfZQgBctD/K5Zt06+/I6pP6+HA==}
 
   lru-cache@5.1.1:
     resolution: {integrity: sha512-KpNARQA3Iwv+jTA0utUVVbrh+Jlrr1Fv0e56GGzAFOXN7dk/FviaDW8LHmK52DlcH4WP2n6gI8vN1aesBFgo9w==}
@@ -1435,6 +1630,9 @@ packages:
     resolution: {integrity: sha512-4a+OsYv9UktOJKE+l1A4OufDgdRF9PifWj+tJnHURo/P+WOxpG4GzUFL9qCalmWauao6ogiG+QvnCovwPoyAWA==}
     engines: {node: '>=12.20.0'}
 
+  package-manager-detector@1.8.0:
+    resolution: {integrity: sha512-yQA4H19AmPEoMUeavPMDIe1higySl/gH/yaQrkT/s07Qp+7pp2hYz30N3z2l5BkjVkF9Ow6o0wjJamm2y7Sn0A==}
+
   path-to-regexp-typed@8.0.0:
     resolution: {integrity: sha512-3XoV7MNLxtKDznqJ5IzJA8Pe1unRLtnfHBnfRBFnPhvsYwXAtXRJmnvm54zi/sOFuRCmXXPg9UTKJY1ib21w0w==}
     peerDependencies:
@@ -1451,6 +1649,10 @@ packages:
 
   picomatch@4.0.5:
     resolution: {integrity: sha512-RvwwcruNjI1ncT5xRakeyS9Lf8lcItv34KD+aif+VH9kduAyfYBipGh12274xtenIPZ119/R9BdTBa8gAwSh0A==}
+    engines: {node: '>=12'}
+
+  picomatch@4.0.7:
+    resolution: {integrity: sha512-qcJu88Q2IWqJsDD529JKMdwGm/dvInW4HvQnRwiH9JtihJvzGOscDtHE3x1pBKeUOTysQ8kVmLnJ2kJu7yhcGA==}
     engines: {node: '>=12'}
 
   playwright-core@1.63.0:
@@ -1487,8 +1689,15 @@ packages:
     engines: {node: '>=10'}
     hasBin: true
 
+  shell-quote@1.10.0:
+    resolution: {integrity: sha512-w1aiOKwKuRgtwAReIIj89puqg+I7GvX4IbLrvmhXbzQsj1+Zwi4VO3+fa6ZF91TWSjIxoEkKnMeHcLEODK5ZXA==}
+    engines: {node: '>= 0.4'}
+
   siginfo@2.0.0:
     resolution: {integrity: sha512-ybx0WO1/8bSBLEWXZvEd7gMW3Sn3JFlW3TvX1nREbDLRNQNaeNN8WK0meBwPdAaOI7TtRRRJn/Es1zhrrCHu7g==}
+
+  sisteransi@1.0.5:
+    resolution: {integrity: sha512-bLGGlR1QxBcynn2d5YmDX4MGjlZvy2MRBDRNHLJ8VI6l6+9FUiyTFNJ0IveOSP0bcXgVDPRcfGqA0pjaqUpfVg==}
 
   smart-buffer@4.2.0:
     resolution: {integrity: sha512-94hK0Hh8rPqQl2xXc3HsaBoOXKV20MToPkcXvwbISWLEs+64sBq5kFgn2kJDHb1Pry9yrP0dxrCI9RRci7RXKg==}
@@ -1525,6 +1734,10 @@ packages:
 
   tinyexec@1.3.0:
     resolution: {integrity: sha512-QKAl9m8gWWGHV8jZcPeym6j+XULi6tOf1mT83WYJ4Lk2ytW/uwAWkrP0uFsdoYMdueVJ0qs26wZ+23xeB4ibNQ==}
+    engines: {node: '>=18'}
+
+  tinyexec@1.3.1:
+    resolution: {integrity: sha512-GCvB3aoys96IuDFBMcTB46JOR6mdMtAToqwiW8JlWhsoh1mhHi/xn9ss/Dg7N555GiJyEt2qzoG/NHCwM6h1EA==}
     engines: {node: '>=18'}
 
   tinyglobby@0.2.17:
@@ -1848,6 +2061,122 @@ snapshots:
 
   '@borewit/text-codec@0.2.2': {}
 
+  '@changesets/apply-release-plan@8.1.1':
+    dependencies:
+      '@changesets/config': 4.0.1
+      '@changesets/format': 0.1.2
+      '@changesets/git': 4.0.1
+      '@changesets/should-skip-package': 1.0.0
+      '@changesets/types': 7.0.0
+      import-meta-resolve: 4.2.0
+      jsonc-parser: 3.3.1
+      semver: 7.8.5
+
+  '@changesets/assemble-release-plan@7.0.0':
+    dependencies:
+      '@changesets/errors': 1.0.0
+      '@changesets/get-dependents-graph': 3.0.0
+      '@changesets/should-skip-package': 1.0.0
+      '@changesets/types': 7.0.0
+      semver: 7.8.5
+
+  '@changesets/changelog-git@1.0.0':
+    dependencies:
+      '@changesets/types': 7.0.0
+
+  '@changesets/cli@3.0.3':
+    dependencies:
+      '@changesets/apply-release-plan': 8.1.1
+      '@changesets/assemble-release-plan': 7.0.0
+      '@changesets/changelog-git': 1.0.0
+      '@changesets/config': 4.0.1
+      '@changesets/errors': 1.0.0
+      '@changesets/get-dependents-graph': 3.0.0
+      '@changesets/git': 4.0.1
+      '@changesets/pre': 3.0.0
+      '@changesets/read': 1.0.1
+      '@changesets/should-skip-package': 1.0.0
+      '@changesets/types': 7.0.0
+      '@changesets/write': 1.0.1
+      '@clack/prompts': 1.8.1
+      '@manypkg/get-packages': 3.1.0
+      '@pnpm/deps.graph-sequencer': 1100.0.1
+      cac: 7.0.0
+      import-meta-resolve: 4.2.0
+      launch-editor: 2.14.1
+      package-manager-detector: 1.8.0
+      semver: 7.8.5
+      tinyexec: 1.3.1
+
+  '@changesets/config@4.0.1':
+    dependencies:
+      '@changesets/get-dependents-graph': 3.0.0
+      '@changesets/should-skip-package': 1.0.0
+      '@changesets/types': 7.0.0
+      '@manypkg/get-packages': 3.1.0
+      picomatch: 4.0.7
+
+  '@changesets/errors@1.0.0': {}
+
+  '@changesets/format@0.1.2':
+    dependencies:
+      package-manager-detector: 1.8.0
+      tinyexec: 1.3.1
+
+  '@changesets/get-dependents-graph@3.0.0':
+    dependencies:
+      '@changesets/types': 7.0.0
+      semver: 7.8.5
+
+  '@changesets/git@4.0.1':
+    dependencies:
+      '@changesets/errors': 1.0.0
+      '@changesets/types': 7.0.0
+      '@manypkg/get-packages': 3.1.0
+      picomatch: 4.0.5
+      tinyexec: 1.3.1
+
+  '@changesets/parse@1.0.0':
+    dependencies:
+      '@changesets/types': 7.0.0
+      yaml: 2.9.0
+
+  '@changesets/pre@3.0.0':
+    dependencies:
+      '@changesets/errors': 1.0.0
+      '@changesets/types': 7.0.0
+      '@manypkg/get-packages': 3.1.0
+
+  '@changesets/read@1.0.1':
+    dependencies:
+      '@changesets/git': 4.0.1
+      '@changesets/parse': 1.0.0
+      '@changesets/types': 7.0.0
+
+  '@changesets/should-skip-package@1.0.0':
+    dependencies:
+      '@changesets/types': 7.0.0
+
+  '@changesets/types@7.0.0': {}
+
+  '@changesets/write@1.0.1':
+    dependencies:
+      '@changesets/format': 0.1.2
+      '@changesets/types': 7.0.0
+      human-id: 4.2.1
+
+  '@clack/core@1.5.1':
+    dependencies:
+      fast-wrap-ansi: 0.2.2
+      sisteransi: 1.0.5
+
+  '@clack/prompts@1.8.1':
+    dependencies:
+      '@clack/core': 1.5.1
+      fast-string-width: 3.0.2
+      fast-wrap-ansi: 0.2.2
+      sisteransi: 1.0.5
+
   '@cordisjs/fetch-file@1.0.3':
     dependencies:
       cosmokit: 1.8.1
@@ -2090,12 +2419,29 @@ snapshots:
     dependencies:
       vue: 3.5.41(typescript@5.9.3)
 
+  '@manypkg/find-root@3.1.0':
+    dependencies:
+      '@manypkg/tools': 2.1.2
+
+  '@manypkg/get-packages@3.1.0':
+    dependencies:
+      '@manypkg/find-root': 3.1.0
+      '@manypkg/tools': 2.1.2
+
+  '@manypkg/tools@2.1.2':
+    dependencies:
+      jju: 1.4.0
+      tinyglobby: 0.2.17
+      yaml: 2.9.0
+
   '@napi-rs/lzma-linux-x64-gnu@1.5.1':
     optional: true
 
   '@playwright/test@1.63.0':
     dependencies:
       playwright: 1.63.0
+
+  '@pnpm/deps.graph-sequencer@1100.0.1': {}
 
   '@rolldown/pluginutils@1.0.1': {}
 
@@ -2384,6 +2730,8 @@ snapshots:
       node-releases: 2.0.53
       update-browserslist-db: 1.3.1(browserslist@4.28.8)
 
+  cac@7.0.0: {}
+
   caniuse-lite@1.0.30001809: {}
 
   chai@6.2.2: {}
@@ -2479,6 +2827,16 @@ snapshots:
 
   expect-type@1.4.0: {}
 
+  fast-string-truncated-width@3.0.3: {}
+
+  fast-string-width@3.0.2:
+    dependencies:
+      fast-string-truncated-width: 3.0.3
+
+  fast-wrap-ansi@0.2.2:
+    dependencies:
+      fast-string-width: 3.0.2
+
   fdir@6.5.0(picomatch@4.0.5):
     optionalDependencies:
       picomatch: 4.0.5
@@ -2507,7 +2865,11 @@ snapshots:
 
   html-escaper@2.0.2: {}
 
+  human-id@4.2.1: {}
+
   ieee754@1.2.1: {}
+
+  import-meta-resolve@4.2.0: {}
 
   ip-address@10.7.2: {}
 
@@ -2524,6 +2886,8 @@ snapshots:
       html-escaper: 2.0.2
       istanbul-lib-report: 3.0.1
 
+  jju@1.4.0: {}
+
   js-tokens@10.0.0: {}
 
   js-tokens@4.0.0: {}
@@ -2531,6 +2895,13 @@ snapshots:
   jsesc@3.1.0: {}
 
   json5@2.2.3: {}
+
+  jsonc-parser@3.3.1: {}
+
+  launch-editor@2.14.1:
+    dependencies:
+      picocolors: 1.1.1
+      shell-quote: 1.10.0
 
   lru-cache@5.1.1:
     dependencies:
@@ -2568,6 +2939,8 @@ snapshots:
 
   obug@2.1.4: {}
 
+  package-manager-detector@1.8.0: {}
+
   path-to-regexp-typed@8.0.0(path-to-regexp@8.4.2):
     dependencies:
       path-to-regexp: 8.4.2
@@ -2579,6 +2952,8 @@ snapshots:
   picocolors@1.1.1: {}
 
   picomatch@4.0.5: {}
+
+  picomatch@4.0.7: {}
 
   playwright-core@1.63.0: {}
 
@@ -2635,7 +3010,11 @@ snapshots:
 
   semver@7.8.5: {}
 
+  shell-quote@1.10.0: {}
+
   siginfo@2.0.0: {}
+
+  sisteransi@1.0.5: {}
 
   smart-buffer@4.2.0: {}
 
@@ -2663,6 +3042,8 @@ snapshots:
   tinybench@2.9.0: {}
 
   tinyexec@1.3.0: {}
+
+  tinyexec@1.3.1: {}
 
   tinyglobby@0.2.17:
     dependencies:

@@ -4,7 +4,7 @@
 
 当前应用版本为 **0.1.0**，版本来源是根 `package.json`。
 这是容器应用版本；所有 workspace package 仍为 private，不发布到 npm，
-也不意味着 `@numen/*` npm scope 或第三方 SDK 已冻结。
+也不意味着 `@numenjs/*` npm scope 或第三方 SDK 已冻结。
 
 本次冻结当前已经实现的单用户、单进程 Node + SQLite 产品路径：
 

@@ -1,0 +1,39 @@
+name: Prepare or publish npm packages
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Pack and verify, or explicitly publish the current package versions
+        type: choice
+        options: [pack, publish]
+        default: pack
+permissions:
+  contents: read
+concurrency:
+  group: npm-release
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: npm-release
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm release:verify
+      - run: pnpm release:check
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-packages
+          path: artifacts/npm/
+      - if: inputs.operation == 'publish'
+        run: pnpm exec changeset publish --no-git-tag
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

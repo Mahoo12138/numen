@@ -1,4 +1,4 @@
-import type { AutomationSource, CompileDiagnostic, ControlSource, CoreControlSource, SourceRef, ValueExpr } from '@numen/core'
+import type { AutomationSource, CompileDiagnostic, ControlSource, CoreControlSource, SourceRef, ValueExpr } from '@numenjs/core'
 
 interface Scope { parent?: Scope }
 interface Declaration { control: ControlSource; scope: Scope }

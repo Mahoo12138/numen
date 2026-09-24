@@ -1,6 +1,7 @@
-import { ConsoleProcedureError, type ConsoleActionDefinition, type ConsoleQueryDefinition } from '@numen/console'
-import { AutomationInputValidationError } from '@numen/core'
-import { ManualRunRequestConflictError, ManualRunRevisionConflictError } from '@numen/scheduler'
+import { AutomationArchivedError } from '@numenjs/automation'
+import { ConsoleProcedureError, type ConsoleActionDefinition, type ConsoleQueryDefinition } from '@numenjs/console'
+import { AutomationInputValidationError } from '@numenjs/core'
+import { ManualRunRequestConflictError, ManualRunRevisionConflictError } from '@numenjs/scheduler'
 import type { Context } from 'cordis'
 import z from 'schemastery'
 import { automationIdSchema } from './automation-schemas.js'
@@ -24,6 +25,7 @@ export const workbenchStartManualRunAction: ConsoleActionDefinition<WorkbenchSta
 function activeRevision(ctx: Context, automationId: string) {
   const automation = ctx.automations.get(automationId)
   if (!automation) throw new ConsoleProcedureError(404, 'AUTOMATION_NOT_FOUND', 'The Automation was not found.')
+  if (automation.archivedAt) throw new ConsoleProcedureError(409, 'AUTOMATION_ARCHIVED', 'Restore this Automation before starting a new Run.')
   if (!automation.activeRevisionId) throw new ConsoleProcedureError(409, 'AUTOMATION_NOT_ACTIVE', 'Publish and activate a Revision before starting a Run.')
   return ctx.automations.getRevision(automation.activeRevisionId)!
 }
@@ -38,11 +40,15 @@ export function provideManualRuns(ctx: Context): void {
   })
   ctx.console.provideAction(ctx, workbenchStartManualRunActionRef, {
     action({ input }: { input: WorkbenchStartManualRunInput }): WorkbenchStartManualRunResult {
-      activeRevision(ctx, input.automationId)
+      const automation = ctx.automations.get(input.automationId)
+      if (!automation) throw new ConsoleProcedureError(404, 'AUTOMATION_NOT_FOUND', 'The Automation was not found.')
+      // Let Scheduler resolve an accepted requestId before rejecting a retry for an archived Automation.
+      if (!automation.archivedAt && !automation.activeRevisionId) throw new ConsoleProcedureError(409, 'AUTOMATION_NOT_ACTIVE', 'Publish and activate a Revision before starting a Run.')
       try {
         const run = ctx.scheduler.startManual(input.automationId, input.input, { type: 'manual' }, input.expectedRevisionId, input.requestId)
         return { runId: run.id }
       } catch (error) {
+        if (error instanceof AutomationArchivedError) throw new ConsoleProcedureError(409, 'AUTOMATION_ARCHIVED', 'Restore this Automation before starting a new Run.')
         if (error instanceof ManualRunRequestConflictError) throw new ConsoleProcedureError(409, 'MANUAL_RUN_REQUEST_CONFLICT', error.message)
         if (error instanceof ManualRunRevisionConflictError) throw new ConsoleProcedureError(409, 'MANUAL_RUN_REVISION_CONFLICT', error.message)
         if (error instanceof AutomationInputValidationError) throw new ConsoleProcedureError(422, 'AUTOMATION_INPUT_INVALID', error.message, { issues: error.issues })

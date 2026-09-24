@@ -1,7 +1,7 @@
 import { AutomationInputs } from './AutomationInputs.js'
 import { localizeCatalogItem, useWorkbenchI18n } from './i18n.js'
 import { AutomationRuns } from './AutomationRuns.js'
-import type { SourceRef } from '@numen/core'
+import type { SourceRef } from '@numenjs/core'
 import { computed, h, inject, onScopeDispose, provide, ref, watch, type ComputedRef, type InjectionKey } from 'vue'
 import { DraftConflictRecovery } from './DraftConflictRecovery.js'
 import { AutomationEditor, type AutomationEditorProps } from './AutomationEditor.js'
@@ -13,7 +13,10 @@ import {
   workbenchAutomationInsertCatalogQueryRef,
   workbenchAutomationVariableCatalogQueryRef,
   workbenchAutomationsIndexQueryRef,
+  workbenchArchiveAutomationActionRef,
   workbenchCreateAutomationActionRef,
+  workbenchRemoveArchivedAutomationActionRef,
+  workbenchRestoreAutomationActionRef,
   type WorkbenchAutomationDetail,
   type WorkbenchAutomationDetailQueryInput,
   type WorkbenchAutomationInsertCatalog,
@@ -21,6 +24,9 @@ import {
   type WorkbenchAutomationsIndex,
   type WorkbenchCreateAutomationInput,
   type WorkbenchCreateAutomationResult,
+  type WorkbenchArchiveAutomationInput,
+  type WorkbenchRemoveArchivedAutomationInput,
+  type WorkbenchRestoreAutomationInput,
 } from './contracts.js'
 import { Inspector, type InspectorFieldFocus } from './Inspector.js'
 import type { WorkbenchPageChromeProps } from './types.js'
@@ -44,16 +50,22 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
   const confirmedAutomationId = ref<string>()
   const requestedAutomationId = ref('morning-brief')
   const activeTab = ref('Editor')
+  const archiveView = ref(false)
+  const lifecyclePending = ref(false)
+  const lifecycleError = ref<string>()
   const requestedStepId = ref('notification')
   const fieldFocus = ref<InspectorFieldFocus>()
   const creatingAutomation = ref(false)
   const createAutomationError = ref<string>()
   let createAutomationController: AbortController | undefined
+  let lifecycleController: AbortController | undefined
   onScopeDispose(() => createAutomationController?.abort())
-  const [indexState, reloadIndex, refreshIndex] = useConsoleQuery<Record<string, never>, WorkbenchAutomationsIndex>(
+  onScopeDispose(() => lifecycleController?.abort())
+  const indexInput = computed(() => ({ archived: archiveView.value }))
+  const [indexState, reloadIndex, refreshIndex] = useConsoleQuery<{ archived: boolean }, WorkbenchAutomationsIndex>(
     () => props.consoleClient,
     workbenchAutomationsIndexQueryRef,
-    emptyQueryInput,
+    indexInput,
     'automations',
   )
   const [insertCatalogState, reloadInsertCatalog] = useConsoleQuery<Record<string, never>, WorkbenchAutomationInsertCatalog>(
@@ -89,6 +101,7 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
       if (controller.signal.aborted) return false
       confirmedAutomationId.value = result.automation.id
       requestedAutomationId.value = result.automation.id
+      archiveView.value = false
       activeTab.value = 'Editor'
       refreshIndex()
       return true
@@ -102,6 +115,47 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
       }
     }
   }
+  const runLifecycleAction = async <Input extends object, Output extends object>(
+    procedure: { id: string; version: number },
+    input: Input,
+    success: () => void,
+    before?: () => Promise<boolean>,
+  ): Promise<boolean> => {
+    if (!props.consoleClient || lifecyclePending.value) return false
+    const controller = lifecycleController = new AbortController()
+    lifecyclePending.value = true
+    lifecycleError.value = undefined
+    try {
+      if (before && !(await before())) return false
+      await props.consoleClient.action<Input, Output>(procedure, input, controller.signal)
+      if (controller.signal.aborted) return false
+      success()
+      return true
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        lifecycleError.value = error instanceof Error ? error.message : 'Automation operation failed.'
+        refreshIndex()
+      }
+      return false
+    } finally {
+      if (lifecycleController === controller) {
+        lifecycleController = undefined
+        lifecyclePending.value = false
+      }
+    }
+  }
+  const restoreAutomation = (automationId: string, expectedActivationGeneration: number) => runLifecycleAction<WorkbenchRestoreAutomationInput, { automationId: string }>(
+    workbenchRestoreAutomationActionRef, { automationId, expectedActivationGeneration }, () => { archiveView.value = false },
+  )
+  const removeArchivedAutomation = (automationId: string, expectedArchivedAt: string) => runLifecycleAction<WorkbenchRemoveArchivedAutomationInput, { automationId: string; removedRuns: number }>(
+    workbenchRemoveArchivedAutomationActionRef, { automationId, expectedArchivedAt }, () => {
+      if (requestedAutomationId.value === automationId) {
+        requestedAutomationId.value = ''
+        confirmedAutomationId.value = undefined
+      }
+      refreshIndex()
+    },
+  )
   const liveItems = computed(() => indexState.status === 'READY' ? indexState.data.items : [])
   const automationId = computed(() => props.consoleClient
     ? ((requestedAutomationId.value === confirmedAutomationId.value || liveItems.value.some(item => item.id === requestedAutomationId.value)) ? requestedAutomationId.value : liveItems.value[0]?.id)
@@ -139,6 +193,19 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
     detail,
     reloadDetail,
   })
+  const archiveAutomation = (automationIdTarget: string, expectedActivationGeneration: number) => runLifecycleAction<WorkbenchArchiveAutomationInput, { automationId: string }>(
+    workbenchArchiveAutomationActionRef, { automationId: automationIdTarget, expectedActivationGeneration }, () => {
+      archiveView.value = true
+      activeTab.value = 'Runs'
+      props.onInspectorOpenChange(false)
+    },
+    async () => {
+      if (automationId.value !== automationIdTarget) return true
+      const saved = await authoring.flushDraft(lifecycleController?.signal)
+      if (!saved) lifecycleError.value = t('workbench.saveDraftBeforeArchiving')
+      return saved
+    },
+  )
   const effectiveDetail = computed<WorkbenchAutomationDetail | undefined>(() => {
     const queriedDetail = detail.value
     const currentDetail = queriedDetail ? {
@@ -165,6 +232,8 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
     if (detailState.value?.status !== 'READY' || !detailState.value.data || !effectiveDetail.value) return detailState.value
     return { status: 'READY', data: effectiveDetail.value }
   })
+  const archived = computed(() => !!effectiveDetail.value?.automation.archivedAt)
+  const editable = computed(() => !archived.value && !lifecyclePending.value)
   const capabilityTitles = computed(() => new Map(
     localizedCatalogState.value.status === 'READY'
       ? localizedCatalogState.value.data.items.flatMap(item => item.kind === 'capability' || item.kind === 'trigger'
@@ -196,28 +265,25 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
     } : {}),
     ...(props.consoleClient ? {
       authoring: {
-        canEdit: authoring.canEdit,
-        canPublish: authoring.canPublish,
-        canUndo: authoring.canUndo,
-        canRedo: authoring.canRedo,
+        canEdit: editable.value && authoring.canEdit,
+        canPublish: editable.value && authoring.canPublish,
+        canUndo: editable.value && authoring.canUndo,
+        canRedo: editable.value && authoring.canRedo,
         publishPending: authoring.publishPending,
         ...(authoring.conflict ? { conflict: authoring.conflict } : {}),
         ...(authoring.saveError ? { saveError: authoring.saveError } : {}),
         ...(authoring.publishError ? { publishError: authoring.publishError } : {}),
       },
-      onInsert: authoring.insert,
-      onDeleteStep: authoring.deleteStep,
-      onMoveStep: authoring.moveStep,
+      ...(editable.value ? { onInsert: authoring.insert } : {}),
+      ...(editable.value ? { onDeleteStep: authoring.deleteStep, onMoveStep: authoring.moveStep } : {}),
       onReloadInsertCatalog: reloadInsertCatalog,
-      onUndo: authoring.undo,
-      onRedo: authoring.redo,
-      onPublish: authoring.publish,
+      ...(editable.value ? { onUndo: authoring.undo, onRedo: authoring.redo, onPublish: authoring.publish } : {}),
       onReloadDraft: authoring.reload,
-      onRetrySave: authoring.retrySave,
+      ...(editable.value ? { onRetrySave: authoring.retrySave } : {}),
     } : {}),
     ...(props.consoleClient && authoring.document ? {
-      inputSettings: h(AutomationInputs, { inputs: authoring.document.source.inputs, canEdit: authoring.canEdit, problems: authoring.problems, onChange: authoring.setAutomationInputs, ...(props.schemaUI ? { schemaUI: props.schemaUI } : {}) }),
-      manualRunForm: h(AutomationRuns, { key: authoring.document.automationId, automationId: authoring.document.automationId, consoleClient: props.consoleClient, ...(props.schemaUI ? { schemaUI: props.schemaUI } : {}), ...(props.navigation ? { navigation: props.navigation } : {}) }),
+      inputSettings: h(AutomationInputs, { inputs: authoring.document.source.inputs, canEdit: editable.value && authoring.canEdit, problems: authoring.problems, onChange: inputs => { if (editable.value) authoring.setAutomationInputs(inputs) }, ...(props.schemaUI ? { schemaUI: props.schemaUI } : {}) }),
+      manualRunForm: h(AutomationRuns, { key: authoring.document.automationId, automationId: authoring.document.automationId, archived: archived.value, consoleClient: props.consoleClient, ...(props.schemaUI ? { schemaUI: props.schemaUI } : {}), ...(props.navigation ? { navigation: props.navigation } : {}) }),
     } : {}),
     ...(props.consoleClient && authoring.document && authoring.conflict ? {
       conflictRecovery: h(DraftConflictRecovery, {
@@ -233,7 +299,7 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
         },
       }),
     } : {}),
-    ...(props.consoleClient && effectiveDetail.value ? {
+    ...(props.consoleClient && effectiveDetail.value && !archived.value && !lifecyclePending.value ? {
       activation: activation.view(effectiveDetail.value.automation),
       onActivateRevision: (revisionId: string) => {
         if (effectiveDetail.value) activation.activate(effectiveDetail.value.automation, revisionId)
@@ -287,6 +353,12 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
         {...(createAutomationError.value ? { createError: createAutomationError.value } : {})}
         creating={creatingAutomation.value}
         state={indexState}
+        onArchiveViewChange={archived => { archiveView.value = archived; lifecycleError.value = undefined }}
+        onArchive={archiveAutomation}
+        onRestore={restoreAutomation}
+        onRemoveArchived={removeArchivedAutomation}
+        mutationPending={lifecyclePending.value}
+        {...(lifecycleError.value ? { mutationError: lifecycleError.value } : {})}
       />
       {h(PageComponent, {
         ...(props.consoleClient ? { consoleClient: props.consoleClient } : {}),
@@ -295,7 +367,7 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
       })}
       <Inspector
         activeStepId={activeStepId.value}
-        canEdit={authoring.canEdit}
+        canEdit={editable.value && authoring.canEdit}
         {...(localizedCatalogState.value.status === 'READY' ? { catalog: localizedCatalogState.value.data } : {})}
         {...(variableCatalogState.status === 'READY' ? { variableCatalog: variableCatalogState.data } : {})}
         {...(fieldFocus.value ? { fieldFocus: fieldFocus.value } : {})}
@@ -304,15 +376,17 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
         {...(authoring.document ? { source: authoring.document.source } : {})}
         {...(props.consoleClient ? { steps: steps.value } : {})}
         onClose={() => props.onInspectorOpenChange(false)}
-        onCapabilityConnectionChange={authoring.setCapabilityConnection}
-        onCapabilityInputChange={authoring.setCapabilityInput}
-        onTriggerConfigChange={authoring.setTriggerConfig}
-        onExtensionInputChange={authoring.setExtensionInput}
-        onControlExpressionChange={authoring.setControlExpression}
-        onWaitExpressionChange={authoring.setWaitExpression}
+        onCapabilityConnectionChange={(nodeId, slotName, connectionId) => { if (editable.value) authoring.setCapabilityConnection(nodeId, slotName, connectionId) }}
+        onCapabilityInputChange={(nodeId, fieldName, expression) => { if (editable.value) authoring.setCapabilityInput(nodeId, fieldName, expression) }}
+        onTriggerConfigChange={(nodeId, fieldName, value) => { if (editable.value) authoring.setTriggerConfig(nodeId, fieldName, value) }}
+        onExtensionInputChange={(nodeId, fieldName, expression) => { if (editable.value) authoring.setExtensionInput(nodeId, fieldName, expression) }}
+        onControlExpressionChange={(nodeId, field, expression) => { if (editable.value) authoring.setControlExpression(nodeId, field, expression) }}
+        onWaitExpressionChange={(nodeId, field, expression) => { if (editable.value) authoring.setWaitExpression(nodeId, field, expression) }}
         {...(props.schemaUI ? { schemaUI: props.schemaUI } : {})}
       />
       <AutomationPanel
+        {...(props.consoleClient ? { consoleClient: props.consoleClient } : {})}
+        {...(automationId.value ? { automationId: automationId.value } : {})}
         problems={authoring.problems}
         preview={!props.consoleClient}
         onProblemSelect={selectProblem}

@@ -5,7 +5,7 @@
 
 ## 1. 结论
 
-直接依赖 `@koishijs/i18n-utils@1.0.1` 复用语言树和回退算法，另建轻量 `@numen/i18n` Cordis Service 管理词条、文本渲染和生命周期。该上游包仅提供 `LocaleTree.from()` 与 `fallback()`，不包含消息存储、插值、Vue 集成或卸载。源码仅依赖 `cosmokit`，没有 Node 专属 API；包同时提供 CommonJS、ESM 与类型入口，适合 Node / Browser 共用。[包定义](https://github.com/koishijs/koishi/blob/5525cfd06e0e48be0d65fa31a0ce46d0dc65ffde/packages/i18n-utils/package.json) [完整工具源码](https://github.com/koishijs/koishi/blob/5525cfd06e0e48be0d65fa31a0ce46d0dc65ffde/packages/i18n-utils/src/index.ts)
+直接依赖 `@koishijs/i18n-utils@1.0.1` 复用语言树和回退算法，另建轻量 `@numenjs/i18n` Cordis Service 管理词条、文本渲染和生命周期。该上游包仅提供 `LocaleTree.from()` 与 `fallback()`，不包含消息存储、插值、Vue 集成或卸载。源码仅依赖 `cosmokit`，没有 Node 专属 API；包同时提供 CommonJS、ESM 与类型入口，适合 Node / Browser 共用。[包定义](https://github.com/koishijs/koishi/blob/5525cfd06e0e48be0d65fa31a0ce46d0dc65ffde/packages/i18n-utils/package.json) [完整工具源码](https://github.com/koishijs/koishi/blob/5525cfd06e0e48be0d65fa31a0ce46d0dc65ffde/packages/i18n-utils/src/index.ts)
 
 Koishi Core 与 WebUI 不是同一个渲染器：Core 采用 Satori 消息元素，WebUI 采用 Vue I18n。Numen 应学习其服务分层与外置词条方式，再适配本项目的纯文本 UI、Cordis 4 与 Entry 原子切换；无需将整个 Koishi Core 或 Client 引入依赖。[Core](https://github.com/koishijs/koishi/blob/5525cfd06e0e48be0d65fa31a0ce46d0dc65ffde/packages/core/src/i18n.ts) [WebUI](https://github.com/koishijs/webui/blob/ec7b4849564347316d9000965606a452b584d8ec/packages/client/client/plugins/i18n.ts)
 

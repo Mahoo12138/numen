@@ -113,7 +113,7 @@ async function completedRun(runId) {
     db.close()
     console.log(JSON.stringify({ schema, output: JSON.parse(output) }))
   `, runId]))
-  assert.equal(persisted.schema, 13, 'release database schema')
+  assert.equal(persisted.schema, 14, 'release database schema')
   assert.deepEqual(persisted.output, { message: 'Release smoke test' }, 'durable Echo output')
 }
 
@@ -147,6 +147,10 @@ try {
   const manualInput = { automationId: automation.id, requestId: randomUUID(), expectedRevisionId: revision.id, input: {} }
   const { runId } = await call('action', 'manual-run-start', manualInput)
   await completedRun(runId)
+  const logHistory = await call('query', 'logs', { runId, limit: 100 })
+  assert.equal(logHistory.persistence, 'ready', 'runtime logs are persisted')
+  assert.ok(logHistory.records.some(record => record.attemptId && record.message === 'Attempt completed'), 'execution logs carry Run/Attempt correlation')
+  assert.ok(!JSON.stringify(logHistory).includes('Release smoke test'), 'runtime logs exclude domain input/output')
   console.log('PASS: Console create/save/publish/activate/enable and real Echo execution')
   const previousCookie = cookie
   docker(['stop', '--time', '20', name])
@@ -160,6 +164,11 @@ try {
   assert.deepEqual(restored.draft.source, source)
   assert.equal((await call('action', 'manual-run-start', manualInput)).runId, runId)
   await completedRun(runId)
+  const restoredLogs = await call('query', 'logs', { runId, limit: 100, before: { stream: logHistory.stream, sequence: 1 } })
+  assert.equal(restoredLogs.reset, true, 'old log cursors reset after process recreation')
+  assert.equal(restoredLogs.persistence, 'ready')
+  assert.ok(logHistory.records.every(previous => restoredLogs.records.some(record => record.id === previous.id)), 'volume retains correlated log history across recreation')
+  console.log('PASS: correlated runtime logs persist across container recreation and reset old cursors')
   console.log('PASS: container recreation retains Draft/Revision/Run and submission deduplication; sessions rotate')
   // A Run accepted after the recreated container started proves subscriptions were rebuilt.
   const afterRestart = Date.now()

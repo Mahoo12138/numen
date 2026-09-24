@@ -1,14 +1,14 @@
 import { automationIdSchema } from './automation-schemas.js'
 import { provideManualRuns } from './manual-run-provider.js'
-import '@numen/automation'
-import '@numen/scheduler'
-import type { NumenValue } from '@numen/core'
+import '@numenjs/automation'
+import '@numenjs/scheduler'
+import type { NumenValue } from '@numenjs/core'
 import {
   ConsoleProcedureError,
   type ConsoleActionDefinition,
   type ConsoleQueryDefinition,
-} from '@numen/console'
-import type { ExecutionListCursor, RunListCursor, RunListFilters } from '@numen/scheduler'
+} from '@numenjs/console'
+import type { ExecutionListCursor, RunListCursor, RunListFilters } from '@numenjs/scheduler'
 import type { Context } from 'cordis'
 import z from 'schemastery'
 import {
@@ -233,7 +233,7 @@ export function workbenchRunsProviderPlugin(ctx: Context): void {
       }
       const page = ctx.scheduler.listRunSummariesPage(input.limit, input.cursor, filters)
       const counts = ctx.scheduler.getRunStatusCounts(input.automationId)
-      const automationNames = new Map(ctx.automations.list().map(automation => [automation.id, automation.name]))
+      const automationNames = new Map(ctx.automations.list(true).map(automation => [automation.id, automation.name]))
       return {
         summary: {
           total: Object.values(counts).reduce((sum, count) => sum + count, 0),

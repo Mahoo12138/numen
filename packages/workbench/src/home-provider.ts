@@ -1,7 +1,7 @@
-import '@numen/automation'
-import '@numen/connections'
-import '@numen/scheduler'
-import type { ConsoleQueryDefinition } from '@numen/console'
+import '@numenjs/automation'
+import '@numenjs/connections'
+import '@numenjs/scheduler'
+import type { ConsoleQueryDefinition } from '@numenjs/console'
 import type { Context } from 'cordis'
 import z from 'schemastery'
 import {

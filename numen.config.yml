@@ -2,6 +2,15 @@ version: 1
 dataDir: .numen
 
 # Core services are regular Cordis plugins; their inject declarations enforce readiness order.
+# Cordis levels: error=0, warn=1, info=2, debug=3. NUMEN_LOG_LEVEL/NUMEN_DEBUG override these.
+logger:
+  levels: { base: 2 }
+  showTime: true
+  showDiff: false
+  capacity: 2000
+  maxFileBytes: 1048576
+  maxFiles: 5
+
 plugins:
   i18n:
     locales: [en-US]
@@ -41,6 +50,7 @@ plugins:
   workbenchConnections: {}
   workbenchCredentials: {}
   workbenchHome: {}
+  workbenchLogs: {}
   workbenchInvalidation: {}
   workbenchRuns: {}
   consoleSession: {}

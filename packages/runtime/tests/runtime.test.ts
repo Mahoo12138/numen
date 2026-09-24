@@ -1,8 +1,8 @@
-import { writeConfig } from '@numen/config'
+import { writeConfig } from '@numenjs/config'
 import {
   workbenchInvalidationSubscriptionRef,
   type WorkbenchInvalidationEvent,
-} from '@numen/workbench/contracts'
+} from '@numenjs/workbench/contracts'
 import z from 'schemastery'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -59,6 +59,7 @@ describe('Numen runtime', () => {
         workbenchConnections: {},
         workbenchCredentials: {},
         workbenchHome: {},
+        workbenchLogs: {},
         workbenchInvalidation: {},
         workbenchRuns: {},
         consoleSession: {},
@@ -82,6 +83,10 @@ describe('Numen runtime', () => {
         providerAvailable: true,
       }),
       expect.objectContaining({
+        definition: expect.objectContaining({ id: 'numen:automation-archive', version: 1, kind: 'action' }),
+        providerAvailable: true,
+      }),
+      expect.objectContaining({
         definition: expect.objectContaining({ id: 'numen:automation-create', version: 1, kind: 'action' }),
         providerAvailable: true,
       }),
@@ -95,6 +100,14 @@ describe('Numen runtime', () => {
       }),
       expect.objectContaining({
         definition: expect.objectContaining({ id: 'numen:automation-publish-draft', version: 1, kind: 'action' }),
+        providerAvailable: true,
+      }),
+      expect.objectContaining({
+        definition: expect.objectContaining({ id: 'numen:automation-remove-archived', version: 1, kind: 'action' }),
+        providerAvailable: true,
+      }),
+      expect.objectContaining({
+        definition: expect.objectContaining({ id: 'numen:automation-restore', version: 1, kind: 'action' }),
         providerAvailable: true,
       }),
       expect.objectContaining({
@@ -157,6 +170,8 @@ describe('Numen runtime', () => {
         definition: expect.objectContaining({ id: 'numen:home-overview', version: 1, kind: 'query' }),
         providerAvailable: true,
       }),
+      expect.objectContaining({ definition: expect.objectContaining({ id: 'numen:logs-changed', version: 1, kind: 'subscription' }), providerAvailable: true }),
+      expect.objectContaining({ definition: expect.objectContaining({ id: 'numen:logs', version: 1, kind: 'query' }), providerAvailable: true }),
       expect.objectContaining({ definition: expect.objectContaining({ id: 'numen:manual-run-form', version: 1, kind: 'query' }), providerAvailable: true }),
       expect.objectContaining({ definition: expect.objectContaining({ id: 'numen:manual-run-start', version: 1, kind: 'action' }), providerAvailable: true }),
       expect.objectContaining({
@@ -704,7 +719,7 @@ describe('Numen runtime', () => {
     expect(await ready.json()).toMatchObject({
       status: 'ready',
       checks: {
-        database: { migrationVersion: 13 },
+        database: { migrationVersion: 14 },
         automations: { ready: true, count: 1 },
         connections: {
           ready: true,

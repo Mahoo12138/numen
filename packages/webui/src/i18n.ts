@@ -1,4 +1,4 @@
-import { canonicalLocale, fallback, LocaleTree, type MessageParams } from '@numen/i18n'
+import { canonicalLocale, fallback, LocaleTree, type MessageParams } from '@numenjs/i18n'
 import { Service, type Context } from 'cordis'
 
 export interface BrowserLocaleConfig {

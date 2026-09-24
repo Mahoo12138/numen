@@ -1,5 +1,5 @@
-import type { ConsoleEntryManifest, ConsoleEntryManifestItem } from '@numen/console'
-import type { I18nService } from '@numen/i18n'
+import type { ConsoleEntryManifest, ConsoleEntryManifestItem } from '@numenjs/console'
+import type { I18nService } from '@numenjs/i18n'
 import { Service, type Context, type Fiber, type Plugin } from 'cordis'
 import {
   BrowserExtensionRegistry,

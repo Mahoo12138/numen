@@ -1,5 +1,5 @@
 {
-  "name": "@numen/automation",
+  "name": "@numenjs/automation",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -12,11 +12,11 @@
     }
   },
   "peerDependencies": {
-    "cordis": "^4.0.0-rc.8"
+    "cordis": "4.0.0-rc.8"
   },
   "dependencies": {
-    "@numen/core": "workspace:*",
-    "@numen/database": "workspace:*"
+    "@numenjs/core": "workspace:*",
+    "@numenjs/database": "workspace:*"
   },
   "devDependencies": {
     "schemastery": "^3.18.0"

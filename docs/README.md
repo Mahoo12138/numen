@@ -14,7 +14,7 @@
 - **Numen**：框架与 Runtime 的正式名称。
 - **Numen Workbench**：本文档对默认 WebUI / 产品壳的工作称呼；未来如果产品层采用独立品牌，不影响 Numen Framework Contract。
 - **`numen/*`**：内建 Contract / Permission / Schema Role 的逻辑命名空间，不等同于 npm scope。
-- **`@numen/*`**：本文档中的逻辑 npm 包名占位。实际 npm organization/scope 仍需确认可用性后冻结。
+- **`@numenjs/*`**：本文档中的逻辑 npm 包名占位。实际 npm organization/scope 仍需确认可用性后冻结。
 - 社区插件通用命名建议：`numen-plugin-*` / `@scope/numen-plugin-*`。
 - CLI 可执行文件统一使用：`numen`。
 
@@ -53,6 +53,8 @@
 | [17-mvp-release.md](17-mvp-release.md) | MVP 候选范围冻结、发布门禁、版本镜像与发布检查表 |
 | [18-i18n.md](18-i18n.md) | 共用词条服务、浏览器语言、Vue 接入、Entry 生命周期与验证 |
 | [18-i18n-research.md](18-i18n-research.md) | Koishi i18n 第一方源码依据与适配取舍 |
+| [19-logging.md](19-logging.md) | 宿主日志、关联上下文、脱敏、轮转与 Workbench 实时查询 |
+| [19-logging-research.md](19-logging-research.md) | Koishi / Cordis 日志源码依据与版本适配 |
 
 ## 推荐阅读顺序
 
@@ -67,3 +69,5 @@
 若准备写第三方插件：
 
 `15 → 01 → 02 → 04 → 16 → 08 → 13`
+
+- [20. 通用组件与 npm 发布](20-components-and-publishing.md)

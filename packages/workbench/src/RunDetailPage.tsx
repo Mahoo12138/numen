@@ -133,7 +133,7 @@ export const RunDetailPage = defineSetupComponent<WorkbenchPageProps>(
 
     return () => (
       <main class="main-workbench core-page run-detail-page">
-        <RunDetailHeader cancellation={cancellation} onBack={openRuns} onCancel={cancelRun} state={detail} />
+        <RunDetailHeader onLogs={() => props.navigation?.navigate(coreWorkbenchRoutes.system, { query: { runId: runId.value } })} cancellation={cancellation} onBack={openRuns} onCancel={cancelRun} state={detail} />
         <RunDetailContent
           activeView={activeView.value}
           canShowNewerEvents={position.eventHistory.length > 0}
@@ -151,11 +151,12 @@ export const RunDetailPage = defineSetupComponent<WorkbenchPageProps>(
   },
 )
 
-function RunDetailHeader({ state, cancellation, onBack, onCancel }: {
+function RunDetailHeader({ state, cancellation, onBack, onCancel, onLogs }: {
   state: ConsoleQueryState<WorkbenchRunDetail | null>
   cancellation: { pending: boolean; error?: string; confirmedStatus?: WorkbenchCancelRunResult['status'] }
   onBack(): void
   onCancel(): void
+  onLogs(): void
 }) {
   const run = state.status === 'READY' ? state.data?.run : undefined
   const status = cancellation.confirmedStatus ?? run?.status
@@ -171,6 +172,7 @@ function RunDetailHeader({ state, cancellation, onBack, onCancel }: {
       </div>
       {run ? (
         <div class="run-detail-actions">
+          <button class="secondary-button" type="button" onClick={onLogs}>{t('workbench.logs.viewRun')}</button>
           {cancellable ? (
             <button
               class="run-cancel-button"

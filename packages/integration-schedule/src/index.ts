@@ -1,4 +1,4 @@
-import { defineCapability, type TriggerProvider } from '@numen/core'
+import { defineCapability, type TriggerProvider } from '@numenjs/core'
 import type { Context } from 'cordis'
 import z from 'schemastery'
 

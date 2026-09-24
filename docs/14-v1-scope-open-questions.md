@@ -74,13 +74,13 @@ Home / Automations / Runs / Connections / Plugins / System
 
 ### 4.1 npm organization / scope 与仓库命名
 
-框架名称 **Numen 已冻结**。仍需确认的是实际 npm organization/scope 是否可用，以及官方仓库命名。
+框架名称 **Numen 已冻结**，npm scope 已确定为 **@numenjs**。首次发布前仍需确认组织权限；官方仓库命名独立管理。
 
-本文档暂用逻辑占位：
+官方包命名：
 
 ```text
-@numen/core
-@numen/plugin-xxx
+@numenjs/core
+@numenjs/plugin-xxx
 ```
 
 社区插件通用命名建议已经明确：
@@ -90,7 +90,7 @@ numen-plugin-xxx
 @scope/numen-plugin-xxx
 ```
 
-`@numen/*` 目前仅表示 Numen 官方逻辑包名，不代表 npm scope 已最终占用。
+`@numenjs/*` 已作为源码与发布包名使用；当前尚未执行 npm 发布。
 
 ### 4.2 Config 具体格式
 

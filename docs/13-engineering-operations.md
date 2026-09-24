@@ -98,14 +98,14 @@ Docker 部署的最小升级流程：
 
 ## 4. 插件 SDK
 
-建议形成稳定的逻辑包边界（本文档以 `@numen/*` 作为占位，实际 npm scope 尚未冻结）：
+建议形成稳定的逻辑包边界（官方 scope 已确定为 `@numenjs/*`，下列是逻辑边界；实际发布范围见 [组件与发布](20-components-and-publishing.md)）：
 
 ```text
-@numen/core
-@numen/plugin-sdk
-@numen/client
-@numen/components
-@numen/testing
+@numenjs/core
+@numenjs/plugin-sdk
+@numenjs/client
+@numenjs/components
+@numenjs/testing
 ```
 
 第三方插件避免 import 深层内部路径。

@@ -23,7 +23,7 @@ import {
   type ContractSnapshot,
   type NumenValue,
   type ValueExpr,
-} from '@numen/core'
+} from '@numenjs/core'
 import { validateSourceReferences } from './reference-validation.js'
 
 export interface CapabilityResolver {

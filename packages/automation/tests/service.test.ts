@@ -1,5 +1,5 @@
-import { CapabilityRegistry, type AutomationSource, type CapabilityDefinition } from '@numen/core'
-import { DatabaseService } from '@numen/database'
+import { CapabilityRegistry, type AutomationSource, type CapabilityDefinition } from '@numenjs/core'
+import { DatabaseService } from '@numenjs/database'
 import { Context } from 'cordis'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'

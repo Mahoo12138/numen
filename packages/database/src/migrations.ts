@@ -345,6 +345,14 @@ export const coreMigrations: readonly Migration[] = [
       `)
     },
   },
+  {
+    version: 14,
+    name: 'automation-archives',
+    up(database) {
+      database.exec('ALTER TABLE automations ADD COLUMN archived_at TEXT;')
+      database.exec('CREATE INDEX automations_archive_idx ON automations(archived_at, updated_at DESC);')
+    },
+  },
 ]
 
 export function runMigrations(

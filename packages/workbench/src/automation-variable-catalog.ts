@@ -1,4 +1,4 @@
-import type { AutomationSource, CapabilitySource, ControlSource, ValueExpr } from '@numen/core'
+import type { AutomationSource, CapabilitySource, ControlSource, ValueExpr } from '@numenjs/core'
 import type {
   WorkbenchAutomationInputField,
   WorkbenchAutomationVariableCatalog,

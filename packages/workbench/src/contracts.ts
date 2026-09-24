@@ -1,4 +1,5 @@
-import type { ConsoleProcedureRef } from '@numen/console'
+import type { SchemaFieldType as WorkbenchSchemaFieldType, SchemaOption as WorkbenchSchemaOption, SchemaField as WorkbenchSchemaField } from '@numenjs/components'
+import type { ConsoleProcedureRef } from '@numenjs/console'
 import type {
   AttemptStatus,
   AutomationSource,
@@ -6,7 +7,7 @@ import type {
   CapabilityRef,
   ExecutionStatus,
   NumenValue,
-} from '@numen/core'
+} from '@numenjs/core'
 
 export const workbenchHomeOverviewQueryRef = {
   id: 'numen:home-overview',
@@ -370,12 +371,17 @@ export const workbenchAutomationsIndexQueryRef = {
   version: 1,
 } as const satisfies ConsoleProcedureRef
 
+export interface WorkbenchAutomationsIndexInput { archived?: boolean }
+
 export interface WorkbenchAutomationIndexItem {
   id: string
   name: string
   enabled: boolean
   activeRevisionId?: string
   activationGeneration: number
+  archivedAt?: string
+  activeRunCount: number
+  runCount: number
   draftVersion: number
   revisionCount: number
   latestRevisionNumber?: number
@@ -396,6 +402,16 @@ export const workbenchCreateAutomationActionRef = {
   id: 'numen:automation-create',
   version: 1,
 } as const satisfies ConsoleProcedureRef
+
+export const workbenchArchiveAutomationActionRef = { id: 'numen:automation-archive', version: 1 } as const satisfies ConsoleProcedureRef
+export const workbenchRestoreAutomationActionRef = { id: 'numen:automation-restore', version: 1 } as const satisfies ConsoleProcedureRef
+export const workbenchRemoveArchivedAutomationActionRef = { id: 'numen:automation-remove-archived', version: 1 } as const satisfies ConsoleProcedureRef
+
+export interface WorkbenchArchiveAutomationInput { automationId: string; expectedActivationGeneration: number }
+export interface WorkbenchRestoreAutomationInput { automationId: string; expectedActivationGeneration: number }
+export interface WorkbenchRemoveArchivedAutomationInput { automationId: string; expectedArchivedAt: string }
+export interface WorkbenchAutomationMutationResult { automationId: string }
+export interface WorkbenchRemoveArchivedAutomationResult { automationId: string; removedRuns: number }
 
 export interface WorkbenchCreateAutomationInput {
   name: string
@@ -421,6 +437,7 @@ export interface WorkbenchAutomationIdentity {
   enabled: boolean
   activeRevisionId?: string
   activationGeneration: number
+  archivedAt?: string
   createdAt: string
   updatedAt: string
 }
@@ -454,27 +471,11 @@ export const workbenchAutomationInsertCatalogQueryRef = {
 
 export type WorkbenchAutomationControlKind = 'wait' | 'if' | 'parallel' | 'race' | 'foreach'
 
-export type WorkbenchSchemaFieldType = 'string' | 'number' | 'boolean' | 'enum' | 'json'
-
-export interface WorkbenchSchemaOption {
-  label: string
-  value: NumenValue
-}
-
-export interface WorkbenchSchemaField {
-  name: string
-  label: string
-  type: WorkbenchSchemaFieldType
-  schemaType: string
-  required: boolean
-  description?: string
-  role?: string
-  defaultValue?: NumenValue
-  options?: WorkbenchSchemaOption[]
-  min?: number
-  max?: number
-  step?: number
-}
+export type {
+  SchemaFieldType as WorkbenchSchemaFieldType,
+  SchemaOption as WorkbenchSchemaOption,
+  SchemaField as WorkbenchSchemaField,
+} from '@numenjs/components'
 
 export type WorkbenchAutomationInputFieldType = WorkbenchSchemaFieldType
 export type WorkbenchAutomationInputOption = WorkbenchSchemaOption

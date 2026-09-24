@@ -244,16 +244,24 @@ Settings 的 Automation inputs 表单编辑 Draft 的输入名称、类型、标
 
 Runs 页通过 `numen:manual-run-form@1` Query 读取 Active Revision 的契约，复用 Schema Literal Renderers 生成参数表单。旧 Revision 没有声明时使用 JSON 对象输入。表单冻结加载时的 Revision ID；`numen:manual-run-start@1` Action 提交 `requestId`，由 Scheduler 核对 `expectedRevisionId`，并在同一事务中写入 Run、RunAccepted Journal 和请求内容指纹。相同 requestId 与相同 payload 的重试（包括进程重启后）返回原 runId；payload 不同返回 `409 MANUAL_RUN_REQUEST_CONFLICT`。浏览器在响应不确定时冻结原 payload 并提供安全重试。版本改变返回 409，用户显式 Reload parameters 后查看新契约。422 校验失败不会创建 Run，有效提交可通过 View Run 打开现有运行详情。
 
-手动运行不要求启用 Trigger 订阅，但必须先发布并激活 Revision。草稿或尚未激活的新 Revision 不影响运行表单。表单卸载会中止客户端请求，过期响应不会更新页面；这不撤销服务端可能已接受的 Run。无法确认提交结果时不自动重试，提示先检查 Runs。手动提交目前没有持久化幂等请求 ID，重复提交表示创建另一个 Run。
+手动运行不要求启用 Trigger 订阅，但必须先发布并激活 Revision。草稿或尚未激活的新 Revision 不影响运行表单。表单卸载会中止客户端请求，过期响应不会更新页面；这不撤销服务端可能已接受的 Run。无法确认提交结果时，可用冻结的 requestId 和原 payload 安全重试；只有服务端此前已接受的同一请求才返回原 Run。
 
 JSON 编辑器保留未提交文本并上报本地格式状态；无效 JSON 会阻止手动运行提交。参数值回调不透传成原生 DOM `change` 监听器，避免把 Event 对象当成参数。
 
 ## Automation 运行历史
 
-Automation 的 Runs 页展示该 Automation 所有 Revision 的运行记录，并保留可展开的手动运行表单。可按 Queued、Running、Completed、Failed、Cancelling、Cancelled 筛选，点击记录打开已有 Run 详情。状态统计始终表示当前 Automation 的全部记录，不随状态筛选缩小；记录包含其冻结的 Revision ID。
+Automation 的 Runs 页展示该 Automation 所有 Revision 的运行记录；未归档 Automation 还提供可展开的手动运行表单。可按 Queued、Running、Completed、Failed、Cancelling、Cancelled 筛选，点击记录打开已有 Run 详情。状态统计始终表示当前 Automation 的全部记录，不随状态筛选缩小；记录包含其冻结的 Revision ID。归档 Automation 只读，保留历史查询但不提供新 Run 表单。
 
 `numen:runs-index@1` 增加可选的 `automationId`、`status` 参数，省略时保持全局列表行为。不存在的 Automation 返回 404。Scheduler 在 SQL 中筛选并按 `(created_at DESC, id DESC)` 取最多 20 条页面记录（底层接口最多 50 条），再汇总该页 Execution/Attempt 数量。相同时间戳使用 ID 排序，避免不稳定翻页；游标绑定 Automation 和状态，跨筛选条件使用会返回 `RUN_CURSOR_SCOPE_MISMATCH`。
 
 Previous/Next 保存当前筛选下的游标路径。切换状态或 Automation 会从第一页开始，Latest runs 回到当前状态的第一页并刷新。Run invalidation 更新当前页及统计，手动接受 Run 后也会刷新；页面不把新记录插入正在浏览的旧页。列表是实时视图而非数据库快照：状态变化可能使记录进入或离开筛选结果，用户可回到第一页查看最新状态。列表卸载时查询和订阅随 Vue scope 清理。
 
 手机端编号列截断展示，状态保留在首屏，其余列可横向滚动查看。加载、查询失败、无运行记录和筛选为空分别展示明确状态。
+
+## Automation 生命周期
+
+- 归档会写入 `archived_at` 并递增激活代数。触发订阅立即卸载，旧代数的迟到事件会被 Scheduler 拒绝；已接受的 Run 继续执行，Automation 的启用意图、Draft、Revision 和 Run 历史都会保留。
+- 默认 Automation 列表隐藏归档记录，归档筛选器可查看记录、恢复或永久移除。恢复会清除归档时间并再次递增激活代数；如果恢复时仍处于启用状态且有激活 Revision，触发订阅会按当前状态重新建立。
+- 归档后不显示手动运行表单，也会拒绝新的手动 Run；先前已接受的请求仍可按相同 requestId 安全重试。
+- 永久移除只接受已归档 Automation。只要关联 Run 仍处于排队、运行或取消处理中，就必须先等待完成或取消；通过后在一个数据库事务内清除 Automation、Draft、Revision 和全部 Run 历史。
+- Run 删除同时释放其 Execution 的资源所有权。共享资源、仍被其他对象拥有的资源及有效租约不会被清除；没有其他所有者的资源进入现有延迟垃圾回收流程。

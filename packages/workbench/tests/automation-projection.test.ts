@@ -1,4 +1,4 @@
-import type { AutomationSource } from '@numen/core'
+import type { AutomationSource } from '@numenjs/core'
 import { describe, expect, it } from 'vitest'
 import { projectAutomationSteps } from '../src/automation-projection.js'
 

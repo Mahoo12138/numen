@@ -1,4 +1,4 @@
-import { DatabaseService } from '@numen/database'
+import { DatabaseService } from '@numenjs/database'
 import { Context } from 'cordis'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'

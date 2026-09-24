@@ -1,4 +1,4 @@
-import type { AutomationSource, BlockSource, ControlSource, NumenValue, TriggerSource, ValueExpr } from '@numen/core'
+import type { AutomationSource, BlockSource, ControlSource, NumenValue, TriggerSource, ValueExpr } from '@numenjs/core'
 import type { WorkbenchAutomationInsertItem } from './contracts.js'
 
 export type AutomationSourceCommand =

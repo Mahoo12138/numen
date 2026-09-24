@@ -118,6 +118,7 @@ export function AutomationEditor({
     ? detailState.data
     : undefined
   const automationName = detail?.automation.name ?? (live ? 'Automation' : previewAutomation.label)
+  const archived = !!detail?.automation.archivedAt
   const steps = detail ? (projectedSteps ?? []) : automationSteps
   const selectedNodeId = steps.find(step => step.id === activeStepId)?.sourceId
   const editOptions = detail ? automationStepEditOptions(detail.draft.source, selectedNodeId) : undefined
@@ -132,6 +133,7 @@ export function AutomationEditor({
             <span class="breadcrumb">{t('workbench.automations')}{automationName}</span>
             <div class="automation-title"><h1>{automationName}</h1>{detail ? (
               <span class="automation-badges">
+                {archived ? <em data-tone="archived">{t('workbench.archived')}</em> : null}
                 <em data-tone={detail.automation.enabled ? 'enabled' : 'disabled'}>{detail.automation.enabled ? t('workbench.enabled') : t('workbench.disabled')}</em>
                 <em>{t('workbench.draftV')}{detail.draft.version}</em>
                 <em>{latestRevision ? t('workbench.publishedRValue0', { value0: latestRevision.number }) : t('workbench.noRevisions')}</em>
@@ -190,6 +192,7 @@ export function AutomationEditor({
         </nav>
       </header>
       {activation?.error ? <section class="authoring-notice" data-tone="error" role="alert"><span>{activation.error}</span></section> : null}
+      {archived ? <section class="authoring-notice" data-tone="conflict" role="status"><span>{t('workbench.archivedAutomationReadOnly')}</span></section> : null}
       {authoring?.conflict ? (conflictRecovery ??
         <section class="authoring-notice" data-tone="conflict" role="alert">
           <span><strong>{t('workbench.draftChangedElsewhere')}</strong>{t('workbench.localVersion')}{authoring.conflict.expectedVersion}{t('workbench.cannotOverwriteServerVersion')}{authoring.conflict.actualVersion}.</span>

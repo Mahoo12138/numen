@@ -1,6 +1,6 @@
 import { diagnosticText, t } from './i18n.js'
-import type { AutomationSource, CapabilitySource, CompileDiagnostic, NumenValue, TriggerSource, ValueExpr } from '@numen/core'
-import type { SchemaUIResolver } from '@numen/webui/schema-ui'
+import type { AutomationSource, CapabilitySource, CompileDiagnostic, NumenValue, TriggerSource, ValueExpr } from '@numenjs/core'
+import type { SchemaUIResolver } from '@numenjs/webui/schema-ui'
 import { AlertCircle } from '@lucide/vue'
 import type {
   WorkbenchAutomationConnectionOption,

@@ -1,6 +1,6 @@
 import { diagnosticText, t } from './i18n.js'
-import { automationInputTypes, isAutomationInputName, validateAutomationInputDeclarations, type AutomationInputDeclaration, type AutomationSource, type CompileDiagnostic, type NumenValue } from '@numen/core'
-import type { SchemaUIResolver } from '@numen/webui/schema-ui'
+import { automationInputTypes, isAutomationInputName, validateAutomationInputDeclarations, type AutomationInputDeclaration, type AutomationSource, type CompileDiagnostic, type NumenValue } from '@numenjs/core'
+import type { SchemaUIResolver } from '@numenjs/webui/schema-ui'
 import { h, ref } from 'vue'
 import type { WorkbenchSchemaField } from './contracts.js'
 import { coreSchemaLiteralRenderers, type SchemaLiteralRenderer } from './SchemaRenderers.js'

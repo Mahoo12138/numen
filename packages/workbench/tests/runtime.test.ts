@@ -3,7 +3,7 @@ import {
   ConsoleEntryRegistry,
   ConsoleService,
   SingleUserConsoleAuthService,
-} from '@numen/console'
+} from '@numenjs/console'
 import { Context } from 'cordis'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -14,6 +14,9 @@ import {
   workbenchRuntimePlugin,
 } from '../src/runtime.js'
 import {
+  workbenchArchiveAutomationActionRef,
+  workbenchRestoreAutomationActionRef,
+  workbenchRemoveArchivedAutomationActionRef,
   workbenchAutomationDetailQueryRef,
   workbenchActivateAutomationRevisionActionRef,
   workbenchSetAutomationEnabledActionRef,
@@ -66,6 +69,11 @@ describe('Workbench Runtime plugin', () => {
       id: coreWorkbenchEntryId,
       prod: entrySource,
     }])
+    for (const ref of [workbenchArchiveAutomationActionRef, workbenchRestoreAutomationActionRef, workbenchRemoveArchivedAutomationActionRef]) {
+      expect(root.console.get(ref), `${ref.id}@${ref.version} must exist before providers load`).toMatchObject({
+        definition: { ...ref, kind: 'action' }, providerAvailable: false,
+      })
+    }
     expect(root.console.get(workbenchAutomationDetailQueryRef)).toMatchObject({ providerAvailable: false })
     expect(root.console.get(workbenchAutomationInsertCatalogQueryRef)).toMatchObject({ providerAvailable: false })
     expect(root.console.get(workbenchAutomationVariableCatalogQueryRef)).toMatchObject({ providerAvailable: false })
@@ -94,6 +102,9 @@ describe('Workbench Runtime plugin', () => {
 
     await fiber.dispose()
     expect(root.consoleEntries.list()).toEqual([])
+    for (const ref of [workbenchArchiveAutomationActionRef, workbenchRestoreAutomationActionRef, workbenchRemoveArchivedAutomationActionRef]) {
+      expect(root.console.get(ref)).toBeUndefined()
+    }
     expect(root.console.get(workbenchAutomationDetailQueryRef)).toBeUndefined()
     expect(root.console.get(workbenchAutomationInsertCatalogQueryRef)).toBeUndefined()
     expect(root.console.get(workbenchAutomationVariableCatalogQueryRef)).toBeUndefined()

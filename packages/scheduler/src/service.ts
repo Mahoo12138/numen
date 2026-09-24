@@ -1,5 +1,7 @@
-import '@numen/automation'
-import { ConnectionBindingError, ConnectionRuntimeUnavailableError, type ConnectionService } from '@numen/connections'
+import { withLogContext } from '@numenjs/logging'
+import '@numenjs/automation'
+import { AutomationArchivedError } from '@numenjs/automation'
+import { ConnectionBindingError, ConnectionRuntimeUnavailableError, type ConnectionService } from '@numenjs/connections'
 import {
   capabilityKey,
   resolveAutomationInputs,
@@ -17,9 +19,9 @@ import {
   type TriggerAcceptance,
   type TriggerBinding,
   type TriggerEmission,
-} from '@numen/core'
-import '@numen/database'
-import '@numen/resources'
+} from '@numenjs/core'
+import '@numenjs/database'
+import '@numenjs/resources'
 import { Service, type Context } from 'cordis'
 import { createHash, randomUUID } from 'node:crypto'
 import { evaluateExpression, type EvaluationBindings } from './evaluator.js'
@@ -352,6 +354,7 @@ export class SchedulerService extends Service {
       }
       const automation = this.ctx.automations.get(automationId)
       if (!automation) throw new Error(`automation not found: ${automationId}`)
+      if (automation.archivedAt) throw new AutomationArchivedError(`automation is archived: ${automationId}`)
       if (!automation.activeRevisionId) throw new Error(`automation has no active revision: ${automationId}`)
       if (expectedRevisionId !== undefined && automation.activeRevisionId !== expectedRevisionId) throw new ManualRunRevisionConflictError()
       const revision = this.ctx.automations.getRevision(automation.activeRevisionId)!
@@ -782,6 +785,8 @@ export class SchedulerService extends Service {
     this.scheduleRunChange(runId)
   }
 
+  private readonly loggedRunStates = new Map<string, string>()
+
   private scheduleRunChange(runId: string): void {
     this.pendingRunChanges.add(runId)
     if (this.runChangeScheduled) return
@@ -790,7 +795,18 @@ export class SchedulerService extends Service {
       this.runChangeScheduled = false
       const runIds = [...this.pendingRunChanges]
       this.pendingRunChanges.clear()
-      for (const changedRunId of runIds) this.ctx.emit('numen/run-change', changedRunId)
+      if (!this.ready) return
+      for (const changedRunId of runIds) {
+        const run = this.getRun(changedRunId)
+        if (run && this.loggedRunStates.get(run.id) !== run.status) {
+          this.loggedRunStates.set(run.id, run.status)
+          if (this.loggedRunStates.size > 2000) this.loggedRunStates.delete(this.loggedRunStates.keys().next().value!)
+          withLogContext({ runId: run.id, automationId: run.automationId, traceId: run.id }, () => {
+            this.ctx.logger('scheduler')[run.status === 'FAILED' ? 'warn' : 'info']('Run %s', run.status)
+          })
+        }
+        this.ctx.emit('numen/run-change', changedRunId)
+      }
     })
   }
 
@@ -1043,19 +1059,27 @@ export class SchedulerService extends Service {
     })
     if (!claimed) return
 
+    const run = this.getRun(execution.runId)
+    const logMetadata = {
+      ...(run ? { automationId: run.automationId } : {}), runId: execution.runId,
+      executionId: execution.id, attemptId, traceId: execution.runId,
+      ...(Object.keys(connectionIds).length === 1 ? { connectionId: Object.values(connectionIds)[0]! } : {}),
+    }
+    withLogContext(logMetadata, () => this.ctx.logger('scheduler').info('Attempt started'))
     const controller = new AbortController()
     this.activeInvocations.set(execution.id, { runId: execution.runId, controller })
     const timeoutMs = instruction.policy?.timeoutMs ?? contract.semantics.defaultTimeoutMs
     try {
-      const output = await this.invokeWithGuards(() => provider.invoke({
+      const output = await this.invokeWithGuards(() => withLogContext(logMetadata, () => provider.invoke({
           input: resolvedInput,
           connections,
           signal: controller.signal,
           idempotencyKey: attemptId,
-        }), controller, timeoutMs)
+        })), controller, timeoutMs)
       const validatedOutput = status.definition.output(output)
       if (!isNumenValue(validatedOutput)) throw new Error('capability output is not a Numen value')
       this.completeInvocation(execution, attemptId, instruction.next, validatedOutput)
+      withLogContext(logMetadata, () => this.ctx.logger('scheduler').info('Attempt completed'))
     } catch (error) {
       if (error instanceof InvocationCancelledError) return
       const timedOut = error instanceof InvocationTimeoutError
@@ -1068,6 +1092,7 @@ export class SchedulerService extends Service {
         timedOut ? 'TIMED_OUT' : 'FAILED',
         errorValue(error),
       )
+      withLogContext(logMetadata, () => this.ctx.logger('scheduler').warn(timedOut ? 'Attempt timed out' : 'Attempt failed'))
     } finally {
       this.activeInvocations.delete(execution.id)
     }

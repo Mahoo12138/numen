@@ -1,4 +1,4 @@
-import { writeConfig } from '@numen/config'
+import { writeConfig } from '@numenjs/config'
 import { createServer, type Server } from 'node:http'
 import { connect, type Socket } from 'node:net'
 import { mkdtemp, rm } from 'node:fs/promises'

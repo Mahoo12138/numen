@@ -28,6 +28,7 @@ test.beforeAll(async () => {
   await writeConfig(configPath, {
     version: 1,
     dataDir: 'data',
+    logger: { console: false, capacity: 250, levels: { base: 2, e2e: 3 } },
     plugins: {
       database: { path: 'data/numen.db' },
       capabilities: {},
@@ -53,6 +54,7 @@ test.beforeAll(async () => {
       workbenchConnections: {},
       workbenchCredentials: {},
       workbenchHome: {},
+      workbenchLogs: {},
       workbenchInvalidation: {},
       workbenchRuns: {},
       consoleSession: {},
@@ -210,4 +212,80 @@ test.describe('Workbench localization', () => {
     } }] })
     expect(errors).toEqual([])
   })
+})
+
+test('shows authenticated live logs, recovers from a lost query and WebSocket, and bounds history', async ({ page }, testInfo) => {
+  const errors: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
+  let socket: { close(): void } | undefined
+  await page.routeWebSocket('**/api/console/subscribe', route => { socket = route.connectToServer() })
+  const unauthorized = await fetch(new URL('/api/console/call', application.serverUrl), {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ kind: 'query', procedure: 'numen:logs@1', input: {} }),
+  })
+  expect(unauthorized.status).toBe(401)
+  await page.goto(application.workbenchUrl!)
+  await page.getByRole('button', { name: 'System', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Runtime logs', exact: true })).toBeVisible()
+  const view = page.getByRole('region', { name: 'Runtime logs', exact: true })
+  await view.getByLabel('Namespace', { exact: true }).fill('e2e')
+  await view.getByLabel('Namespace', { exact: true }).press('Tab')
+  const logger = application.context.logger('e2e:logger')
+  logger.info('literal <script>window.logExecuted=true</script> token=%s', 'e2e-secret-token')
+  await expect(view.locator('.log-record pre')).toContainText(['literal <script>window.logExecuted=true</script> token=[REDACTED]'])
+  expect(await page.evaluate(() => (window as unknown as Record<string, unknown>).logExecuted)).toBeUndefined()
+  await expect(view).not.toContainText('e2e-secret-token')
+  logger.debug('debug-visible-only-when-requested')
+  await expect(view).not.toContainText('debug-visible-only-when-requested')
+  await view.getByLabel('Level', { exact: true }).selectOption('3')
+  await expect(view).toContainText('debug-visible-only-when-requested')
+  // Live redraws must not overwrite a partially typed, uncommitted filter.
+  await view.getByLabel('Search messages', { exact: true }).fill('pending filter')
+  logger.info('while-filter-is-focused')
+  await expect(view).toContainText('while-filter-is-focused')
+  await expect(view.getByLabel('Search messages', { exact: true })).toHaveValue('pending filter')
+  await view.getByLabel('Search messages', { exact: true }).fill('')
+  await view.getByLabel('Search messages', { exact: true }).press('Tab')
+  await view.getByRole('button', { name: 'Pause updates' }).click()
+  await expect(view.getByText('Loading…', { exact: true })).toHaveCount(0)
+  logger.warn('arrived-while-paused')
+  await page.waitForTimeout(600)
+  await expect(view).not.toContainText('arrived-while-paused')
+  await view.getByRole('button', { name: 'Follow updates' }).click()
+  await expect(view).toContainText('arrived-while-paused')
+  socket!.close()
+  logger.warn('arrived-during-reconnect')
+  await expect(view).toContainText('arrived-during-reconnect')
+  await expect(view.locator('.log-record pre').filter({ hasText: 'arrived-during-reconnect' })).toHaveCount(1)
+  let failNext = true
+  await page.route('**/api/console/call', async route => {
+    if (route.request().postDataJSON()?.procedure === 'numen:logs@1' && failNext) { failNext = false; await route.abort(); return }
+    await route.continue()
+  })
+  logger.info('refresh-after-network-failure')
+  await expect(view.getByRole('alert')).toContainText('Logs could not be refreshed')
+  await view.getByRole('button', { name: 'Try again' }).click()
+  await expect(view).toContainText('refresh-after-network-failure')
+  for (let index = 0; index < 280; index++) logger.info('flood-%d', index)
+  await expect(view.locator('.log-record')).toHaveCount(100)
+  await expect(view).toContainText('flood-279')
+  await view.getByRole('button', { name: 'Older logs' }).click()
+  await expect(view).toContainText('flood-179')
+  await expect(view).not.toContainText('flood-279')
+  await view.getByRole('button', { name: 'Latest logs' }).click()
+  await expect(view).toContainText('flood-279')
+  await page.screenshot({ path: testInfo.outputPath('logs-desktop.png') })
+  await page.getByRole('combobox', { name: 'Language', exact: true }).selectOption('zh-CN')
+  await expect(page.getByRole('heading', { name: '系统日志', exact: true })).toBeVisible()
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(page.getByRole('button', { name: '暂停更新', exact: true })).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  await page.screenshot({ path: testInfo.outputPath('logs-mobile.png') })
+  await page.getByRole('tab', { name: '日志', exact: true }).click()
+  const panel = page.locator('.logs-panel-content')
+  await expect(panel.locator('.log-record')).toHaveCount(100)
+  expect(await panel.evaluate(element => element.getBoundingClientRect().bottom <= window.innerHeight)).toBe(true)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  await page.screenshot({ path: testInfo.outputPath('logs-panel-mobile.png') })
+  expect(errors).toEqual([])
 })

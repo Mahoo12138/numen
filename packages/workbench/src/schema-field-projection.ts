@@ -1,4 +1,4 @@
-import { isNumenValue } from '@numen/core'
+import { isNumenValue } from '@numenjs/core'
 import type Schema from 'schemastery'
 import z from 'schemastery'
 import type { WorkbenchSchemaField } from './contracts.js'

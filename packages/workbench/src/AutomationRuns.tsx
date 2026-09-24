@@ -32,19 +32,19 @@ const statusOptions = () => [
 ]
 const time = formatDateTime
 
-interface AutomationRunsProps extends WorkbenchPageProps { automationId: string }
-export const AutomationRuns = defineSetupComponent<AutomationRunsProps>('AutomationRuns', ['automationId', 'consoleClient', 'schemaUI', 'navigation'], props => {
+interface AutomationRunsProps extends WorkbenchPageProps { automationId: string; archived?: boolean }
+export const AutomationRuns = defineSetupComponent<AutomationRunsProps>('AutomationRuns', ['automationId', 'archived', 'consoleClient', 'schemaUI', 'navigation'], props => {
   const position = reactive<RunHistoryPosition>({ status: '', history: [] })
   const input = computed<WorkbenchRunsQueryInput>(() => ({ automationId: props.automationId, limit: 20,
     ...(position.status ? { status: position.status } : {}), ...(position.cursor ? { cursor: position.cursor } : {}),
   }))
   const [index, reload] = useConsoleQuery<WorkbenchRunsQueryInput, WorkbenchRunsIndex>(() => props.consoleClient, workbenchRunsIndexQueryRef, input, 'runs')
   return () => <section class="automation-runs">
-    <details class="automation-run-launcher">
+    {!props.archived ? <details class="automation-run-launcher">
       <summary>{t('workbench.runManually')}</summary>
       <ManualRunForm automationId={props.automationId} {...(props.consoleClient ? { consoleClient: props.consoleClient } : {})}
         {...(props.schemaUI ? { schemaUI: props.schemaUI } : {})} {...(props.navigation ? { navigation: props.navigation } : {})} />
-    </details>
+    </details> : null}
     <section aria-label={t('workbench.automationRunHistory')}>
       <div class="automation-run-heading"><div><h2>{t('workbench.runHistory')}</h2><p>{t('workbench.allRevisionsNewestFirst20PerPage')}</p></div>
         <button class="secondary-button" disabled={index.status === 'LOADING'} onClick={() => { delete position.cursor; position.history = []; reload() }} type="button">{t('workbench.latestRuns')}</button>

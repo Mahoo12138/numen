@@ -1,0 +1,52 @@
+{
+  "name": "@numenjs/components",
+  "version": "0.1.0",
+  "description": "Shared Vue components for Numen applications and frontend plugins",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./style.css": "./dist/style.css",
+    "./vite": {
+      "types": "./dist/vite.d.ts",
+      "import": "./dist/vite.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "dist/**/*.css",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -b && vite build",
+    "prepack": "pnpm build"
+  },
+  "peerDependencies": {
+    "vue": "^3.5.0",
+    "vite": "^7.3.2"
+  },
+  "peerDependenciesMeta": {
+    "vite": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "vue": "^3.5.0",
+    "@vue/server-renderer": "^3.5.0",
+    "@lucide/vue": "^1.33.0",
+    "vite": "^7.3.2"
+  }
+}

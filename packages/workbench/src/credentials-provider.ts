@@ -6,9 +6,9 @@ import {
   CredentialTypeUnavailableError,
   CredentialValidationError,
   type CredentialMetadata,
-} from '@numen/credentials'
-import type { NumenValue } from '@numen/core'
-import { ConsoleProcedureError, type ConsoleActionDefinition, type ConsoleQueryDefinition } from '@numen/console'
+} from '@numenjs/credentials'
+import type { NumenValue } from '@numenjs/core'
+import { ConsoleProcedureError, type ConsoleActionDefinition, type ConsoleQueryDefinition } from '@numenjs/console'
 import type { Context } from 'cordis'
 import z from 'schemastery'
 import {

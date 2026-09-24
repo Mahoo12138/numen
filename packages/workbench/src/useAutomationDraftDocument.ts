@@ -1,4 +1,4 @@
-import type { AutomationSource, CompileDiagnostic, NumenValue, ValueExpr } from '@numen/core'
+import type { AutomationSource, CompileDiagnostic, NumenValue, ValueExpr } from '@numenjs/core'
 import {
   shallowRef,
   toValue,
@@ -424,6 +424,7 @@ export interface AutomationDraftDocumentModel {
   undo(): void
   redo(): void
   publish(): void
+  flushDraft(signal?: AbortSignal): Promise<boolean>
   reload(): void
   retrySave(): void
 }
@@ -559,6 +560,42 @@ export function useAutomationDraftDocument({
   const undo = () => dispatch({ type: 'UNDO' })
   const redo = () => dispatch({ type: 'REDO' })
   const publish = () => dispatch({ type: 'PUBLISH_REQUEST' })
+  const flushDraft = (signal?: AbortSignal): Promise<boolean> => {
+    const initial = state.value
+    const automationId = initial.document?.automationId
+    if (!automationId || (initial.savePhase === 'CLEAN' && !initial.publishPending)) return Promise.resolve(true)
+    if (signal?.aborted || initial.savePhase === 'ERROR' || initial.savePhase === 'CONFLICT') return Promise.resolve(false)
+    if (initial.savePhase === 'DIRTY') dispatch({ type: 'SAVE_REQUEST' })
+
+    const currentOutcome = (): boolean | undefined => {
+      const current = state.value
+      if (current.selectedAutomationId !== automationId) return false
+      if (current.savePhase === 'ERROR' || current.savePhase === 'CONFLICT') return false
+      if (current.savePhase === 'CLEAN' && !current.publishPending) return true
+      return undefined
+    }
+    const outcome = currentOutcome()
+    if (outcome !== undefined) return Promise.resolve(outcome)
+
+    return new Promise(resolve => {
+      let settled = false
+      const finish = (result: boolean) => {
+        if (settled) return
+        settled = true
+        stop()
+        signal?.removeEventListener('abort', onAbort)
+        resolve(result)
+      }
+      const onAbort = () => finish(false)
+      const stop = watch(() => state.value, current => {
+        if (signal?.aborted || current.selectedAutomationId !== automationId) { finish(false); return }
+        if (current.savePhase === 'DIRTY') dispatch({ type: 'SAVE_REQUEST' })
+        const nextOutcome = currentOutcome()
+        if (nextOutcome !== undefined) finish(nextOutcome)
+      })
+      signal?.addEventListener('abort', onAbort, { once: true })
+    })
+  }
   const reload = () => {
     dispatch({ type: 'RELOAD' })
     reloadDetail()
@@ -612,6 +649,7 @@ export function useAutomationDraftDocument({
     undo,
     redo,
     publish,
+    flushDraft,
     reload,
     retrySave,
   }

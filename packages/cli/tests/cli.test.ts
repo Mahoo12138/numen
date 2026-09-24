@@ -1,4 +1,4 @@
-import { writeConfig } from '@numen/config'
+import { writeConfig } from '@numenjs/config'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'

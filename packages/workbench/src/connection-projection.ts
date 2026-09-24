@@ -1,4 +1,4 @@
-import type { Connection, ConnectionRuntimeState } from '@numen/connections'
+import type { Connection, ConnectionRuntimeState } from '@numenjs/connections'
 import type { WorkbenchConnectionIndexItem, WorkbenchConnectionStatus } from './contracts.js'
 
 function connectionStatus(connection: Connection, runtime: ConnectionRuntimeState): WorkbenchConnectionStatus {

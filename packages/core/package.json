@@ -1,7 +1,6 @@
 {
-  "name": "@numen/core",
+  "name": "@numenjs/core",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -12,9 +11,23 @@
     }
   },
   "peerDependencies": {
-    "cordis": "^4.0.0-rc.8"
+    "cordis": "4.0.0-rc.8"
   },
   "dependencies": {
     "schemastery": "^3.18.0"
-  }
+  },
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "prepack": "pnpm build"
+  },
+  "description": "Automation contracts, capabilities, and expressions for Numen plugins"
 }

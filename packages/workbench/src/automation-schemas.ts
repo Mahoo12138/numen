@@ -1,4 +1,4 @@
-import type { AutomationSource, NumenValue } from '@numen/core'
+import type { AutomationSource, NumenValue } from '@numenjs/core'
 import z from 'schemastery'
 
 export const automationIdSchema = z.string().pattern(/^auto_[a-f0-9]{32}$/).required()
@@ -9,6 +9,7 @@ export const automationIdentityFields = {
   enabled: z.boolean().required(),
   activeRevisionId: z.string(),
   activationGeneration: z.number().required(),
+  archivedAt: z.string(),
   createdAt: z.string().required(),
   updatedAt: z.string().required(),
 }

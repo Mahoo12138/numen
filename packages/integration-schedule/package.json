@@ -1,5 +1,5 @@
 {
-  "name": "@numen/integration-schedule",
+  "name": "@numenjs/integration-schedule",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -12,19 +12,19 @@
     }
   },
   "peerDependencies": {
-    "cordis": "^4.0.0-rc.8"
+    "cordis": "4.0.0-rc.8"
   },
   "dependencies": {
-    "@numen/core": "workspace:*",
+    "@numenjs/core": "workspace:*",
     "schemastery": "^3.18.0"
   },
   "devDependencies": {
-    "@numen/automation": "workspace:*",
-    "@numen/connections": "workspace:*",
-    "@numen/credentials": "workspace:*",
-    "@numen/database": "workspace:*",
-    "@numen/resources": "workspace:*",
-    "@numen/scheduler": "workspace:*",
-    "@numen/triggers": "workspace:*"
+    "@numenjs/automation": "workspace:*",
+    "@numenjs/connections": "workspace:*",
+    "@numenjs/credentials": "workspace:*",
+    "@numenjs/database": "workspace:*",
+    "@numenjs/resources": "workspace:*",
+    "@numenjs/scheduler": "workspace:*",
+    "@numenjs/triggers": "workspace:*"
   }
 }

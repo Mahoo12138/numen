@@ -9,3 +9,5 @@ test-results/
 .DS_Store
 .env
 !.env.example
+examples/*/dist/
+artifacts/npm/

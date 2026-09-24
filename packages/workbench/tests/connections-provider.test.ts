@@ -3,10 +3,10 @@ import {
   ConsoleProcedureUnavailableError,
   ConsoleService,
   type ConsoleRequestContext,
-} from '@numen/console'
-import { ConnectionService } from '@numen/connections'
-import { CredentialService } from '@numen/credentials'
-import { DatabaseService } from '@numen/database'
+} from '@numenjs/console'
+import { ConnectionService } from '@numenjs/connections'
+import { CredentialService } from '@numenjs/credentials'
+import { DatabaseService } from '@numenjs/database'
 import { Context, type Logger } from 'cordis'
 import z from 'schemastery'
 import { describe, expect, it } from 'vitest'

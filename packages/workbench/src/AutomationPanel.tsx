@@ -1,5 +1,6 @@
+import { LogsView, type LogsViewProps } from './LogsView.js'
 import { diagnosticText, t, plural } from './i18n.js'
-import type { CompileDiagnostic, SourceRef } from '@numen/core'
+import type { CompileDiagnostic, SourceRef } from '@numenjs/core'
 import { AlertTriangle, Save } from '@lucide/vue'
 import { ref, watch } from 'vue'
 import type { AutomationDraftSavePhase } from './useAutomationDraftDocument.js'
@@ -7,13 +8,13 @@ import { defineSetupComponent } from './vue-component.js'
 
 const panelTabs = ['Problems', 'Preview', 'Logs'] as const
 
-interface AutomationPanelProps {
+interface AutomationPanelProps extends Pick<LogsViewProps, 'consoleClient' | 'automationId'> {
   problems: CompileDiagnostic[]
   preview?: boolean
   onProblemSelect(source: SourceRef): void
 }
 
-export const AutomationPanel = defineSetupComponent<AutomationPanelProps>('AutomationPanel', ['problems', 'preview', 'onProblemSelect'], props => {
+export const AutomationPanel = defineSetupComponent<AutomationPanelProps>('AutomationPanel', ['problems', 'preview', 'onProblemSelect', 'consoleClient', 'automationId'], props => {
   const open = ref(false)
   const activeTab = ref('Problems')
 
@@ -46,7 +47,7 @@ export const AutomationPanel = defineSetupComponent<AutomationPanelProps>('Autom
         >⌃</button>
       </div>
       {open.value ? (
-        <div class="panel-content automation-panel-content">
+        <div class={['panel-content automation-panel-content', activeTab.value === 'Logs' && 'logs-panel-content']}>
           {activeTab.value === 'Problems' ? (
             props.problems.length ? props.problems.map((problem, index) => (
               <button
@@ -60,7 +61,7 @@ export const AutomationPanel = defineSetupComponent<AutomationPanelProps>('Autom
                 <code>{[problem.source?.nodeId, problem.source?.fieldPath].filter(Boolean).join(' · ') || t('workbench.automation')}</code>
               </button>
             )) : <p>{t('workbench.noPublishProblemsForTheCurrentLocalDraft')}</p>
-          ) : <p>{t('workbench.panelOutput', { panel: t(`workbench.tabs.${activeTab.value}`) })}</p>}
+          ) : activeTab.value === 'Logs' ? <LogsView compact {...(props.consoleClient ? { consoleClient: props.consoleClient } : {})} {...(props.automationId ? { automationId: props.automationId } : {})} /> : <p>{t('workbench.panelOutput', { panel: t(`workbench.tabs.${activeTab.value}`) })}</p>}
         </div>
       ) : null}
     </section>

@@ -1,5 +1,5 @@
-import type { ConsoleEntryManifest } from '@numen/console'
-import { I18nService } from '@numen/i18n'
+import type { ConsoleEntryManifest } from '@numenjs/console'
+import { I18nService } from '@numenjs/i18n'
 import { Context, type Plugin } from 'cordis'
 import { describe, expect, it, vi } from 'vitest'
 import {

@@ -6,7 +6,7 @@ import { Inspector } from '../src/Inspector.js'
 import { AutomationSidebar } from '../src/AutomationSidebar.js'
 import { projectAutomationSteps } from '../src/automation-projection.js'
 import { coreSchemaLiteralRenderers } from '../src/SchemaRenderers.js'
-import type { SchemaUIResolver } from '@numen/webui/schema-ui'
+import type { SchemaUIResolver } from '@numenjs/webui/schema-ui'
 import type {
   WorkbenchAutomationDetail,
   WorkbenchAutomationInsertCatalog,

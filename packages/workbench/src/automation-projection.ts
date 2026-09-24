@@ -1,6 +1,6 @@
-import { interpolate, type MessageParams } from '@numen/i18n'
+import { interpolate, type MessageParams } from '@numenjs/i18n'
 import { enUS } from './locales/en-US.js'
-import type { AutomationSource, CompileDiagnostic, ControlSource, ValueExpr } from '@numen/core'
+import type { AutomationSource, CompileDiagnostic, ControlSource, ValueExpr } from '@numenjs/core'
 import { Boxes, Clock3, GitBranch, Network, Play, Radio, Repeat2, Zap } from '@lucide/vue'
 import type { AutomationStep } from './model.js'
 

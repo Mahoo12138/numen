@@ -1,7 +1,7 @@
 import type {
   ConsoleProcedureRef,
   ConsoleSubscriptionServerMessage,
-} from '@numen/console'
+} from '@numenjs/console'
 import type { Context } from 'cordis'
 
 export type BrowserWebSocketFactory = (url: string) => WebSocket

@@ -1,6 +1,6 @@
 # Numen Development Status
 
-> Last updated: 2026-09-22
+> Last updated: 2026-09-24
 >
 > Architecture baseline: V1 Draft in [`docs/`](docs/README.md)
 
@@ -216,6 +216,7 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Bounded SQL page aggregation, filtered pagination reset, and integrated manual Run launcher
 - [x] Durable idempotent manual Run submission, v12 migration, and same-request uncertain-response recovery
 - [x] Frozen cross-plugin Connection Runtime ABI with v13 legacy type adoption
+- [x] Automation archive/restore lifecycle, generation-fenced trigger shutdown, and transactional permanent removal with Run/resource cleanup (v14)
 - [x] Shared Cordis-native outbound HTTP substrate with global timeout, explicit/environment proxy selection, HTTP(S)/SOCKS adapters, scoped clients, cancellation, and typed errors
 - [x] Host-owned NO_PROXY routing with startup environment snapshots, domain/IP/port rules, per-redirect routing, and Effect-owned transport cleanup
 - [x] Built-in bounded `http:request` Action with text/JSON bodies, projected responses, secret-header redaction, scheme fencing, and full-stream timeout
@@ -230,7 +231,7 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 
 ### i18n after the 0.1.0 baseline
 
-- [x] Shared Node/browser `@numen/i18n` Cordis service using `@koishijs/i18n-utils@1.0.1`, with locale fallback, safe plain-text interpolation, references, override restoration, and Fiber-owned cleanup
+- [x] Shared Node/browser `@numenjs/i18n` Cordis service using `@koishijs/i18n-utils@1.0.1`, with locale fallback, safe plain-text interpolation, references, override restoration, and Fiber-owned cleanup
 - [x] Browser locale detection, local preference persistence, reactive Vue adapter, and English/Simplified Chinese Workbench catalogs
 - [x] Entry locale staging coupled to Page/Renderer snapshot activation; failed generations preserve the old dictionaries
 - [x] Localized navigation, authoring, catalog metadata, forms, statuses, dates, run events, and known diagnostic explanations; user Source/configuration and raw runtime data remain unchanged
@@ -238,6 +239,17 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 - [x] Catalog parity, interpolation parameters, Vue isolation/escaping, and production-browser language switching/reload/mobile/publish coverage
 - [x] Post-i18n release verification: 68 test files / 346 tests, 2 production-browser E2Es, build, config validation, and CLI doctor passed
 - [x] [Plugin API and UI integration guide](docs/18-i18n.md), with [pinned Koishi source research](docs/18-i18n-research.md)
+
+### Runtime logging after i18n
+
+- [x] Host-owned Cordis Exporter with namespace levels, time/diff formatting, NUMEN_LOG_LEVEL / NUMEN_DEBUG, and sanitized terminal / bounded history / rotating JSONL projections
+- [x] Async-local Run / Execution / Attempt, Connection, Trigger and Console request correlation; automatic plugin source snapshots
+- [x] Secret redaction before publication, guarded serialization, exporter reentry and failure isolation, rotation and malformed-tail recovery
+- [x] Authenticated logs Query and batched invalidation, stable older-page cursors, explicit expired windows and restart resets
+- [x] System / global / Automation logs, Run-to-logs navigation, pause/follow, filters, pagination, bilingual millisecond timestamps and responsive panels
+- [x] Verification: 71 test files / 358 tests, 3 production-browser E2Es, typecheck, build, config validation and doctor; continuous updates during slow queries do not starve responses
+- [x] Local Linux ARM64 image acceptance: correlated Run / Attempt logs survive volume-backed container recreation; stale cursors reset and Cron resumes
+- [x] [Logging configuration and plugin guide](docs/19-logging.md), with [pinned Koishi / Cordis research](docs/19-logging-research.md)
 
 ## Next
 
@@ -268,7 +280,7 @@ local release verification.
 
 - **Connection Runtime ABI seam — pass:** Connection Type is now distinct from Adapter and is persisted on each Connection. Capability slots target Type IDs, while Adapter Providers return a lifecycle wrapper whose `value` is the only object injected into Capability and Trigger Providers. ConnectionService is the deep module that owns type compatibility, READY validation, generation fencing, secret-backed open/close, and legacy v12 type adoption. Scheduler blocks before creating an Attempt with `CONNECTION_UNAVAILABLE` and resumes after readiness; Trigger subscriptions are recreated around Runtime generations. Providers no longer receive durable Connection IDs or lifecycle handles.
 
-- **Outbound HTTP seam — pass:** the Runtime installs one `ctx.http` service through `@numen/http`; Integration plugins declare that dependency and derive scoped clients with `extend()` instead of creating clients or agents. Host defaults own timeout and explicit or `NUMEN_HTTP_PROXY` selection, while request signals, status errors, response decoding, and HTTP(S)/SOCKS proxy transport remain on the Cordis interface. Host-owned `noProxy` / `NO_PROXY` rules match domain boundaries, IP literals, and optional ports without DNS lookup. Routing is evaluated for every redirect origin, and cached plugin proxy transports retire with their Effects. Tests cross a real local CONNECT proxy in both direct/proxy redirect directions and cover scoped headers, status errors, timeout, cancellation, startup environment precedence, and registration disposal.
+- **Outbound HTTP seam — pass:** the Runtime installs one `ctx.http` service through `@numenjs/http`; Integration plugins declare that dependency and derive scoped clients with `extend()` instead of creating clients or agents. Host defaults own timeout and explicit or `NUMEN_HTTP_PROXY` selection, while request signals, status errors, response decoding, and HTTP(S)/SOCKS proxy transport remain on the Cordis interface. Host-owned `noProxy` / `NO_PROXY` rules match domain boundaries, IP literals, and optional ports without DNS lookup. Routing is evaluated for every redirect origin, and cached plugin proxy transports retire with their Effects. Tests cross a real local CONNECT proxy in both direct/proxy redirect directions and cover scoped headers, status errors, timeout, cancellation, startup environment precedence, and registration disposal.
 
 - **HTTP Request Capability seam — pass:** `http:request` exposes only serializable method, URL, string headers/query, text-or-JSON body, and timeout inputs. The Provider uses the shared `ctx.http`, forwards cancellation, applies a full-operation timeout, reads the response stream under a hard byte limit, rejects non-HTTP(S) targets and binary payloads, redacts credential-bearing response headers, and projects every HTTP status into `{ ok, status, statusText, headers, bodyType, body }`. The conservative Action contract is non-idempotent and not retry-safe because method is dynamic. Integration tests execute through publish → manual Run → Scheduler and cover 418 output, request projection, secret redaction, scheme fencing, and oversize cancellation.
 
@@ -299,9 +311,9 @@ local release verification.
 - **Quick Picker command seam — pass:** the Palette is an ephemeral searchable picker rather than permanent library state, and every selection resolves to one generic Source command. Capability nodes preserve stable `{id, version}` references even when their Provider is unavailable, structured controls receive collision-free nested IDs, and invalid/incomplete shapes remain saveable Drafts for authoritative Publish validation. Capability titles are a read-only catalog projection; Source remains semantic truth.
 - **Schema authoring seam — pass:** the Workbench Provider serializes Capability input contracts into presentation-safe field descriptors while preserving required/default/range/role metadata. The Inspector consumes that typed projection and issues Source commands only; it does not import Schemastery schemas, Capability Providers, or runtime registries. Runtime-dependent choices remain outside Schema, and unsupported shapes use an explicit JSON fallback rather than inventing a second value contract.
 - **Connection binding seam — pass:** Capability and Trigger Source bind durable Connections by declared slot name, and the compiler carries the ID map into Core IR and the dependency manifest while snapshotting slot requirements. Publish validates slot existence, required bindings, Connection existence, and Connection Type compatibility. At execution, ConnectionService resolves those durable IDs to READY named Runtime values before Scheduler or Trigger Providers run. The deprecated single `connection` field is normalized only at the compiler/editing boundary for persisted protocol-v1 compatibility.
-- **Schema Renderer seam — pass:** `@numen/webui` owns a small `defineRenderer` / `resolveRenderer` interface with stable IDs, versions, collision checks, Role-first/type-fallback resolution, and Edit/View/Compact projections. Renderer registrations use the caller's Cordis Effect and participate in the same staged, validated, atomic Frontend Entry generation as Pages and Slots, so failed generations never leak renderers and unloading an Entry removes them automatically.
+- **Schema Renderer seam — pass:** `@numenjs/webui` owns a small `defineRenderer` / `resolveRenderer` interface with stable IDs, versions, collision checks, Role-first/type-fallback resolution, and Edit/View/Compact projections. Renderer registrations use the caller's Cordis Effect and participate in the same staged, validated, atomic Frontend Entry generation as Pages and Slots, so failed generations never leak renderers and unloading an Entry removes them automatically.
 - **Automation ValueExpr seam — pass:** the unified Workbench Field Shell owns Literal/Reference/Template mode selection and safe template parse/print, while plugin Renderer adapters receive only literal values and never learn the ValueExpr AST. Every committed mode change is one generic Source command; invalid transient Reference/Template text remains local, existing structured expressions are preserved when no visual editor exists, and Draft Source remains the sole semantic truth.
-- **Structured expression seam — pass:** `@numen/core` owns the protocol-v1 pure function catalog, metadata, arity contract, stringification, and deterministic evaluation; the compiler rejects unavailable or malformed Calls before publish, while Scheduler delegates runtime execution to the same catalog. Workbench recursively edits only stable Call AST nodes through the unified Field Shell, preserves unknown functions for repair, and keeps plugin Schema Renderers limited to Literal mode. Wait duration/until changes use the same typed Source command boundary and enforce exactly one durable wake source.
+- **Structured expression seam — pass:** `@numenjs/core` owns the protocol-v1 pure function catalog, metadata, arity contract, stringification, and deterministic evaluation; the compiler rejects unavailable or malformed Calls before publish, while Scheduler delegates runtime execution to the same catalog. Workbench recursively edits only stable Call AST nodes through the unified Field Shell, preserves unknown functions for repair, and keeps plugin Schema Renderers limited to Literal mode. Wait duration/until changes use the same typed Source command boundary and enforce exactly one durable wake source.
 - **Magic Variable catalog seam — pass:** Workbench exposes one stable typed Query whose optional Provider Adapter projects presentation-safe Capability output descriptors, including Triggers, without sending Schemastery or Provider implementations to the browser. A separate pure client module combines those descriptors with the current unsaved Draft to enforce lexical visibility, stable step IDs, target-type filtering, and explicit `core:to-string` conversion; the Picker only emits structured `ValueExpr` commands and never becomes semantic state.
 - **Vue field event boundary — pass:** interactive Field Shell and Input Field layers declare runtime props through the shared setup adapter, preventing native `change` events from falling through as domain callbacks. Reference, Template, and conversion insertion remain one command each, and browser QA confirms mode changes do not produce duplicate edits or console errors.
 - **Connection desired-state Action seam — pass:** Workbench defines one typed Action and an optional Provider Adapter maps it to `ConnectionService.setEnabled`; the durable `enabled + generation` pair remains authoritative and live Runtime status stays a separate projection. The Vue module owns only abortable in-flight intent, confirmed-generation overlay, and recoverable public errors, then reconciles through the existing typed invalidation/query path without introducing a second Connection store.
@@ -326,12 +338,12 @@ local release verification.
 ```text
 Typecheck: passing
 Build: passing
-Tests: 65 files, 336 tests passing
-Browser E2E: 1 Playwright test passing
+Tests: 71 files, 358 tests passing
+Browser E2E: 3 Playwright tests passing
 CLI config validate: passing
 CLI doctor: passing
 Docker image build/start/health/recreate: passing
-SQLite schema migration: v13
+SQLite schema migration: v14 (archive lifecycle migration added; current changes have not yet been release-verified)
 ```
 
 Run locally with:

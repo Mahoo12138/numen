@@ -1,5 +1,5 @@
-import { createRuntimeEntries, loadConfig } from '@numen/config'
-import { runtimeBuiltinNames, startRuntime } from '@numen/runtime'
+import { createRuntimeEntries, loadConfig } from '@numenjs/config'
+import { runtimeBuiltinNames, startRuntime } from '@numenjs/runtime'
 import { randomBytes } from 'node:crypto'
 import { access } from 'node:fs/promises'
 import { constants } from 'node:fs'

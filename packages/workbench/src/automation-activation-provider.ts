@@ -1,9 +1,10 @@
 import {
   AutomationActivationConflictError,
+  AutomationArchivedError,
   AutomationNotFoundError,
   AutomationRevisionNotFoundError,
-} from '@numen/automation'
-import { ConsoleProcedureError, type ConsoleActionDefinition } from '@numen/console'
+} from '@numenjs/automation'
+import { ConsoleProcedureError, type ConsoleActionDefinition } from '@numenjs/console'
 import type { Context } from 'cordis'
 import z from 'schemastery'
 import { automationIdSchema, automationIdentityFields } from './automation-schemas.js'
@@ -45,6 +46,9 @@ export const workbenchSetAutomationEnabledAction: ConsoleActionDefinition<
 }
 
 function publicActivationError(error: unknown): never {
+  if (error instanceof AutomationArchivedError) {
+    throw new ConsoleProcedureError(409, 'AUTOMATION_ARCHIVED', 'Restore this Automation before changing its activation.')
+  }
   if (error instanceof AutomationActivationConflictError) {
     throw new ConsoleProcedureError(409, 'AUTOMATION_ACTIVATION_CONFLICT', 'The Automation activation changed.', {
       expectedActivationGeneration: error.expectedGeneration,

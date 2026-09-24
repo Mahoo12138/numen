@@ -1,5 +1,5 @@
-import { isNumenValue, isResourceRef, type NumenValue } from '@numen/core'
-import '@numen/database'
+import { isNumenValue, isResourceRef, type NumenValue } from '@numenjs/core'
+import '@numenjs/database'
 import { Service, type Context } from 'cordis'
 import { createCipheriv, createDecipheriv, randomBytes, randomUUID } from 'node:crypto'
 import type Schema from 'schemastery'

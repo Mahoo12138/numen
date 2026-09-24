@@ -1,3 +1,4 @@
+import { validateLoggingConfig } from '@numenjs/logging/config'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, isAbsolute, resolve } from 'node:path'
 import { parse, stringify } from 'yaml'
@@ -21,6 +22,9 @@ export function validateConfig(value: unknown): NumenConfig {
   }
   if (typeof value.dataDir !== 'string' || !value.dataDir.trim()) {
     throw new ConfigError('config.dataDir must be a non-empty string')
+  }
+  if (value.logger !== undefined) {
+    try { validateLoggingConfig(value.logger) } catch (error) { throw new ConfigError((error as Error).message) }
   }
   assertRecord(value.plugins, 'config.plugins')
 

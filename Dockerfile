@@ -15,6 +15,7 @@ COPY packages/credentials/package.json packages/credentials/package.json
 COPY packages/database/package.json packages/database/package.json
 COPY packages/http/package.json packages/http/package.json
 COPY packages/i18n/package.json packages/i18n/package.json
+COPY packages/logging/package.json packages/logging/package.json
 COPY packages/integration-demo/package.json packages/integration-demo/package.json
 COPY packages/integration-http/package.json packages/integration-http/package.json
 COPY packages/integration-schedule/package.json packages/integration-schedule/package.json
@@ -23,11 +24,14 @@ COPY packages/runtime/package.json packages/runtime/package.json
 COPY packages/scheduler/package.json packages/scheduler/package.json
 COPY packages/triggers/package.json packages/triggers/package.json
 COPY packages/webui/package.json packages/webui/package.json
+COPY packages/components/package.json packages/components/package.json
 COPY packages/workbench/package.json packages/workbench/package.json
+COPY examples/components-plugin/package.json examples/components-plugin/package.json
 RUN --mount=type=cache,id=numen-pnpm-store,target=/pnpm/store \
   pnpm config set store-dir /pnpm/store \
   && pnpm install --frozen-lockfile
 COPY packages ./packages
+COPY examples ./examples
 RUN pnpm build
 
 FROM node:24-alpine AS runtime

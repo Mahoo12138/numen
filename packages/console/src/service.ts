@@ -1,3 +1,4 @@
+import { withLogContext } from '@numenjs/logging'
 import { Service, type Context, type Logger } from 'cordis'
 import type Schema from 'schemastery'
 
@@ -293,7 +294,7 @@ export class ConsoleService extends Service {
     const provider = this.requireProvider<AnyQueryProvider>(ref, entry)
     request.signal.throwIfAborted()
     const parsedInput = entry.definition.input(input)
-    const output = await provider.query({ input: parsedInput, request })
+    const output = await withLogContext({ requestId: request.requestId, traceId: request.requestId }, () => provider.query({ input: parsedInput, request }))
     request.signal.throwIfAborted()
     return entry.definition.output(output) as Output
   }
@@ -307,7 +308,8 @@ export class ConsoleService extends Service {
     const provider = this.requireProvider<AnyActionProvider>(ref, entry)
     request.signal.throwIfAborted()
     const parsedInput = entry.definition.input(input)
-    const output = await provider.action({ input: parsedInput, request })
+    withLogContext({ requestId: request.requestId, traceId: request.requestId }, () => request.logger.info('Console action %s', consoleProcedureKey(ref)))
+    const output = await withLogContext({ requestId: request.requestId, traceId: request.requestId }, () => provider.action({ input: parsedInput, request }))
     request.signal.throwIfAborted()
     return entry.definition.output(output) as Output
   }
@@ -350,11 +352,11 @@ export class ConsoleService extends Service {
     request.signal.addEventListener('abort', abort, { once: true })
 
     try {
-      const result = await provider.subscribe({
+      const result = await withLogContext({ requestId: request.requestId, traceId: request.requestId }, () => provider.subscribe({
         input: parsedInput,
         request,
         emit: event => emit(entry.definition.event(event) as Event),
-      })
+      }))
       cleanup = result ?? undefined
       if (entry.provider !== provider) {
         request.signal.removeEventListener('abort', abort)

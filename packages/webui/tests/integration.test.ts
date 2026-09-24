@@ -5,7 +5,7 @@ import {
   consoleHttpPlugin,
   consoleSessionPlugin,
   consoleWebSocketPlugin,
-} from '@numen/console'
+} from '@numenjs/console'
 import { Context } from 'cordis'
 import z from 'schemastery'
 import { expect, it, vi } from 'vitest'

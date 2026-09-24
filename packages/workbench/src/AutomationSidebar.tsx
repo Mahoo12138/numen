@@ -14,8 +14,14 @@ export interface AutomationSidebarProps {
   onCreate?(name: string): Promise<boolean>
   onCreateDismiss?(): void
   onReload?(): void
+  onArchiveViewChange?(archived: boolean): void
+  onArchive?(id: string, expectedActivationGeneration: number): Promise<boolean>
+  onRestore?(id: string, expectedActivationGeneration: number): Promise<boolean>
+  onRemoveArchived?(id: string, expectedArchivedAt: string): Promise<boolean>
   createError?: string
   creating?: boolean
+  mutationPending?: boolean
+  mutationError?: string
   state?: ConsoleQueryState<WorkbenchAutomationsIndex>
 }
 
@@ -23,13 +29,19 @@ interface AutomationSidebarItem {
   id: string
   label: string
   icon: typeof Network
+  activationGeneration?: number
   meta?: string
   enabled?: boolean
   published?: boolean
+  archived?: boolean
+  archivedAt?: string
+  activeRunCount?: number
+  runCount?: number
 }
 
 export const AutomationSidebar = defineSetupComponent<AutomationSidebarProps>('AutomationSidebar', [
   'activeId', 'onChange', 'onOpen', 'onCreate', 'onCreateDismiss', 'onReload', 'createError', 'creating', 'state',
+  'onArchiveViewChange', 'onArchive', 'onRestore', 'onRemoveArchived', 'mutationPending', 'mutationError',
 ], props => {
   const { t } = useWorkbenchI18n()
   const createOpen = ref(false)
@@ -56,6 +68,8 @@ export const AutomationSidebar = defineSetupComponent<AutomationSidebarProps>('A
     if (await props.onCreate(normalized)) {
       createOpen.value = false
       name.value = ''
+      filterStatus.value = 'all'
+      props.onArchiveViewChange?.(false)
     }
   }
   const items = computed<AutomationSidebarItem[]>(() => {
@@ -66,9 +80,14 @@ export const AutomationSidebar = defineSetupComponent<AutomationSidebarProps>('A
           id: item.id,
           label: item.name,
           icon: Network,
+          activationGeneration: item.activationGeneration,
           meta: t(`workbench.projection.draft.${item.revisionCount === 1 ? 'one' : 'other'}`, { version: item.draftVersion, count: item.revisionCount }),
           enabled: item.enabled,
           published: item.revisionCount > 0,
+          archived: !!item.archivedAt,
+          archivedAt: item.archivedAt,
+          activeRunCount: item.activeRunCount,
+          runCount: item.runCount,
         }))
         : []
     const query = filterQuery.value.trim().toLocaleLowerCase()
@@ -86,6 +105,18 @@ export const AutomationSidebar = defineSetupComponent<AutomationSidebarProps>('A
     menuAutomationId.value = undefined
     if (props.onOpen) props.onOpen(id, tab)
     else props.onChange(id)
+  }
+  const archive = async (item: AutomationSidebarItem) => {
+    if (!props.onArchive || !window.confirm(t('workbench.archiveAutomationConfirm', { value0: item.label }))) return
+    if (await props.onArchive(item.id, item.activationGeneration ?? 0)) { filterStatus.value = 'archived'; menuAutomationId.value = undefined }
+  }
+  const restore = async (item: AutomationSidebarItem) => {
+    if (props.onRestore && await props.onRestore(item.id, item.activationGeneration ?? 0)) { filterStatus.value = 'all'; menuAutomationId.value = undefined }
+  }
+  const removeArchived = async (item: AutomationSidebarItem) => {
+    if (!item.archivedAt || !props.onRemoveArchived || props.mutationPending || item.activeRunCount) return
+    if (!window.confirm(t('workbench.permanentlyRemoveAutomationConfirm', { value0: item.label, count: item.runCount ?? 0 }))) return
+    if (await props.onRemoveArchived(item.id, item.archivedAt)) menuAutomationId.value = undefined
   }
   const onDocumentPointerDown = (event: PointerEvent) => {
     if (menuAutomationId.value && !(event.target as Element).closest('.automation-row-actions')) menuAutomationId.value = undefined
@@ -149,16 +180,18 @@ export const AutomationSidebar = defineSetupComponent<AutomationSidebarProps>('A
             { value: 'disabled', label: t('workbench.disabled') },
             { value: 'published', label: t('workbench.published') },
             { value: 'draft', label: t('workbench.draftOnly') },
+            { value: 'archived', label: t('workbench.archived') },
           ]}
           value={filterStatus.value}
-          onChange={value => { filterStatus.value = value }}
+          onChange={value => { filterStatus.value = value; props.onArchiveViewChange?.(value === 'archived') }}
         /></label>
         <footer><span>{items.value.length}{t('workbench.shown')}</span><button
           disabled={!filtersActive.value}
-          onClick={() => { filterQuery.value = ''; filterStatus.value = 'all' }}
+          onClick={() => { filterQuery.value = ''; filterStatus.value = 'all'; props.onArchiveViewChange?.(false) }}
           type="button"
         >{t('workbench.clear')}</button></footer>
       </section> : null}
+      {props.mutationError ? <p class="automation-sidebar-state" role="alert">{props.mutationError}</p> : null}
       <div class="automation-list">
         {props.state?.status === 'LOADING' ? <p class="automation-sidebar-state" role="status">{t('workbench.loadingAutomations')}</p> : null}
         {props.state?.status === 'ERROR' ? (
@@ -168,17 +201,20 @@ export const AutomationSidebar = defineSetupComponent<AutomationSidebarProps>('A
             <button {...(props.onReload ? { onClick: props.onReload } : {})} type="button">{t('workbench.tryAgain')}</button>
           </div>
         ) : null}
-        {props.state?.status === 'READY' && !props.state.data.items.length ? (
+        {props.state?.status === 'READY' && !items.value.length && !filtersActive.value ? (
           <p class="automation-sidebar-state">{t('workbench.noAutomationsYet2')}</p>
         ) : null}
-        {(preview || props.state?.status === 'READY') && !items.value.length && filtersActive.value ? <p class="automation-sidebar-state">{t('workbench.noAutomationsMatchTheseFilters')}</p> : null}
+        {props.state?.status === 'READY' && !items.value.length && filterStatus.value === 'archived' && !filterQuery.value.trim() ? (
+          <p class="automation-sidebar-state">{t('workbench.noArchivedAutomations')}</p>
+        ) : null}
+        {(preview || props.state?.status === 'READY') && !items.value.length && filtersActive.value && !(filterStatus.value === 'archived' && !filterQuery.value.trim()) ? <p class="automation-sidebar-state">{t('workbench.noAutomationsMatchTheseFilters')}</p> : null}
         {(preview || props.state?.status === 'READY') ? items.value.map(item => {
           const Icon = item.icon
           const menuOpen = menuAutomationId.value === item.id
           return <div class={['automation-row', item.meta ? 'automation-row-live' : '']} data-active={props.activeId === item.id} key={item.id}>
-            <button class="automation-select" onClick={() => props.onChange(item.id)} type="button">
+            <button class="automation-select" onClick={() => item.archived ? openAutomation(item.id, 'Runs') : props.onChange(item.id)} type="button">
               <Icon aria-hidden="true" size={17} strokeWidth={1.7} />
-              {item.meta ? <span><strong>{item.label}</strong><small>{item.meta}</small></span> : <span>{item.label}</span>}
+              {item.meta ? <span><strong>{item.label}</strong><small>{item.archived ? t('workbench.archived') : item.meta}</small></span> : <span>{item.label}</span>}
             </button>
             <div class="automation-row-actions">
               <button
@@ -191,8 +227,15 @@ export const AutomationSidebar = defineSetupComponent<AutomationSidebarProps>('A
                 type="button"
               ><MoreVertical size={16} /></button>
               {menuOpen ? <div aria-label={t('workbench.actionsForValue0', { value0: item.label })} class="automation-row-menu" role="menu">
-                <button onClick={() => openAutomation(item.id, 'Editor')} role="menuitem" type="button">{t('workbench.openEditor')}</button>
                 <button onClick={() => openAutomation(item.id, 'Runs')} role="menuitem" type="button">{t('workbench.viewRuns')}</button>
+                {item.archived ? <>
+                  <button disabled={props.mutationPending} onClick={() => void restore(item)} role="menuitem" type="button">{t('workbench.restoreAutomation')}</button>
+                  <button disabled={props.mutationPending || !!item.activeRunCount} onClick={() => void removeArchived(item)} role="menuitem" type="button">{t('workbench.permanentlyRemoveAutomation')}</button>
+                  {item.activeRunCount ? <small role="status">{t('workbench.activeRunsPreventPermanentRemoval', { count: item.activeRunCount })}</small> : null}
+                </> : <>
+                  <button onClick={() => openAutomation(item.id, 'Editor')} role="menuitem" type="button">{t('workbench.openEditor')}</button>
+                  <button disabled={props.mutationPending} onClick={() => void archive(item)} role="menuitem" type="button">{t('workbench.archiveAutomation')}</button>
+                </>}
               </div> : null}
             </div>
           </div>

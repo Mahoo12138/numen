@@ -1,4 +1,4 @@
-import { defineCapability, type CapabilityProvider } from '@numen/core'
+import { defineCapability, type CapabilityProvider } from '@numenjs/core'
 import type { Context } from 'cordis'
 import z from 'schemastery'
 

@@ -1,6 +1,6 @@
 import { t } from './i18n.js'
-import type { NumenValue } from '@numen/core'
-import type { SchemaUIResolver } from '@numen/webui/schema-ui'
+import type { NumenValue } from '@numenjs/core'
+import type { SchemaUIResolver } from '@numenjs/webui/schema-ui'
 import { AlertCircle, Save, Trash2, X } from '@lucide/vue'
 import { computed, h, ref, type VNodeChild } from 'vue'
 import {

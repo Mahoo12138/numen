@@ -1,0 +1,23 @@
+{
+  "name": "@numenjs/example-components-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc -b && vite build"
+  },
+  "dependencies": {
+    "@numenjs/components": "workspace:*"
+  },
+  "peerDependencies": {
+    "@numenjs/console": "workspace:*",
+    "@numenjs/webui": "workspace:*",
+    "cordis": "4.0.0-rc.8",
+    "vue": "^3.5.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue-jsx": "5.1.6",
+    "vite": "^7.3.2"
+  }
+}

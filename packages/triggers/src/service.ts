@@ -1,5 +1,6 @@
-import '@numen/automation'
-import '@numen/connections'
+import { withLogContext } from '@numenjs/logging'
+import '@numenjs/automation'
+import '@numenjs/connections'
 import {
   capabilityKey,
   isNumenValue,
@@ -8,8 +9,8 @@ import {
   type TriggerBinding,
   type TriggerEmission,
   type TriggerProvider,
-} from '@numen/core'
-import '@numen/scheduler'
+} from '@numenjs/core'
+import '@numenjs/scheduler'
 import { Service, type Context } from 'cordis'
 
 export interface TriggerServiceHealth {
@@ -114,6 +115,9 @@ export class TriggerService extends Service {
         }))
       } catch {
         unavailable += 1
+        withLogContext({ automationId: subscription.binding.automationId, triggerId: subscription.binding.triggerId }, () => {
+          this.ctx.logger('triggers').error('Trigger activation failed')
+        })
       }
     }
     this.unavailableSubscriptions = unavailable
@@ -122,7 +126,7 @@ export class TriggerService extends Service {
   private collectDesiredSubscriptions(): Map<string, DesiredSubscription> {
     const desired = new Map<string, DesiredSubscription>()
     for (const automation of this.ctx.automations.list()) {
-      if (!automation.enabled || !automation.activeRevisionId) continue
+      if (automation.archivedAt || !automation.enabled || !automation.activeRevisionId) continue
       const revision = this.ctx.automations.getRevision(automation.activeRevisionId)
       if (!revision) continue
       for (const trigger of revision.source.triggers) {
@@ -163,7 +167,8 @@ export class TriggerService extends Service {
       subscription.binding.connectionIds,
       subscription.definition.connections ?? [],
     )
-    const dispose = subscription.provider.activate({
+    const metadata = { automationId: subscription.binding.automationId, triggerId: subscription.binding.triggerId, traceId: subscription.binding.automationId }
+    const dispose = withLogContext(metadata, () => subscription.provider.activate({
       binding: subscription.binding,
       connections,
       signal: controller.signal,
@@ -173,9 +178,12 @@ export class TriggerService extends Service {
         if (!isNumenValue(data)) {
           throw new TypeError(`${capabilityKey(subscription.binding.capability)} emitted a non-Numen value`)
         }
-        return this.ctx.scheduler.acceptTrigger(subscription.binding, { ...emission, data })
+        const result = this.ctx.scheduler.acceptTrigger(subscription.binding, { ...emission, data })
+        withLogContext({ ...metadata, ...(result.runId ? { runId: result.runId } : {}) }, () => this.ctx.logger('triggers').debug('Trigger emission %s', result.status))
+        return result
       },
-    })
+    }))
+    withLogContext(metadata, () => this.ctx.logger('triggers').info('Trigger activated'))
     return {
       ...subscription,
       provider: subscription.provider,
@@ -186,7 +194,10 @@ export class TriggerService extends Service {
 
   private disposeSubscription(subscription: ActiveSubscription): void {
     if (!subscription.controller.signal.aborted) subscription.controller.abort()
-    subscription.dispose?.()
+    withLogContext({ automationId: subscription.binding.automationId, triggerId: subscription.binding.triggerId }, () => {
+      subscription.dispose?.()
+      this.ctx.logger('triggers').info('Trigger disposed')
+    })
   }
 }
 

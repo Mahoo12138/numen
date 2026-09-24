@@ -1,3 +1,5 @@
+import { StatePanel } from '@numenjs/components'
+import { LogsView } from './LogsView.js'
 import { diagnosticText, t, metadataText, formatDateTime, statusLabel } from './i18n.js'
 import type { Context } from 'cordis'
 import { Activity, Boxes, Cable, Home, Network, Pencil, Play, Plus, Settings } from '@lucide/vue'
@@ -114,22 +116,7 @@ function HomeMetric({ label, value, detail, tone = 'default' }: {
   return <div class="home-metric" data-tone={tone}><span>{label}</span><strong>{value}</strong><small>{detail}</small></div>
 }
 
-function QueryStatePanel({ title, message, busy = false, tone = 'default', action, onAction }: {
-  title: string
-  message: string
-  busy?: boolean
-  tone?: 'default' | 'error'
-  action?: string
-  onAction?(): void
-}) {
-  return (
-    <section aria-busy={busy} class="core-page-section home-state" data-tone={tone} role={tone === 'error' ? 'alert' : 'status'}>
-      <strong>{title}</strong>
-      <p>{message}</p>
-      {action ? <button class="secondary-button home-retry" {...(onAction ? { onClick: onAction } : {})} type="button">{action}</button> : null}
-    </section>
-  )
-}
+const QueryStatePanel = StatePanel
 
 interface RunsPosition {
   cursor?: WorkbenchRunsCursor
@@ -381,8 +368,9 @@ function PluginsPage() {
   return <CoreIndexPage icon={Boxes} title={t('workbench.plugins')} description={t('workbench.reviewInstalledCapabilitiesAndExtendNumen')} />
 }
 
-function SystemPage() {
-  return <CoreIndexPage icon={Settings} title={t('workbench.system')} description={t('workbench.monitorRuntimeHealthDiagnosticsLogsAndSettings')} />
+function SystemPage(props: WorkbenchPageProps) {
+  const runId = new URLSearchParams(props.navigation?.route.search ?? '').get('runId') || undefined
+  return <main class="main-workbench secondary-view system-logs-page"><header><h1>{t('workbench.logs.title')}</h1><p>{t('workbench.logs.description')}</p></header><LogsView {...(props.consoleClient ? { consoleClient: props.consoleClient } : {})} {...(runId ? { runId } : {})} /></main>
 }
 
 function CoreIndexPage({ icon: Icon, title, description }: {

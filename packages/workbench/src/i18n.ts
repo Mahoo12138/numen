@@ -1,7 +1,8 @@
-import { interpolate, type MessageParams } from '@numen/i18n'
-import type { BrowserLocaleService } from '@numen/webui/i18n'
+import { provideComponentI18n } from '@numenjs/components'
+import { interpolate, type MessageParams } from '@numenjs/i18n'
+import type { BrowserLocaleService } from '@numenjs/webui/i18n'
 import type { Context } from 'cordis'
-import type { FrontendPage } from '@numen/webui/extensions'
+import type { FrontendPage } from '@numenjs/webui/extensions'
 import type { WorkbenchAutomationInsertItem } from './contracts.js'
 import { computed, getCurrentInstance, inject, provide, shallowRef, watchEffect, type ComputedRef, type InjectionKey } from 'vue'
 import { enUS } from './locales/en-US.js'
@@ -44,6 +45,7 @@ export function provideWorkbenchI18n(getService: () => BrowserLocaleService | un
     },
     setLocale(locale) { getService()?.setLocale(locale) },
   }
+  provideComponentI18n(key => value.t(`workbench.${key}`))
   provide(key, value)
   return value
 }

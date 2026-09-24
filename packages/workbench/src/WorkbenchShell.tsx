@@ -1,11 +1,12 @@
+import { LogsView } from './LogsView.js'
 import { t, provideWorkbenchI18n, pageTitle } from './i18n.js'
-import type { BrowserLocaleService } from '@numen/webui/i18n'
-import type { FrontendExtensionRef } from '@numen/webui/extensions'
-import type { SchemaUIResolver } from '@numen/webui/schema-ui'
+import type { BrowserLocaleService } from '@numenjs/webui/i18n'
+import type { FrontendExtensionRef } from '@numenjs/webui/extensions'
+import type { SchemaUIResolver } from '@numenjs/webui/schema-ui'
 import type {
   BrowserNavigateOptions,
   BrowserRouteState,
-} from '@numen/webui/router'
+} from '@numenjs/webui/router'
 import { CircleHelp, Clock3, Command, Play, Plus, Save, Search, Settings } from '@lucide/vue'
 import { h, ref, shallowRef, watchEffect } from 'vue'
 import { ActivityRail } from './ActivityRail.js'
@@ -181,7 +182,7 @@ export const WorkbenchShell = defineSetupComponent<WorkbenchShellProps>('Workben
             type="button"
           >⌃</button>
         </div>
-        {panelOpen.value ? <div class="panel-content">{t('workbench.panelOutput', { panel: t(`workbench.tabs.${panelTab.value}`) })}</div> : null}
+        {panelOpen.value ? <div class={['panel-content', panelTab.value === 'Logs' && 'logs-panel-content']}>{panelTab.value === 'Logs' ? <LogsView compact {...(props.consoleClient ? { consoleClient: props.consoleClient } : {})} /> : t('workbench.panelOutput', { panel: t(`workbench.tabs.${panelTab.value}`) })}</div> : null}
       </section>}
       {ownsStatus ? null : <footer class="status-bar">
         <span class="ready-status"><span class="status-check">✓</span>{t('workbench.ready')}</span>

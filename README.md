@@ -45,6 +45,13 @@ switching languages preserves open editors and user data. Plugin translations
 use the shared Cordis i18n service and unload with their owning Entry.
 See [the i18n guide](docs/18-i18n.md) for service and Vue examples.
 
+## Runtime logs
+
+Open System or the bottom Logs panel for authenticated runtime logs, or jump from a
+Run to its correlated records. Namespace levels, bounded history, sanitized terminal
+output, and rotating files under `<dataDir>/logs` share one host collector.
+See [the logging guide](docs/19-logging.md) for configuration and plugin usage.
+
 ## Docker first run
 
 The Compose deployment keeps SQLite and Resources in one named volume, requires
@@ -98,3 +105,12 @@ temporary volume. It removes its test container and volume afterward.
 For the frozen scope, release checklist, registry publication steps, and
 `compose.release.yml` deployment, see [the release runbook](docs/17-mvp-release.md).
 No registry image is published by these local commands.
+
+## Shared components and plugin packages
+
+All workspace packages use `@numenjs/*`. `packages/components` supplies the Vue
+controls shared by Workbench and plugins; `examples/components-plugin` demonstrates
+a separately built Entry using the host runtime. Run `pnpm build:examples` after
+`pnpm build`, and `pnpm release:check` to pack and test the public packages in an
+independent npm consumer. These commands do not publish to npm.
+See [components and publishing](docs/20-components-and-publishing.md).

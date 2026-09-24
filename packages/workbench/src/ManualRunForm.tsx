@@ -1,5 +1,5 @@
 import { t } from './i18n.js'
-import { AutomationInputValidationError, resolveAutomationInputs, type AutomationInputIssue, type NumenValue } from '@numen/core'
+import { AutomationInputValidationError, resolveAutomationInputs, type AutomationInputIssue, type NumenValue } from '@numenjs/core'
 import { onScopeDispose, ref, shallowRef } from 'vue'
 import { AutomationInputValue } from './AutomationInputs.js'
 import { workbenchManualRunFormQueryRef, workbenchStartManualRunActionRef, type WorkbenchManualRunForm, type WorkbenchStartManualRunInput, type WorkbenchStartManualRunResult } from './contracts.js'

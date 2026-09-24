@@ -6,12 +6,12 @@
 
 ## 1. 决策
 
-Numen 直接采用 Cordis 的 `ctx.http` 作为唯一的宿主级出站 HTTP interface，并由 `@numen/http` 安装和配置其默认 Adapter。Integration 不应各自创建 Axios、Undici Agent 或读取系统代理配置。
+Numen 直接采用 Cordis 的 `ctx.http` 作为唯一的宿主级出站 HTTP interface，并由 `@numenjs/http` 安装和配置其默认 Adapter。Integration 不应各自创建 Axios、Undici Agent 或读取系统代理配置。
 
 ```text
 Numen Runtime config
         ↓
-@numen/http
+@numenjs/http
         ↓
 Cordis ctx.http
         ↓
@@ -126,7 +126,7 @@ SOCKS；复用的代理连接与直连连接随所属 Effect 卸载而关闭。I
 
 ## 5. Built-in HTTP Request Capability
 
-`@numen/integration-http` 在相同 seam 上提供 `http:request@1`。它是保守的 `action`：method 是运行时输入，Contract 不能把所有请求都声明成无副作用或可安全重试。
+`@numenjs/integration-http` 在相同 seam 上提供 `http:request@1`。它是保守的 `action`：method 是运行时输入，Contract 不能把所有请求都声明成无副作用或可安全重试。
 
 输入：
 

@@ -1,7 +1,6 @@
 {
-  "name": "@numen/webui",
+  "name": "@numenjs/webui",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -32,14 +31,31 @@
     }
   },
   "dependencies": {
-    "@numen/console": "workspace:*",
-    "@numen/i18n": "workspace:*",
-    "cordis": "^4.0.0-rc.8"
+    "@numenjs/console": "workspace:*",
+    "@numenjs/i18n": "workspace:*"
   },
   "devDependencies": {
     "@types/ws": "^8.18.1",
     "@cordisjs/plugin-server": "^1.7.0",
     "schemastery": "^3.18.0",
-    "ws": "^8.19.0"
-  }
+    "ws": "^8.19.0",
+    "cordis": "4.0.0-rc.8"
+  },
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "prepack": "pnpm build"
+  },
+  "peerDependencies": {
+    "cordis": "4.0.0-rc.8"
+  },
+  "description": "Browser runtime and lifecycle-owned extension registries for Numen"
 }

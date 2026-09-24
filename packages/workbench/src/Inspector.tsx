@@ -1,8 +1,8 @@
+import { FormSection as InspectorGroup } from '@numenjs/components'
 import { diagnosticText, t } from './i18n.js'
-import type { AutomationSource, CompileDiagnostic, NumenValue, WaitSource, ValueExpr } from '@numen/core'
-import type { SchemaUIResolver } from '@numen/webui/schema-ui'
+import type { AutomationSource, CompileDiagnostic, NumenValue, WaitSource, ValueExpr } from '@numenjs/core'
+import type { SchemaUIResolver } from '@numenjs/webui/schema-ui'
 import { ChevronDown, X } from '@lucide/vue'
-import type { SetupContext } from 'vue'
 import { CapabilityConnectionFields, CapabilityInputFields, TriggerConfigurationFields } from './CapabilityInspector.js'
 import { findAutomationControl, findAutomationTrigger } from './automation-source-editing.js'
 import type {
@@ -40,20 +40,6 @@ export interface InspectorProps {
   onControlExpressionChange?(nodeId: string, field: 'condition' | 'items', expression: ValueExpr): void
   onWaitExpressionChange?(nodeId: string, field: 'durationMs' | 'until', expression: ValueExpr): void
   onClose(): void
-}
-
-function InspectorGroup({ title, open = true }: {
-  title: string
-  open?: boolean
-}, context: SetupContext) {
-  return (
-    <section class="inspector-group">
-      <button class="inspector-group-heading" type="button">
-        <span>{title}</span><ChevronDown size={15} data-open={open} />
-      </button>
-      {open ? <div class="inspector-group-content">{context.slots.default?.()}</div> : null}
-    </section>
-  )
 }
 
 function WaitConfiguration({

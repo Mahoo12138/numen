@@ -1,7 +1,8 @@
+import '@numenjs/components/style.css'
 import type { Context } from 'cordis'
 import { createApp } from 'vue'
-import { I18nService } from '@numen/i18n'
-import { BrowserLocaleService } from '@numen/webui/i18n'
+import { I18nService } from '@numenjs/i18n'
+import { BrowserLocaleService } from '@numenjs/webui/i18n'
 import { WorkbenchShell } from './WorkbenchShell.js'
 
 const root = document.querySelector('#root')
@@ -12,9 +13,9 @@ async function startContext(): Promise<{ context: Context; stop(): Promise<void>
   if (import.meta.env.DEV) {
     const [{ Context }, { BrowserExtensionRegistry }, { BrowserRouterService }, { SchemaUIRegistry }] = await Promise.all([
       import('cordis'),
-      import('@numen/webui/extensions'),
-      import('@numen/webui/router'),
-      import('@numen/webui/schema-ui'),
+      import('@numenjs/webui/extensions'),
+      import('@numenjs/webui/router'),
+      import('@numenjs/webui/schema-ui'),
     ])
     const context = new Context()
     await context.plugin(I18nService)
@@ -24,7 +25,7 @@ async function startContext(): Promise<{ context: Context; stop(): Promise<void>
     await context.plugin(BrowserRouterService, { basePath: import.meta.env.BASE_URL })
     return { context, stop: () => context.fiber.dispose() }
   }
-  return import('@numen/webui/runtime').then(({ startBrowserRuntime }) => startBrowserRuntime())
+  return import('@numenjs/webui/runtime').then(({ startBrowserRuntime }) => startBrowserRuntime())
 }
 
 async function main(): Promise<void> {

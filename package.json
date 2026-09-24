@@ -14,20 +14,27 @@
     ]
   },
   "scripts": {
-    "build": "tsc -b && pnpm --filter @numen/workbench build:app",
+    "build": "pnpm --filter @numenjs/components build && tsc -b && pnpm --filter @numenjs/workbench build:app",
     "clean": "tsc -b --clean",
     "numen": "tsx packages/cli/src/bin.ts",
     "dev": "pnpm numen start",
     "start": "node packages/cli/dist/bin.js start",
-    "test:e2e": "pnpm build && playwright test",
+    "test:e2e": "pnpm build && pnpm build:examples && playwright test",
     "release:verify": "pnpm typecheck && pnpm test && pnpm test:e2e && pnpm numen config validate && pnpm numen doctor",
     "image:build": "node scripts/build-image.mjs",
     "image:smoke": "node scripts/smoke-image.mjs",
     "typecheck": "tsc -b --pretty",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "build:examples": "pnpm --filter @numenjs/example-components-plugin build",
+    "changeset": "changeset",
+    "version:packages": "changeset version && pnpm install --lockfile-only",
+    "release:pack": "node scripts/pack-packages.mjs",
+    "release:check": "pnpm release:pack && node scripts/verify-packages.mjs",
+    "release:publish": "pnpm release:verify && pnpm release:check && changeset publish"
   },
   "devDependencies": {
+    "@changesets/cli": "^3.0.3",
     "@playwright/test": "^1.63.0",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.15.0",
@@ -36,6 +43,7 @@
     "tsx": "npm:@cordiverse/tsx@4.19.3-fix.3",
     "typescript": "^5.9.3",
     "vite": "^7.3.2",
-    "vitest": "^4.1.5"
+    "vitest": "^4.1.5",
+    "vue": "^3.5.0"
   }
 }

@@ -1,12 +1,12 @@
-import { AutomationService } from '@numen/automation'
+import { AutomationService } from '@numenjs/automation'
 import {
   ConsoleProcedureError,
   ConsoleProcedureUnavailableError,
   ConsoleService,
   type ConsoleRequestContext,
-} from '@numen/console'
-import { CapabilityRegistry, type AutomationSource } from '@numen/core'
-import { DatabaseService } from '@numen/database'
+} from '@numenjs/console'
+import { CapabilityRegistry, type AutomationSource } from '@numenjs/core'
+import { DatabaseService } from '@numenjs/database'
 import { Context, type Logger } from 'cordis'
 import { describe, expect, it } from 'vitest'
 import {

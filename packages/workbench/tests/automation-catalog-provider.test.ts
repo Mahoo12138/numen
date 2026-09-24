@@ -1,5 +1,5 @@
 import { Context } from 'cordis'
-import { ControlRegistry, type CapabilityDefinition, type CapabilityStatus } from '@numen/core'
+import { ControlRegistry, type CapabilityDefinition, type CapabilityStatus } from '@numenjs/core'
 import z from 'schemastery'
 import { describe, expect, it } from 'vitest'
 import {

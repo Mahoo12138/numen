@@ -1,17 +1,17 @@
-import '@numen/connections'
-import '@numen/credentials'
-import type { NumenValue } from '@numen/core'
+import '@numenjs/connections'
+import '@numenjs/credentials'
+import type { NumenValue } from '@numenjs/core'
 import {
   ConnectionConflictError,
   ConnectionNotFoundError,
   type Connection,
   type ConnectionAdapterDefinition,
-} from '@numen/connections'
+} from '@numenjs/connections'
 import {
   ConsoleProcedureError,
   type ConsoleActionDefinition,
   type ConsoleQueryDefinition,
-} from '@numen/console'
+} from '@numenjs/console'
 import type { Context } from 'cordis'
 import z from 'schemastery'
 import {

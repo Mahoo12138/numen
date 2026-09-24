@@ -1,14 +1,14 @@
-import { AutomationService, AutomationActivationConflictError, type AutomationSource } from '@numen/automation'
+import { AutomationService, AutomationActivationConflictError, type AutomationSource } from '@numenjs/automation'
 import {
   CapabilityRegistry,
   type CapabilityDefinition,
   type TriggerActivation,
-} from '@numen/core'
-import { DatabaseService } from '@numen/database'
-import { ConnectionService } from '@numen/connections'
-import { CredentialService } from '@numen/credentials'
-import { ResourceService } from '@numen/resources'
-import { SchedulerService } from '@numen/scheduler'
+} from '@numenjs/core'
+import { DatabaseService } from '@numenjs/database'
+import { ConnectionService } from '@numenjs/connections'
+import { CredentialService } from '@numenjs/credentials'
+import { ResourceService } from '@numenjs/resources'
+import { SchedulerService } from '@numenjs/scheduler'
 import { Context } from 'cordis'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'

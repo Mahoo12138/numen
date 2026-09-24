@@ -1,15 +1,16 @@
-import { AutomationService } from '@numen/automation'
+import { LoggingService } from '@numenjs/logging'
+import { AutomationService } from '@numenjs/automation'
 import {
   CapabilityRegistry,
   ControlRegistry,
   type AutomationSource,
   type CapabilityDefinition,
   type NumenValue,
-} from '@numen/core'
-import { DatabaseService } from '@numen/database'
-import { ConnectionService } from '@numen/connections'
-import { CredentialService } from '@numen/credentials'
-import { ResourceService } from '@numen/resources'
+} from '@numenjs/core'
+import { DatabaseService } from '@numenjs/database'
+import { ConnectionService } from '@numenjs/connections'
+import { CredentialService } from '@numenjs/credentials'
+import { ResourceService } from '@numenjs/resources'
 import { Context } from 'cordis'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -104,6 +105,46 @@ const linearSource: AutomationSource = {
 }
 
 describe('SchedulerService', () => {
+  it('correlates real concurrent provider logs across a failed attempt and retry without copying inputs', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'numen-log-invocations-'))
+    directories.push(directory)
+    const calls = new Map<string, number>()
+    const root = await createContext(join(directory, 'numen.db'), actionDefinition(), async input => {
+      const value = (input as { value: string }).value
+      const count = (calls.get(value) ?? 0) + 1
+      calls.set(value, count)
+      root.logger('provider').info('before %s', value)
+      await new Promise<void>(resolve => setImmediate(resolve))
+      root.logger('provider').info('after %s', value)
+      if (value === 'left' && count === 1) throw new Error('retry this attempt')
+      return input
+    })
+    await root.plugin(LoggingService, { console: false })
+    try {
+      const automationId = publish(root, { triggers: [], flow: { type: 'parallel', id: 'parallel', branches: ['left', 'right'].map(value => ({
+        type: 'block', id: value + '-branch', steps: [{
+          type: 'capability', id: value, capability: { id: 'test:record', version: 1 },
+          input: { value: { type: 'literal', value } }, policy: { retry: { maxAttempts: 2, backoffMs: 0 } },
+        }],
+      })) } })
+      const run = root.scheduler.startManual(automationId, { privateValue: 'not-logged-input' })
+      await root.scheduler.dispatchUntilIdle()
+      expect(root.scheduler.getRun(run.id)?.status).toBe('COMPLETED')
+      const logs = root.logs.query({ namespace: 'provider', runId: run.id }).records
+      const attempts = root.scheduler.listAttempts(run.id)
+      expect(attempts).toHaveLength(3)
+      expect(logs).toHaveLength(6)
+      for (const attempt of attempts) {
+        const records = logs.filter(record => record.attemptId === attempt.id)
+        expect(records).toHaveLength(2)
+        expect(records[0]).toMatchObject({ automationId, runId: run.id, executionId: attempt.executionId, traceId: run.id })
+        expect(records[0]!.message.split(' ')[1]).toBe(records[1]!.message.split(' ')[1])
+      }
+      expect(root.logs.query({ runId: run.id }).records.some(record => record.message === 'Attempt failed')).toBe(true)
+      expect(JSON.stringify(root.logs.query())).not.toContain('not-logged-input')
+    } finally { await root.fiber.dispose() }
+  })
+
   it('durably deduplicates manual Run submissions and rejects request ID reuse with different content', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'numen-manual-request-'))
     directories.push(directory)

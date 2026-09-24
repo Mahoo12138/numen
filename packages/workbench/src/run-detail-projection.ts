@@ -4,13 +4,13 @@ import {
   type ControlSource,
   type NumenValue,
   type Run,
-} from '@numen/core'
+} from '@numenjs/core'
 import type {
   RunEventPage,
   RunExecutionDiagnosticsPage,
   RunInspection,
   RunInstructionExecutionSummary,
-} from '@numen/scheduler'
+} from '@numenjs/scheduler'
 import type {
   WorkbenchRunContextGroup,
   WorkbenchRunDetail,

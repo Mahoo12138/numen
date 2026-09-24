@@ -32,6 +32,8 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+      - run: pnpm build:examples
+      - run: pnpm release:check
       - run: pnpm numen config validate
       - run: pnpm numen doctor
       - if: matrix.node == 24

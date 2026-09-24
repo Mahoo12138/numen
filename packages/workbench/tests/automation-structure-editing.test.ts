@@ -1,4 +1,4 @@
-import type { AutomationSource, BlockSource, ControlSource } from '@numen/core'
+import type { AutomationSource, BlockSource, ControlSource } from '@numenjs/core'
 import { describe, expect, it } from 'vitest'
 import { applyAutomationSourceCommand as apply, automationStepEditOptions as options } from '../src/automation-source-editing.js'
 import { projectAutomationSteps } from '../src/automation-projection.js'

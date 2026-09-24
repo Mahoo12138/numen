@@ -1,7 +1,8 @@
-import { isNumenValue, isResourceRef, type NumenValue } from '@numen/core'
-import '@numen/credentials'
-import type { CredentialSecretSnapshot } from '@numen/credentials'
-import '@numen/database'
+import { withLogContext, withLogSecrets } from '@numenjs/logging'
+import { isNumenValue, isResourceRef, type NumenValue } from '@numenjs/core'
+import '@numenjs/credentials'
+import type { CredentialSecretSnapshot } from '@numenjs/credentials'
+import '@numenjs/database'
 import { Service, type Context } from 'cordis'
 import { randomUUID } from 'node:crypto'
 import type Schema from 'schemastery'
@@ -109,6 +110,7 @@ interface ActiveRuntime {
   controller: AbortController
   status: Exclude<ConnectionRuntimeStatus, 'STOPPED'>
   runtime?: ConnectionRuntime
+  close?: () => void | Promise<void>
   error?: string
   stopTask?: Promise<void>
 }
@@ -542,7 +544,7 @@ export class ConnectionService extends Service {
   private queueReconcile(): void {
     if (!this.ready) return
     queueMicrotask(() => {
-      this.reconcile().catch(() => undefined)
+      this.reconcile().catch(error => this.ctx.logger('connections').error('Reconciliation failed: %s', error))
     })
   }
 
@@ -560,11 +562,12 @@ export class ConnectionService extends Service {
       const credential = connection.credentialId
         ? this.ctx.credentials.readSecretSnapshot(connection.credentialId)
         : undefined
-      const opened = await provider.open({
+      const opened = await withLogContext({ connectionId: connection.id, traceId: connection.id }, () => withLogSecrets(credential?.value, () => provider.open({
         connection,
         signal: runtime.controller.signal,
         ...(credential ? { credential } : {}),
-      })
+      })))
+      runtime.close = () => withLogContext({ connectionId: connection.id }, () => withLogSecrets(credential?.value, () => opened.close?.()))
       const current = this.get(connection.id)
       if (
         runtime.controller.signal.aborted
@@ -574,16 +577,18 @@ export class ConnectionService extends Service {
         || current.generation !== runtime.generation
         || this.resolveAdapterProvider(current.adapter) !== provider
       ) {
-        await opened?.close?.()
+        await runtime.close()
         if (this.runtimes.get(connection.id) === runtime) this.runtimes.delete(connection.id)
         return
       }
       runtime.runtime = opened
       runtime.status = 'READY'
+      withLogContext({ connectionId: connection.id }, () => this.ctx.logger('connections').info('Connection ready'))
       this.ctx.emit('numen/connection-runtime-change', connection.id)
     } catch (error) {
       if (runtime.controller.signal.aborted || this.runtimes.get(connection.id) !== runtime) return
       runtime.status = 'ERROR'
+      withLogContext({ connectionId: connection.id }, () => this.ctx.logger('connections').error('Connection failed to open'))
       runtime.error = error instanceof Error ? error.message : String(error)
       this.ctx.emit('numen/connection-runtime-change', connection.id)
     }
@@ -597,7 +602,7 @@ export class ConnectionService extends Service {
       this.ctx.emit('numen/connection-runtime-change', runtime.connectionId)
       if (!runtime.controller.signal.aborted) runtime.controller.abort()
       try {
-        await runtime.runtime?.close?.()
+        await runtime.close?.()
       } finally {
         if (this.runtimes.get(runtime.connectionId) === runtime) {
           this.runtimes.delete(runtime.connectionId)

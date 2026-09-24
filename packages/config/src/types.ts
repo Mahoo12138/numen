@@ -1,3 +1,4 @@
+import type { LoggingConfig } from '@numenjs/logging/config'
 export interface PluginConfig {
   $if?: boolean
   $package?: string
@@ -7,6 +8,7 @@ export interface PluginConfig {
 export interface NumenConfig {
   version: 1
   dataDir: string
+  logger?: LoggingConfig
   plugins: Record<string, PluginConfig | null>
 }
 

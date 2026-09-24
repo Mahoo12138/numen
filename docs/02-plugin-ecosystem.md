@@ -38,13 +38,13 @@ numen-plugin-foo
 @scope/numen-plugin-foo
 ```
 
-官方包在本文档中暂用逻辑占位：
+官方包统一使用已确定的命名空间：
 
 ```text
-@numen/plugin-foo
+@numenjs/plugin-foo
 ```
 
-其中 `@numen/*` **不表示 npm scope 已经冻结或已占用**；实际 organization/scope 需确认 registry 可用性后再定。
+官方包名已冻结为 `@numenjs/*`。本地完成构建与发布流程不等于已发布到 npm；首次发布前需由维护者确认该 scope 的发布权限。
 
 ### 2.2 Host 兼容性
 
@@ -111,7 +111,7 @@ npm publish
 {
   "name": "numen-plugin-example",
   "peerDependencies": {
-    "<numen-sdk-package>": "^1.0.0"
+    "@numenjs/core": "^0.1.0"
   },
   "numen": {
     "category": "integration"
@@ -119,7 +119,7 @@ npm publish
 }
 ```
 
-其中 `<numen-sdk-package>` 的实际 npm 包名随官方 scope 一起冻结；这里不提前绑定 registry namespace。
+服务端插件按需依赖 `@numenjs/core`、`@numenjs/console`；前端插件使用 `@numenjs/webui` 和 `@numenjs/components`。见 [组件库与 npm 发布](20-components-and-publishing.md)。
 
 ## 5. Marketplace
 

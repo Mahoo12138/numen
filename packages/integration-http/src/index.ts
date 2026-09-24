@@ -1,5 +1,5 @@
-import { defineCapability, isNumenValue, type CapabilityDefinition, type CapabilityProvider, type NumenValue } from '@numen/core'
-import type {} from '@numen/http'
+import { defineCapability, isNumenValue, type CapabilityDefinition, type CapabilityProvider, type NumenValue } from '@numenjs/core'
+import type {} from '@numenjs/http'
 import type { Context } from 'cordis'
 import type Schema from 'schemastery'
 import z from 'schemastery'

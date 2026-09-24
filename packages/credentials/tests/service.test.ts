@@ -1,5 +1,5 @@
 import { ConnectionService } from '../../connections/src/service.js'
-import { DatabaseService } from '@numen/database'
+import { DatabaseService } from '@numenjs/database'
 import { Context } from 'cordis'
 import { randomBytes } from 'node:crypto'
 import { mkdtemp, rm } from 'node:fs/promises'

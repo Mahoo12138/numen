@@ -1,4 +1,4 @@
-import type { ConsoleProcedureRef } from '@numen/console'
+import type { ConsoleProcedureRef } from '@numenjs/console'
 import { shallowReactive, toValue, watchEffect, type MaybeRefOrGetter } from 'vue'
 import {
   workbenchInvalidationSubscriptionRef,

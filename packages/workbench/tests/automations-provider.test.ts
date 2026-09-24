@@ -1,7 +1,7 @@
-import { AutomationService } from '@numen/automation'
-import { ConsoleService, type ConsoleRequestContext } from '@numen/console'
-import { CapabilityRegistry } from '@numen/core'
-import { DatabaseService } from '@numen/database'
+import { AutomationService } from '@numenjs/automation'
+import { ConsoleService, type ConsoleRequestContext } from '@numenjs/console'
+import { CapabilityRegistry } from '@numenjs/core'
+import { DatabaseService } from '@numenjs/database'
 import { Context, type Logger } from 'cordis'
 import { describe, expect, it } from 'vitest'
 import {
@@ -10,6 +10,9 @@ import {
   workbenchAutomationsProviderPlugin,
   summarizeAutomationIndex,
   workbenchCreateAutomationAction,
+  workbenchArchiveAutomationAction,
+  workbenchRestoreAutomationAction,
+  workbenchRemoveArchivedAutomationAction,
 } from '../src/automations-provider.js'
 import { workbenchCreateAutomationActionRef, type WorkbenchAutomationIndexItem } from '../src/contracts.js'
 
@@ -19,6 +22,8 @@ function item(overrides: Partial<WorkbenchAutomationIndexItem>): WorkbenchAutoma
     name: 'Automation',
     enabled: false,
     activationGeneration: 0,
+    activeRunCount: 0,
+    runCount: 0,
     draftVersion: 1,
     revisionCount: 0,
     createdAt: '2026-08-21T00:00:00.000Z',
@@ -49,7 +54,7 @@ describe('Automation index summary', () => {
       await root.plugin(CapabilityRegistry)
       await root.plugin(AutomationService)
       await root.plugin(ConsoleService)
-      for (const definition of [workbenchCreateAutomationAction, workbenchAutomationsIndexQuery, workbenchAutomationDetailQuery]) {
+      for (const definition of [workbenchCreateAutomationAction, workbenchArchiveAutomationAction, workbenchRestoreAutomationAction, workbenchRemoveArchivedAutomationAction, workbenchAutomationsIndexQuery, workbenchAutomationDetailQuery]) {
         root.console.define(root, definition)
       }
       const plugin = (ctx: Context) => workbenchAutomationsProviderPlugin(ctx)

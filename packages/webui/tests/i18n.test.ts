@@ -1,6 +1,6 @@
 import { Context } from 'cordis'
 import { describe, expect, it, vi } from 'vitest'
-import { I18nService } from '@numen/i18n'
+import { I18nService } from '@numenjs/i18n'
 import { BrowserLocaleService, localeStorageKey } from '../src/i18n.js'
 
 describe('browser locale preferences', () => {

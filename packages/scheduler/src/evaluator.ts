@@ -5,7 +5,7 @@ import {
   stringifyCoreExpressionValue,
   type NumenValue,
   type ValueExpr,
-} from '@numen/core'
+} from '@numenjs/core'
 
 export interface EvaluationBindings {
   run: Record<string, NumenValue>

@@ -1,5 +1,5 @@
 import { t } from './i18n.js'
-import { isNumenValue, type NumenValue } from '@numen/core'
+import { isNumenValue, type NumenValue } from '@numenjs/core'
 import { computed, onBeforeUnmount, ref } from 'vue'
 import { X } from '@lucide/vue'
 import {

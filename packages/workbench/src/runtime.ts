@@ -1,7 +1,9 @@
+import { workbenchLogsQuery, workbenchLogsChanged } from './logs-provider.js'
+export { workbenchLogsProviderPlugin } from './logs-provider.js'
 import { workbenchManualRunFormQuery, workbenchStartManualRunAction } from './manual-run-provider.js'
 import { workbenchActivateAutomationRevisionAction, workbenchSetAutomationEnabledAction } from './automation-activation-provider.js'
 import { workbenchCredentialsIndexQuery, workbenchCreateCredentialAction, workbenchRotateCredentialAction, workbenchDeleteCredentialAction } from './credentials-provider.js'
-import type { ConsoleFrontendEntry } from '@numen/console'
+import type { ConsoleFrontendEntry } from '@numenjs/console'
 import { Service, type Context } from 'cordis'
 import {
   workbenchPublishAutomationDraftAction,
@@ -12,7 +14,14 @@ import {
   workbenchAutomationInsertCatalogQuery,
   workbenchAutomationVariableCatalogQuery,
 } from './automation-catalog-provider.js'
-import { workbenchAutomationDetailQuery, workbenchAutomationsIndexQuery, workbenchCreateAutomationAction } from './automations-provider.js'
+import {
+  workbenchArchiveAutomationAction,
+  workbenchAutomationDetailQuery,
+  workbenchAutomationsIndexQuery,
+  workbenchCreateAutomationAction,
+  workbenchRemoveArchivedAutomationAction,
+  workbenchRestoreAutomationAction,
+} from './automations-provider.js'
 import {
   workbenchCreateConnectionAction,
   workbenchDeleteConnectionAction,
@@ -40,6 +49,9 @@ export {
   workbenchAutomationDetailQuery,
   workbenchAutomationsIndexQuery,
   workbenchCreateAutomationAction,
+  workbenchArchiveAutomationAction,
+  workbenchRestoreAutomationAction,
+  workbenchRemoveArchivedAutomationAction,
   workbenchAutomationsProviderPlugin,
 } from './automations-provider.js'
 export {
@@ -81,6 +93,8 @@ export class WorkbenchRuntimeService extends Service {
   constructor(ctx: Context, config: WorkbenchRuntimeConfig = {}) {
     super(ctx, 'workbench')
     workbenchServerPlugin(ctx, config)
+    ctx.console.define(ctx, workbenchLogsQuery)
+    ctx.console.define(ctx, workbenchLogsChanged)
     ctx.console.define(ctx, workbenchActivateAutomationRevisionAction)
     ctx.console.define(ctx, workbenchSetAutomationEnabledAction)
     ctx.console.define(ctx, workbenchAutomationInsertCatalogQuery)
@@ -91,6 +105,9 @@ export class WorkbenchRuntimeService extends Service {
     ctx.console.define(ctx, workbenchAutomationDetailQuery)
     ctx.console.define(ctx, workbenchAutomationsIndexQuery)
     ctx.console.define(ctx, workbenchCreateAutomationAction)
+    ctx.console.define(ctx, workbenchArchiveAutomationAction)
+    ctx.console.define(ctx, workbenchRestoreAutomationAction)
+    ctx.console.define(ctx, workbenchRemoveArchivedAutomationAction)
     ctx.console.define(ctx, workbenchCredentialsIndexQuery)
     ctx.console.define(ctx, workbenchCreateCredentialAction)
     ctx.console.define(ctx, workbenchRotateCredentialAction)

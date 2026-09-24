@@ -5,8 +5,8 @@ import {
   type AutomationSource,
   type NumenValue,
   type ControlResolver,
-} from '@numen/core'
-import '@numen/database'
+} from '@numenjs/core'
+import '@numenjs/database'
 import { Service, type Context } from 'cordis'
 import { createHash, randomUUID } from 'node:crypto'
 import { compileAutomation, type ConnectionResolver } from './compiler.js'
@@ -39,6 +39,19 @@ export class DraftCopyRequestConflictError extends Error {
   override name = 'DraftCopyRequestConflictError'
 }
 
+export class AutomationArchivedError extends Error {
+  override name = 'AutomationArchivedError'
+}
+
+export class AutomationPurgeConflictError extends Error {
+  override name = 'AutomationPurgeConflictError'
+}
+
+export class AutomationHasActiveRunsError extends Error {
+  override name = 'AutomationHasActiveRunsError'
+  constructor(public readonly count: number) { super(`automation has ${count} active Run(s)`) }
+}
+
 export interface SaveDraftCopyInput {
   automationId: string
   requestId: string
@@ -63,6 +76,8 @@ export interface SaveDraftInput {
 export interface AutomationSummary extends Automation {
   draftVersion: number
   revisionCount: number
+  activeRunCount: number
+  runCount: number
   latestRevisionNumber?: number
 }
 
@@ -72,6 +87,7 @@ interface AutomationRow {
   enabled: number
   active_revision_id: string | null
   activation_generation: number
+  archived_at: string | null
   created_at: string
   updated_at: string
 }
@@ -80,6 +96,8 @@ interface AutomationSummaryRow extends AutomationRow {
   draft_version: number
   revision_count: number
   latest_revision_number: number | null
+  active_run_count: number
+  run_count: number
 }
 
 interface DraftRow {
@@ -113,6 +131,7 @@ declare module 'cordis' {
 
   interface Events {
     'numen/automation-change'(automationId: string): void
+    'numen/automation-purge'(automationId: string): void
   }
 }
 
@@ -134,6 +153,7 @@ function mapAutomation(row: AutomationRow): Automation {
     enabled: !!row.enabled,
     ...(row.active_revision_id ? { activeRevisionId: row.active_revision_id } : {}),
     activationGeneration: row.activation_generation,
+    ...(row.archived_at ? { archivedAt: row.archived_at } : {}),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -222,7 +242,9 @@ export class AutomationService extends Service {
         if (previous.content_hash !== contentHash) throw new DraftCopyRequestConflictError('copy request already used with different content')
         return previous.automation_id
       }
-      if (!this.get(input.automationId)) throw new AutomationNotFoundError(`automation not found: ${input.automationId}`)
+      const original = this.get(input.automationId)
+      if (!original) throw new AutomationNotFoundError(`automation not found: ${input.automationId}`)
+      this.requireNotArchived(original)
       const copyId = `auto_${randomUUID().replaceAll('-', '')}`
       this.insertAutomation(copyId, name, input.source, input.presentation, new Date().toISOString())
       this.ctx.database.db.prepare(
@@ -240,19 +262,23 @@ export class AutomationService extends Service {
     return row ? mapAutomation(row) : undefined
   }
 
-  list(): Automation[] {
-    return (this.ctx.database.db.prepare('SELECT * FROM automations ORDER BY created_at DESC').all() as AutomationRow[])
+  list(includeArchived = false): Automation[] {
+    return (this.ctx.database.db.prepare(`SELECT * FROM automations ${includeArchived ? '' : 'WHERE archived_at IS NULL'} ORDER BY created_at DESC`).all() as AutomationRow[])
       .map(mapAutomation)
   }
 
-  listSummaries(): AutomationSummary[] {
+  listSummaries(includeArchived = false): AutomationSummary[] {
     const rows = this.ctx.database.db.prepare(`
       SELECT automations.*, automation_drafts.version AS draft_version,
         COUNT(automation_revisions.id) AS revision_count,
-        MAX(automation_revisions.number) AS latest_revision_number
+        MAX(automation_revisions.number) AS latest_revision_number,
+        (SELECT COUNT(*) FROM runs WHERE runs.automation_id = automations.id
+          AND runs.status IN ('QUEUED', 'RUNNING', 'CANCELLING')) AS active_run_count,
+        (SELECT COUNT(*) FROM runs WHERE runs.automation_id = automations.id) AS run_count
       FROM automations
       JOIN automation_drafts ON automation_drafts.automation_id = automations.id
       LEFT JOIN automation_revisions ON automation_revisions.automation_id = automations.id
+      WHERE automations.archived_at IS ${includeArchived ? 'NOT ' : ''}NULL
       GROUP BY automations.id
       ORDER BY automations.updated_at DESC, automations.id DESC
     `).all() as AutomationSummaryRow[]
@@ -261,6 +287,8 @@ export class AutomationService extends Service {
       draftVersion: row.draft_version,
       revisionCount: row.revision_count,
       ...(row.latest_revision_number === null ? {} : { latestRevisionNumber: row.latest_revision_number }),
+      activeRunCount: row.active_run_count,
+      runCount: row.run_count,
     }))
   }
 
@@ -274,6 +302,9 @@ export class AutomationService extends Service {
   saveDraft(input: SaveDraftInput): AutomationDraft {
     const now = new Date().toISOString()
     const draft = this.ctx.database.transaction(() => {
+      const automation = this.get(input.automationId)
+      if (!automation) throw new AutomationNotFoundError(`automation not found: ${input.automationId}`)
+      this.requireNotArchived(automation)
       const result = this.ctx.database.db.prepare(`
         UPDATE automation_drafts
         SET source_json = ?, presentation_json = ?, version = version + 1, updated_at = ?
@@ -298,7 +329,7 @@ export class AutomationService extends Service {
   }
 
   count(): number {
-    return (this.ctx.database.db.prepare('SELECT COUNT(*) AS count FROM automations').get() as { count: number }).count
+    return (this.ctx.database.db.prepare('SELECT COUNT(*) AS count FROM automations WHERE archived_at IS NULL').get() as { count: number }).count
   }
 
   publishDraft(automationId: string, expectedDraftVersion?: number): AutomationRevision {
@@ -328,6 +359,9 @@ export class AutomationService extends Service {
     const now = new Date().toISOString()
 
     const revision = this.ctx.database.transaction(() => {
+      const automation = this.get(automationId)
+      if (!automation) throw new AutomationNotFoundError(`automation not found: ${automationId}`)
+      this.requireNotArchived(automation)
       const current = this.getDraft(automationId)
       if (!current) throw new AutomationNotFoundError(`automation not found: ${automationId}`)
       if (current.version !== draft.version) throw new DraftConflictError(draft.version, current.version)
@@ -380,6 +414,7 @@ export class AutomationService extends Service {
   activateRevision(automationId: string, revisionId: string, expectedActivationGeneration?: number): Automation {
     const result = this.ctx.database.transaction(() => {
       const current = this.requireActivationGeneration(automationId, expectedActivationGeneration)
+      this.requireNotArchived(current)
       const revision = this.ctx.database.db.prepare(`
         SELECT 1 FROM automation_revisions WHERE id = ? AND automation_id = ?
       `).get(revisionId, automationId)
@@ -400,6 +435,7 @@ export class AutomationService extends Service {
   setEnabled(automationId: string, enabled: boolean, expectedActivationGeneration?: number): Automation {
     const result = this.ctx.database.transaction(() => {
       const current = this.requireActivationGeneration(automationId, expectedActivationGeneration)
+      this.requireNotArchived(current)
       if (current.enabled === enabled) return { automation: current, changed: false }
       this.ctx.database.db.prepare(`
         UPDATE automations
@@ -422,6 +458,91 @@ export class AutomationService extends Service {
       throw new AutomationActivationConflictError(expected, current.activationGeneration)
     }
     return current
+  }
+
+  archive(automationId: string, expectedActivationGeneration?: number): Automation {
+    const result = this.ctx.database.transaction(() => {
+      const current = this.requireActivationGeneration(automationId, expectedActivationGeneration)
+      if (current.archivedAt) return { automation: current, changed: false }
+      const now = new Date().toISOString()
+      this.ctx.database.db.prepare(`
+        UPDATE automations SET archived_at = ?, activation_generation = activation_generation + 1, updated_at = ?
+        WHERE id = ? AND activation_generation = ? AND archived_at IS NULL
+      `).run(now, now, automationId, current.activationGeneration)
+      return { automation: this.get(automationId)!, changed: true }
+    })
+    if (result.changed) this.ctx.emit('numen/automation-change', automationId)
+    return result.automation
+  }
+
+  restoreArchive(automationId: string, expectedActivationGeneration?: number): Automation {
+    const result = this.ctx.database.transaction(() => {
+      const current = this.requireActivationGeneration(automationId, expectedActivationGeneration)
+      if (!current.archivedAt) return { automation: current, changed: false }
+      this.ctx.database.db.prepare(`
+        UPDATE automations SET archived_at = NULL, activation_generation = activation_generation + 1, updated_at = ?
+        WHERE id = ? AND activation_generation = ? AND archived_at = ?
+      `).run(new Date().toISOString(), automationId, current.activationGeneration, current.archivedAt)
+      return { automation: this.get(automationId)!, changed: true }
+    })
+    if (result.changed) this.ctx.emit('numen/automation-change', automationId)
+    return result.automation
+  }
+
+  /** Permanently removes one archived Automation and its run history. */
+  removeArchived(automationId: string, expectedArchivedAt: string): { automationId: string; runCount: number } {
+    const result = this.ctx.database.transaction(() => {
+      const current = this.get(automationId)
+      if (!current) throw new AutomationNotFoundError(`automation not found: ${automationId}`)
+      if (!current.archivedAt || current.archivedAt !== expectedArchivedAt) {
+        throw new AutomationPurgeConflictError('archive state changed; reload before permanent removal')
+      }
+      const active = this.ctx.database.db.prepare(`
+        SELECT COUNT(*) AS count FROM runs
+        WHERE automation_id = ? AND status IN ('QUEUED', 'RUNNING', 'CANCELLING')
+      `).get(automationId) as { count: number }
+      if (active.count) throw new AutomationHasActiveRunsError(active.count)
+      const { count: runCount } = this.ctx.database.db.prepare('SELECT COUNT(*) AS count FROM runs WHERE automation_id = ?').get(automationId) as { count: number }
+
+      const now = new Date().toISOString()
+      this.ctx.database.db.prepare(`
+        UPDATE resources SET gc_after = ?, updated_at = ?
+        WHERE state = 'COMMITTED' AND id IN (
+          SELECT owned.resource_id FROM resource_owners owned
+          WHERE owned.owner_type = 'execution'
+            AND owned.owner_id IN (SELECT executions.id FROM executions JOIN runs ON runs.id = executions.run_id WHERE runs.automation_id = ?)
+            AND NOT EXISTS (
+              SELECT 1 FROM resource_owners other WHERE other.resource_id = owned.resource_id
+                AND NOT (other.owner_type = 'execution' AND other.owner_id IN (
+                  SELECT executions.id FROM executions JOIN runs ON runs.id = executions.run_id WHERE runs.automation_id = ?
+                ))
+            )
+        )
+      `).run(now, now, automationId, automationId)
+      this.ctx.database.db.prepare(`
+        DELETE FROM execution_iterations
+        WHERE iterate_execution_id IN (SELECT id FROM executions WHERE run_id IN (SELECT id FROM runs WHERE automation_id = ?))
+          OR root_execution_id IN (SELECT id FROM executions WHERE run_id IN (SELECT id FROM runs WHERE automation_id = ?))
+          OR terminal_execution_id IN (SELECT id FROM executions WHERE run_id IN (SELECT id FROM runs WHERE automation_id = ?))
+      `).run(automationId, automationId, automationId)
+      this.ctx.database.db.prepare(`
+        UPDATE executions SET parent_execution_id = NULL, scope_execution_id = NULL
+        WHERE run_id IN (SELECT id FROM runs WHERE automation_id = ?)
+      `).run(automationId)
+      this.ctx.database.db.prepare(`
+        DELETE FROM resource_owners WHERE owner_type = 'execution'
+          AND owner_id IN (SELECT executions.id FROM executions JOIN runs ON runs.id = executions.run_id WHERE runs.automation_id = ?)
+      `).run(automationId)
+      this.ctx.database.db.prepare('DELETE FROM runs WHERE automation_id = ?').run(automationId)
+      this.ctx.database.db.prepare('DELETE FROM automations WHERE id = ? AND archived_at = ?').run(automationId, expectedArchivedAt)
+      return { automationId, runCount }
+    })
+    this.ctx.emit('numen/automation-purge', automationId)
+    return result
+  }
+
+  private requireNotArchived(automation: Automation): void {
+    if (automation.archivedAt) throw new AutomationArchivedError(`automation is archived: ${automation.id}`)
   }
 }
 

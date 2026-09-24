@@ -1,8 +1,8 @@
-import type { ConsoleProcedureRef } from '@numen/console'
-import type { FrontendPage } from '@numen/webui/extensions'
-import type { FrontendExtensionRef } from '@numen/webui/extensions'
-import type { BrowserNavigateOptions, BrowserRouteState } from '@numen/webui/router'
-import type { SchemaUIResolver } from '@numen/webui/schema-ui'
+import type { ConsoleProcedureRef } from '@numenjs/console'
+import type { FrontendPage } from '@numenjs/webui/extensions'
+import type { FrontendExtensionRef } from '@numenjs/webui/extensions'
+import type { BrowserNavigateOptions, BrowserRouteState } from '@numenjs/webui/router'
+import type { SchemaUIResolver } from '@numenjs/webui/schema-ui'
 import type { Component } from 'vue'
 
 export interface WorkbenchConsoleClient {

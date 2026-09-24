@@ -1,4 +1,4 @@
-import { BrowserExtensionRegistry, type BrowserRouteState } from '@numen/webui'
+import { BrowserExtensionRegistry, type BrowserRouteState } from '@numenjs/webui'
 import { Context } from 'cordis'
 import { describe, expect, it, vi } from 'vitest'
 import { renderToMarkup } from './render.js'

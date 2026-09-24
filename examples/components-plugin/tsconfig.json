@@ -1,0 +1,6 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "rootDir": "src", "outDir": "dist", "tsBuildInfoFile": "dist/.tsbuildinfo", "lib": ["ES2023", "DOM"], "jsx": "preserve", "jsxImportSource": "vue" },
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "references": [{ "path": "../../packages/components" }, { "path": "../../packages/console" }, { "path": "../../packages/webui" }]
+}

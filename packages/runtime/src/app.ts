@@ -1,7 +1,7 @@
 import Loader, { type EntryOptions } from '@cordisjs/plugin-loader'
-import LoggerConsole from '@cordisjs/plugin-logger-console'
+import { LoggingService } from '@numenjs/logging'
 import Server from '@cordisjs/plugin-server'
-import { AutomationService } from '@numen/automation'
+import { AutomationService } from '@numenjs/automation'
 import {
   ConsoleService,
   ConsoleEntryRegistry,
@@ -10,19 +10,19 @@ import {
   consoleHttpPlugin,
   consoleSessionPlugin,
   consoleWebSocketPlugin,
-} from '@numen/console'
-import { createRuntimeEntries, loadConfig, type LoadedConfig, type RuntimeEntry } from '@numen/config'
-import { ConnectionService } from '@numen/connections'
-import { CredentialService } from '@numen/credentials'
-import { ResourceService } from '@numen/resources'
-import { CapabilityRegistry, ControlRegistry, coreControlsPlugin } from '@numen/core'
-import { DatabaseService } from '@numen/database'
-import { httpSocksPlugin, OutboundHttpService } from '@numen/http'
-import demoIntegrationPlugin from '@numen/integration-demo'
-import httpIntegrationPlugin from '@numen/integration-http'
-import scheduleIntegrationPlugin from '@numen/integration-schedule'
-import { SchedulerService } from '@numen/scheduler'
-import { TriggerService } from '@numen/triggers'
+} from '@numenjs/console'
+import { createRuntimeEntries, loadConfig, type LoadedConfig, type RuntimeEntry } from '@numenjs/config'
+import { ConnectionService } from '@numenjs/connections'
+import { CredentialService } from '@numenjs/credentials'
+import { ResourceService } from '@numenjs/resources'
+import { CapabilityRegistry, ControlRegistry, coreControlsPlugin } from '@numenjs/core'
+import { DatabaseService } from '@numenjs/database'
+import { httpSocksPlugin, OutboundHttpService } from '@numenjs/http'
+import demoIntegrationPlugin from '@numenjs/integration-demo'
+import httpIntegrationPlugin from '@numenjs/integration-http'
+import scheduleIntegrationPlugin from '@numenjs/integration-schedule'
+import { SchedulerService } from '@numenjs/scheduler'
+import { TriggerService } from '@numenjs/triggers'
 import {
   workbenchAutomationAuthoringProviderPlugin,
   workbenchAutomationActivationProviderPlugin,
@@ -31,13 +31,14 @@ import {
   workbenchConnectionsProviderPlugin,
   workbenchCredentialsProviderPlugin,
   workbenchHomeProviderPlugin,
+  workbenchLogsProviderPlugin,
   workbenchInvalidationProviderPlugin,
   workbenchRunsProviderPlugin,
   workbenchRuntimePlugin,
-} from '@numen/workbench/runtime'
+} from '@numenjs/workbench/runtime'
 import { Context } from 'cordis'
-import { I18nService } from '@numen/i18n'
-import { sep } from 'node:path'
+import { I18nService } from '@numenjs/i18n'
+import { resolve, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { healthPlugin, readinessPlugin } from './health.js'
 
@@ -85,6 +86,7 @@ const builtins = {
   workbenchConnections: workbenchConnectionsProviderPlugin,
   workbenchCredentials: workbenchCredentialsProviderPlugin,
   workbenchHome: workbenchHomeProviderPlugin,
+  workbenchLogs: workbenchLogsProviderPlugin,
   workbenchInvalidation: workbenchInvalidationProviderPlugin,
   workbenchRuns: workbenchRunsProviderPlugin,
   consoleSession: consoleSessionPlugin,
@@ -114,12 +116,41 @@ export async function startRuntime(options: StartRuntimeOptions = {}): Promise<N
   context.baseUrl = pathToFileURL(config.baseDir + sep).href
 
   try {
-    await context.plugin(LoggerConsole)
+    const secrets: string[] = []
+    const seen = new Set<object>()
+    const collect = (value: unknown, sensitive = false, depth = 0): void => {
+      if (depth > 16 || secrets.length >= 256) return
+      if (typeof value === 'string') { if (sensitive && value.length >= 4) secrets.push(value); return }
+      if (!value || typeof value !== 'object' || seen.has(value)) return
+      seen.add(value)
+      for (const [key, child] of Object.entries(value)) collect(child, sensitive || /secret|token|password|credential|api.?key|authorization|cookie/i.test(key), depth + 1)
+      seen.delete(value)
+    }
+    collect(config.config.plugins)
+    collect(Object.fromEntries(Object.entries(process.env).filter(([key]) => /NUMEN_.*(?:KEY|TOKEN|SECRET)/i.test(key))), true)
+    await context.plugin(LoggingService, {
+      ...config.config.logger,
+      directory: resolve(config.baseDir, config.config.dataDir, 'logs'),
+      environment: process.env,
+      secrets,
+      pluginPath(fiber) {
+        const path: string[] = []
+        let current = fiber
+        while (current.runtime) {
+          path.unshift(current.entry?.id ?? current.name)
+          current = current.parent.fiber
+        }
+        return path.join('/') || 'root'
+      },
+    })
+    context.logger('runtime').info('Runtime starting%s', safeMode ? ' in safe mode' : '')
     await context.plugin(Loader, { baseUrl: context.baseUrl })
     Object.assign(context.loader.builtins, builtins)
     await context.loader.root.update(entries.map(toCordisEntry))
     await context.loader.await()
+    context.logger('runtime').info('Runtime ready')
   } catch (error) {
+    context.logger('runtime').error('Runtime startup failed: %s', error)
     await context.fiber.dispose()
     throw error
   }
@@ -133,7 +164,11 @@ export async function startRuntime(options: StartRuntimeOptions = {}): Promise<N
     serverUrl: context.server?.baseUrl,
     workbenchUrl: context.workbench?.getLaunchUrl(),
     stop() {
-      return stopTask ??= Promise.resolve(context.fiber.dispose()).then(() => undefined)
+      if (!stopTask) {
+        context.logger('runtime').info('Runtime stopping')
+        stopTask = context.fiber.dispose().then(() => undefined)
+      }
+      return stopTask
     },
   }
 }

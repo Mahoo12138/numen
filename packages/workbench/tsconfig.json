@@ -4,19 +4,48 @@
     "rootDir": "src",
     "outDir": "dist",
     "tsBuildInfoFile": "dist/.tsbuildinfo",
-    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "lib": [
+      "ES2023",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "jsx": "preserve",
     "jsxImportSource": "vue",
-    "types": ["vite/client"]
+    "types": [
+      "vite/client"
+    ]
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx"
+  ],
   "references": [
-    { "path": "../i18n" },
-    { "path": "../automation" },
-    { "path": "../console" },
-    { "path": "../connections" },
-    { "path": "../core" },
-    { "path": "../scheduler" },
-    { "path": "../webui" }
+    {
+      "path": "../components"
+    },
+    {
+      "path": "../logging"
+    },
+    {
+      "path": "../i18n"
+    },
+    {
+      "path": "../automation"
+    },
+    {
+      "path": "../console"
+    },
+    {
+      "path": "../connections"
+    },
+    {
+      "path": "../core"
+    },
+    {
+      "path": "../scheduler"
+    },
+    {
+      "path": "../webui"
+    }
   ]
 }

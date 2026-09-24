@@ -1,5 +1,5 @@
 import { Context } from 'cordis'
-import { I18nService, type I18nConfig } from '@numen/i18n'
+import { I18nService, type I18nConfig } from '@numenjs/i18n'
 import { BrowserLocaleService, type BrowserLocaleConfig } from './i18n.js'
 import { BrowserExtensionRegistry } from './extensions.js'
 import { BrowserEntryLoader, type BrowserEntryLoaderConfig } from './loader.js'

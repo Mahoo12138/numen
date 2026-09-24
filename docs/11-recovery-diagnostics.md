@@ -93,6 +93,8 @@ traceId
 
 通过 Runtime/Invocation Context 自动注入，不要求插件作者每次手写。
 
+当前实现已接通宿主 / 插件、Scheduler、Connection、Trigger 与 Console 的日志边界，并提供脱敏文件轮转、重启恢复和 Workbench 日志页。配置、API、保留窗口和限制见 [Runtime 日志](19-logging.md)。
+
 ### 6.1 Logs ≠ Journal ≠ Audit
 
 | 系统 | 回答的问题 |

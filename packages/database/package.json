@@ -1,5 +1,5 @@
 {
-  "name": "@numen/database",
+  "name": "@numenjs/database",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -12,7 +12,7 @@
     }
   },
   "peerDependencies": {
-    "cordis": "^4.0.0-rc.8"
+    "cordis": "4.0.0-rc.8"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3"

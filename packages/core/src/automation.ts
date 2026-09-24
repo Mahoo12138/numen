@@ -165,6 +165,7 @@ export interface Automation {
   enabled: boolean
   activeRevisionId?: string
   activationGeneration: number
+  archivedAt?: string
   createdAt: string
   updatedAt: string
 }

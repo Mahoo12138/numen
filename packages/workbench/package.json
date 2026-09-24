@@ -1,5 +1,5 @@
 {
-  "name": "@numen/workbench",
+  "name": "@numenjs/workbench",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -34,17 +34,19 @@
   "dependencies": {
     "@cordisjs/plugin-server": "^1.7.0",
     "@lucide/vue": "^1.33.0",
-    "@numen/automation": "workspace:*",
-    "@numen/connections": "workspace:*",
-    "@numen/console": "workspace:*",
-    "@numen/core": "workspace:*",
-    "@numen/credentials": "workspace:*",
-    "@numen/i18n": "workspace:*",
-    "@numen/scheduler": "workspace:*",
-    "@numen/webui": "workspace:*",
-    "cordis": "^4.0.0-rc.8",
+    "@numenjs/automation": "workspace:*",
+    "@numenjs/connections": "workspace:*",
+    "@numenjs/console": "workspace:*",
+    "@numenjs/core": "workspace:*",
+    "@numenjs/credentials": "workspace:*",
+    "@numenjs/i18n": "workspace:*",
+    "@numenjs/scheduler": "workspace:*",
+    "@numenjs/webui": "workspace:*",
+    "cordis": "4.0.0-rc.8",
     "schemastery": "^3.18.0",
-    "vue": "^3.5.0"
+    "vue": "^3.5.0",
+    "@numenjs/logging": "workspace:*",
+    "@numenjs/components": "workspace:*"
   },
   "devDependencies": {
     "@vue/server-renderer": "^3.5.0",

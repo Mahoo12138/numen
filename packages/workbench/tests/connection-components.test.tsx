@@ -1,4 +1,4 @@
-import type { SchemaUIResolver } from '@numen/webui/schema-ui'
+import type { SchemaUIResolver } from '@numenjs/webui/schema-ui'
 import { describe, expect, it, vi } from 'vitest'
 import { ConnectionConfigurationPanel } from '../src/ConnectionConfigurationPanel.js'
 import type { WorkbenchConnectionAdapter, WorkbenchConnectionIndexItem } from '../src/contracts.js'

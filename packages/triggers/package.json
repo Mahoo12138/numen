@@ -1,5 +1,5 @@
 {
-  "name": "@numen/triggers",
+  "name": "@numenjs/triggers",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -12,18 +12,19 @@
     }
   },
   "peerDependencies": {
-    "cordis": "^4.0.0-rc.8"
+    "cordis": "4.0.0-rc.8"
   },
   "dependencies": {
-    "@numen/automation": "workspace:*",
-    "@numen/connections": "workspace:*",
-    "@numen/core": "workspace:*",
-    "@numen/scheduler": "workspace:*"
+    "@numenjs/automation": "workspace:*",
+    "@numenjs/connections": "workspace:*",
+    "@numenjs/core": "workspace:*",
+    "@numenjs/scheduler": "workspace:*",
+    "@numenjs/logging": "workspace:*"
   },
   "devDependencies": {
-    "@numen/credentials": "workspace:*",
-    "@numen/database": "workspace:*",
-    "@numen/resources": "workspace:*",
+    "@numenjs/credentials": "workspace:*",
+    "@numenjs/database": "workspace:*",
+    "@numenjs/resources": "workspace:*",
     "schemastery": "^3.18.0"
   }
 }

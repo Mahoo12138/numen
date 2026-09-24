@@ -1,7 +1,7 @@
-import '@numen/automation'
-import '@numen/connections'
-import type { ConsoleSubscriptionDefinition } from '@numen/console'
-import '@numen/scheduler'
+import '@numenjs/automation'
+import '@numenjs/connections'
+import type { ConsoleSubscriptionDefinition } from '@numenjs/console'
+import '@numenjs/scheduler'
 import type { Context } from 'cordis'
 import z from 'schemastery'
 import {
@@ -49,9 +49,10 @@ export function workbenchInvalidationProviderPlugin(ctx: Context): void {
         queueMicrotask(flush)
       }
       const disposeAutomation = ctx.on('numen/automation-change', () => invalidate('home', 'automations'))
+      const disposeAutomationPurge = ctx.on('numen/automation-purge', () => invalidate('home', 'automations', 'runs'))
       const disposeControl = ctx.on('numen/control-change', () => invalidate('automationCatalog'))
       const disposeCapability = ctx.on('numen/capability-change', () => invalidate('automationCatalog'))
-      const disposeRun = ctx.on('numen/run-change', () => invalidate('home', 'runs'))
+      const disposeRun = ctx.on('numen/run-change', () => invalidate('home', 'runs', 'automations'))
       const disposeConnection = ctx.on('numen/connection-change', () => invalidate('home', 'automationCatalog', 'connections', 'credentials'))
       const disposeCredential = ctx.on('numen/credential-change', () => invalidate('credentials', 'connections'))
       const disposeCredentialType = ctx.on('numen/credential-type-change', () => invalidate('credentials', 'connections'))
@@ -65,6 +66,7 @@ export function workbenchInvalidationProviderPlugin(ctx: Context): void {
         disposed = true
         pending.clear()
         disposeAutomation()
+        disposeAutomationPurge()
         disposeCapability()
         disposeControl()
         disposeRun()

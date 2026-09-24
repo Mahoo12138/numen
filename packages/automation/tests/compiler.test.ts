@@ -1,4 +1,4 @@
-import type { AutomationSource, CapabilityDefinition, CapabilityStatus } from '@numen/core'
+import type { AutomationSource, CapabilityDefinition, CapabilityStatus } from '@numenjs/core'
 import z from 'schemastery'
 import { describe, expect, it } from 'vitest'
 import { AutomationCompileError, compileAutomation } from '../src/index.js'
