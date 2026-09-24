@@ -45,10 +45,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     "rail sidebar main inspector" minmax(0, 1fr)
     "rail panel panel inspector" auto
     "status status status status" 24px
-    / 76px 260px minmax(420px, 1fr) 360px;
+    / 76px var(--wb-sidebar-width, 260px) minmax(0, 1fr) var(--wb-inspector-width, 360px);
   width: 100%;
   height: 100%;
-  min-height: 640px;
+  min-height: 0;
   overflow: hidden;
   background: var(--wb-background);
   color: var(--wb-text);
@@ -700,7 +700,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .inspector-diagnostics p { margin: 0; color: #a13a2d; font-size: 10px; line-height: 1.4; }
 
 .bottom-panel { grid-area: panel; z-index: 2; height: 46px; border-top: 1px solid var(--wb-border); background: var(--wb-chrome); }
-.bottom-panel[data-open="true"] { height: 176px; }
 .panel-tablist { display: flex; align-items: center; height: 45px; padding: 0 12px; }
 .panel-tablist > button { position: relative; height: 32px; padding: 0 12px; border: 0; background: transparent; cursor: pointer; color: #3f4752; font-size: 11.5px; }
 .panel-tablist > button[data-active="true"] { color: var(--wb-text); font-weight: 600; }
@@ -734,10 +733,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
       "rail sidebar main" minmax(0, 1fr)
       "rail panel panel" auto
       "status status status" 24px
-      / 68px 232px minmax(0, 1fr);
+      / 68px var(--wb-sidebar-width, 232px) minmax(0, 1fr);
   }
   .top-bar { grid-template-columns: 245px minmax(280px, 1fr) auto; gap: 12px; }
-  .inspector { position: fixed; inset: 44px 0 24px auto; width: min(360px, calc(100vw - 68px)); box-shadow: -12px 0 32px rgb(31 43 65 / 16%); transform: translateX(102%); transition: transform 180ms ease-out; }
+  .inspector { position: fixed; inset: 44px 0 24px auto; width: var(--wb-inspector-width, 360px); box-shadow: -12px 0 32px rgb(31 43 65 / 16%); transform: translateX(102%); transition: transform 180ms ease-out; }
   .inspector[data-open="true"] { transform: translateX(0); }
   .mobile-inspector-button { display: inline-flex; height: 30px; padding: 0 10px; border: 1px solid var(--wb-border-strong); border-radius: 4px; background: white; color: var(--wb-text); cursor: pointer; font-size: 11px; font-weight: 550; }
   .mobile-inspector-button:hover { background: var(--wb-surface-subtle); }
@@ -755,14 +754,14 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .connections-workspace[data-configuring="true"] .connections-table th:nth-child(5),
   .connections-workspace[data-configuring="true"] .connections-table td:nth-child(5) { display: none; }
   .workbench-shell[data-inspector-open="false"] {
-    grid-template-columns: 76px 260px minmax(420px, 1fr) 0;
+    grid-template-columns: 76px var(--wb-sidebar-width, 260px) minmax(0, 1fr) 0;
   }
   .inspector[data-open="false"] { display: none; }
 }
 
 @media (max-width: 899px) {
   .workbench-shell {
-    min-height: 520px;
+    min-height: 0;
     grid-template:
       "top" 44px
       "main" minmax(0, 1fr)
@@ -840,7 +839,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .runs-section-heading { align-items: flex-start; flex-direction: column; gap: 4px; }
   .bottom-panel { height: 42px; }
   .panel-tablist { height: 41px; }
-  .bottom-panel[data-open="true"] { height: 150px; }
   .panel-content { height: 108px; }
   .inspector { inset: 44px 0 78px auto; width: min(360px, 92vw); }
   .schema-field-row { grid-template-columns: 1fr; gap: 4px; }
@@ -1007,6 +1005,26 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .logs-compact .logs-records { max-height: 200px; }
 .logs-view > .secondary-button { align-self: flex-start; }
 .logs-view .secondary-button { margin: 0; padding-inline: 10px; flex-shrink: 0; }
-.logs-panel-content { height: min(44vh, 380px); overflow: auto; }
-.bottom-panel[data-open="true"]:has(.logs-panel-content) { height: auto; }
+.logs-panel-content { overflow: auto; }
+
 @media (max-width: 700px) { .system-logs-page { padding: 16px; } .logs-toolbar label { flex: 1 1 120px; min-width: 0; } .logs-toolbar input, .logs-toolbar select { width: 100%; max-width: none; } }
+
+/* Splitter positions follow the existing page regions, including plugin-owned chrome. */
+.sidebar-resize-handle { grid-area: sidebar; justify-self: end; transform: translateX(50%); z-index: 6; }
+.inspector-resize-handle { grid-area: inspector; justify-self: start; transform: translateX(-50%); z-index: 6; }
+.bottom-panel { position: relative; display: flex; flex-direction: column; min-height: 0; }
+.bottom-panel[data-open="true"] { height: var(--wb-panel-height, 240px); }
+.panel-resize-handle { position: absolute !important; top: -4px; left: 0; right: 0; z-index: 6; }
+.panel-tablist { flex: 0 0 45px; }
+.bottom-panel .panel-content { flex: 1; min-height: 0; height: auto; overflow: auto; }
+.workbench-shell > .bottom-panel:has(.n-resize-handle[data-dragging="true"]) { z-index: 7; }
+@media (max-width: 1279px) and (min-width: 900px) {
+  .inspector-resize-handle { position: fixed; grid-area: auto; top: 44px; bottom: 24px; right: var(--wb-inspector-width, 360px); left: auto; transform: translateX(50%); }
+}
+@media (max-width: 899px) {
+  .sidebar-resize-handle, .inspector-resize-handle { display: none; }
+  .panel-tablist { flex-basis: 41px; }
+}
+
+/* Keep the inspector toggle available after closing the docked inspector. */
+.mobile-inspector-button { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border: 1px solid var(--wb-border-strong); border-radius: 4px; background: white; color: var(--wb-text); cursor: pointer; font-size: 11px; font-weight: 550; }

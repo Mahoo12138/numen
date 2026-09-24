@@ -26,7 +26,7 @@ try {
   await writeFile(join(directory, 'consumer.ts'), `
 import { h, createSSRApp } from 'vue'
 import { renderToString } from '@vue/server-renderer'
-import { Button, SelectMenu, StringLiteralEditor, FormSection, type SchemaField } from '@numenjs/components'
+import { Button, Input, ResizeHandle, SelectMenu, StringLiteralEditor, FormSection, type SchemaField } from '@numenjs/components'
 import { numenPluginRuntime } from '@numenjs/components/vite'
 import { BrowserExtensionRegistry, SchemaUIRegistry } from '@numenjs/webui'
 import { ConsoleEntryRegistry } from '@numenjs/console'
@@ -35,10 +35,12 @@ import { isNumenValue } from '@numenjs/core'
 const field: SchemaField = { name: 'message', label: 'Message', type: 'string', schemaType: 'string', required: true }
 const html = await renderToString(createSSRApp({ render: () => h(FormSection, { title: 'Settings' }, () => [
   h(Button, { onClick() {} }, () => 'Save'),
+  h(Input, { value: 'Installed input', 'aria-label': 'Input' }),
+  h(ResizeHandle, { ariaLabel: 'Resize panel', axis: 'x', value: 260, min: 180, max: 480, onChange() {} }),
   h(SelectMenu, { ariaLabel: 'Mode', value: 'a', options: [{ value: 'a', label: 'Alpha' }], onChange() {} }),
   h(StringLiteralEditor, { canEdit: true, controlId: 'test', inputId: 'input', invalid: false, field, onCommit() {} }),
 ]) }))
-if (!html.includes('Alpha') || !html.includes('Required') || !html.includes('Save')) throw new Error('Installed component render failed')
+if (!html.includes('role="separator"') || !html.includes('Installed input') || !html.includes('Alpha') || !html.includes('Required') || !html.includes('Save')) throw new Error('Installed component render failed')
 if (numenPluginRuntime().name !== 'numen-plugin-runtime') throw new Error('Missing plugin build adapter')
 if (!isNumenValue({ nested: [1, true, null] }) || isNumenValue(Infinity)) throw new Error('Installed core contract failed')
 const root = new Context()

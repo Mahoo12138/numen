@@ -781,5 +781,9 @@ export const zhCN = {
   "workbench.logs.empty": "没有符合筛选条件的日志。",
   "workbench.logs.older": "更早的日志",
   "workbench.logs.expired": "此页日志已移出保留窗口，请返回最新日志。",
-  "workbench.logs.viewRun": "查看运行日志"
+  "workbench.logs.viewRun": "查看运行日志",
+  "workbench.resize.sidebar": "调整侧栏宽度",
+  "workbench.resize.inspector": "调整检查器宽度",
+  "workbench.resize.panel": "调整底部面板高度",
+  "workbench.resize.hint": "拖动调整大小 · 方向键微调 · 双击或回车恢复默认"
 } satisfies Record<keyof typeof enUS, string>

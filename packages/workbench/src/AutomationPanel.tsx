@@ -1,3 +1,5 @@
+import { PanelResizeHandle } from './PanelResizeHandle.js'
+import { useWorkbenchLayout } from './workbench-layout.js'
 import { LogsView, type LogsViewProps } from './LogsView.js'
 import { diagnosticText, t, plural } from './i18n.js'
 import type { CompileDiagnostic, SourceRef } from '@numenjs/core'
@@ -15,7 +17,7 @@ interface AutomationPanelProps extends Pick<LogsViewProps, 'consoleClient' | 'au
 }
 
 export const AutomationPanel = defineSetupComponent<AutomationPanelProps>('AutomationPanel', ['problems', 'preview', 'onProblemSelect', 'consoleClient', 'automationId'], props => {
-  const open = ref(false)
+  const open = useWorkbenchLayout()?.panelOpen ?? ref(false)
   const activeTab = ref('Problems')
 
   watch(() => props.problems.length, (length) => {
@@ -28,6 +30,7 @@ export const AutomationPanel = defineSetupComponent<AutomationPanelProps>('Autom
   return () => {
     const problemCount = props.preview ? 1 : props.problems.length
     return <section class="bottom-panel" data-open={open.value} aria-label={t('workbench.bottomPanel')}>
+      <PanelResizeHandle />
       <div class="panel-tablist" role="tablist">
         {panelTabs.map(tab => (
           <button

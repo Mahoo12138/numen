@@ -1,4 +1,6 @@
-import { Button, Input, SelectMenu } from '@numenjs/components'
+import { PanelResizeHandle } from './PanelResizeHandle.js'
+import { provideWorkbenchLayout } from './workbench-layout.js'
+import { Button, Input, SelectMenu, ResizeHandle } from '@numenjs/components'
 import { LogsView } from './LogsView.js'
 import { t, provideWorkbenchI18n, pageTitle } from './i18n.js'
 import type { BrowserLocaleService } from '@numenjs/webui/i18n'
@@ -9,7 +11,7 @@ import type {
   BrowserRouteState,
 } from '@numenjs/webui/router'
 import { CircleHelp, Clock3, Command, Play, Plus, Save, Search, Settings } from '@lucide/vue'
-import { h, ref, shallowRef, watchEffect } from 'vue'
+import { computed, h, ref, shallowRef, watchEffect } from 'vue'
 import { ActivityRail } from './ActivityRail.js'
 import {
   activityIdForRoute,
@@ -83,7 +85,6 @@ export const WorkbenchShell = defineSetupComponent<WorkbenchShellProps>('Workben
     if (typeof document !== 'undefined') document.documentElement.lang = language.locale.value
   })
   const standaloneActivityId = ref<CoreWorkbenchActivityId>('automations')
-  const panelOpen = ref(false)
   const panelTab = ref('Problems')
   const inspectorOpen = ref(
     typeof globalThis.matchMedia === 'function'
@@ -91,6 +92,14 @@ export const WorkbenchShell = defineSetupComponent<WorkbenchShellProps>('Workben
       : true
   )
   const routeState = shallowRef(props.router?.getSnapshot() ?? standaloneRouteState)
+  const shell = ref<HTMLElement>()
+  const currentPage = computed(() => (props.router
+    ? routeState.value.page
+    : (props.standalonePages ?? []).find(page => activityIdForRoute(page) === standaloneActivityId.value)
+  ) as WorkbenchPageDefinition | undefined)
+  const layout = provideWorkbenchLayout(shell, computed(() => !!currentPage.value?.chrome?.hasInspector && inspectorOpen.value))
+  const { panelOpen } = layout
+
 
   watchEffect((onCleanup) => {
     const router = props.router
@@ -113,10 +122,7 @@ export const WorkbenchShell = defineSetupComponent<WorkbenchShellProps>('Workben
   return () => {
     const routedActivityId = activityIdForRoute(routeState.value.page)
     const activityId = props.router ? routedActivityId : standaloneActivityId.value
-    const activePage = (props.router
-      ? routeState.value.page
-      : (props.standalonePages ?? []).find(page => activityIdForRoute(page) === standaloneActivityId.value)
-    ) as WorkbenchPageDefinition | undefined
+    const activePage = currentPage.value
     const PageChrome = activePage?.chrome?.component ?? DefaultPageChrome
     const hasInspector = !!activePage?.chrome?.hasInspector
     const ownsPanel = !!activePage?.chrome?.ownsPanel
@@ -125,7 +131,8 @@ export const WorkbenchShell = defineSetupComponent<WorkbenchShellProps>('Workben
       route: routeState.value,
       navigate: props.router.navigate.bind(props.router),
     } : undefined
-    return <div class="workbench-shell" data-inspector-open={hasInspector && inspectorOpen.value}>
+    return <div class="workbench-shell" ref={shell} data-inspector-open={hasInspector && inspectorOpen.value}
+      style={{ '--wb-sidebar-width': `${layout.sizes.value.sidebar}px`, '--wb-inspector-width': `${layout.sizes.value.inspector}px`, '--wb-panel-height': `${layout.sizes.value.panel}px` }}>
       <header class="top-bar">
         <div class="brand"><span class="brand-mark">N</span><strong>Numen Workbench</strong></div>
         <label class="command-center">
@@ -163,7 +170,15 @@ export const WorkbenchShell = defineSetupComponent<WorkbenchShellProps>('Workben
       ) : (
         <NotFoundPageChrome pathname={routeState.value.pathname} />
       )}
+      {!layout.sizes.value.mobile ? <ResizeHandle class="sidebar-resize-handle" ariaLabel={t('workbench.resize.sidebar')}
+        title={t('workbench.resize.hint')} axis="x" value={layout.sizes.value.sidebar} min={180} max={layout.sizes.value.sidebarMax}
+        onChange={value => layout.resize('sidebar', value)} onCommit={layout.save} onCancel={layout.cancel} onReset={() => layout.reset('sidebar')} /> : null}
+      {hasInspector && inspectorOpen.value && !layout.sizes.value.mobile ? <ResizeHandle class="inspector-resize-handle"
+        ariaLabel={t('workbench.resize.inspector')} title={t('workbench.resize.hint')} axis="x" direction={-1}
+        value={layout.sizes.value.inspector} min={260} max={layout.sizes.value.inspectorMax}
+        onChange={value => layout.resize('inspector', value)} onCommit={layout.save} onCancel={layout.cancel} onReset={() => layout.reset('inspector')} /> : null}
       {ownsPanel ? null : <section class="bottom-panel" data-open={panelOpen.value} aria-label={t('workbench.bottomPanel')}>
+        <PanelResizeHandle />
         <div class="panel-tablist" role="tablist">
           {panelTabs.map(tab => (
             <button

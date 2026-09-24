@@ -779,5 +779,9 @@ export const enUS = {
   "workbench.logs.empty": "No logs match these filters.",
   "workbench.logs.older": "Older logs",
   "workbench.logs.expired": "This page has left the retention window. Return to the latest logs.",
-  "workbench.logs.viewRun": "View runtime logs"
+  "workbench.logs.viewRun": "View runtime logs",
+  "workbench.resize.sidebar": "Resize sidebar",
+  "workbench.resize.inspector": "Resize inspector",
+  "workbench.resize.panel": "Resize bottom panel",
+  "workbench.resize.hint": "Drag to resize · Arrow keys to adjust · Double-click or Enter to reset"
 } as const
