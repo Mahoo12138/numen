@@ -1,6 +1,7 @@
 import { workbenchConnectionUsageProviderPlugin } from './connection-usage-provider.js'
 import { workbenchManagementProviderPlugin } from './management-provider.js'
 import { workbenchSystemProviderPlugin } from './system-provider.js'
+import { workbenchPluginOwnershipProviderPlugin } from './plugin-ownership-provider.js'
 import type { Context } from 'cordis'
 import z from 'schemastery'
 import {
@@ -24,6 +25,7 @@ export type WorkbenchConfig = WorkbenchRuntimeConfig
 export function workbenchPlugin(ctx: Context, config: WorkbenchConfig = {}): void {
   ctx.plugin(workbenchRuntimePlugin, config)
   ctx.plugin(workbenchManagementProviderPlugin)
+  ctx.plugin(workbenchPluginOwnershipProviderPlugin)
   ctx.plugin(workbenchSystemProviderPlugin)
   ctx.plugin(workbenchConnectionUsageProviderPlugin)
   ctx.plugin(workbenchAutomationAuthoringProviderPlugin)

@@ -390,7 +390,7 @@ export const workbenchInvalidationSubscriptionRef = {
   version: 1,
 } as const satisfies ConsoleProcedureRef
 
-export type WorkbenchInvalidationScope = 'home' | 'automations' | 'automationCatalog' | 'runs' | 'connections' | 'credentials'
+export type WorkbenchInvalidationScope = 'home' | 'automations' | 'automationCatalog' | 'runs' | 'connections' | 'credentials' | 'plugins'
 
 export interface WorkbenchInvalidationEvent {
   scopes: WorkbenchInvalidationScope[]

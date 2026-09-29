@@ -3,6 +3,7 @@ import { diagnosticText, t, metadataText, formatDateTime, statusLabel } from './
 import { Ban, Braces, ChevronLeft, Clock3, GitBranch, ListTree, RotateCcw, ScrollText } from '@lucide/vue'
 import { computed, nextTick, onScopeDispose, reactive, ref, shallowReactive, watch } from 'vue'
 import { ExecutionDataPanel } from './ExecutionDataPanel.js'
+import { PluginOwnership } from './PluginOwnership.js'
 import { useExecutionData } from './useExecutionData.js'
 import {
   workbenchCancelRunActionRef,
@@ -198,6 +199,7 @@ export const RunDetailPage = defineSetupComponent<WorkbenchPageProps>(
           onClearFilter={() => filterExecutions()}
           filterLabel={sourceFilter.value ?? executionFilter.value}
           selectedSourceNodeId={selectedSourceNode.value}
+          ownership={props}
           state={detail}
         />
       </main>
@@ -263,6 +265,7 @@ export function RunDetailContent({
   onClearFilter,
   filterLabel,
   selectedSourceNodeId,
+  ownership,
 }: {
   activeView: RunDetailView
   state: ConsoleQueryState<WorkbenchRunDetail | null>
@@ -281,6 +284,7 @@ export function RunDetailContent({
   onClearFilter?(): void
   filterLabel?: string | undefined
   selectedSourceNodeId?: string | undefined
+  ownership?: WorkbenchPageProps
 }) {
   if (state.status === 'DISABLED') {
     return <RunDetailState title={t('workbench.runtimePreview')} message={t('workbench.openThisPageFromARunningNumenRuntimeToInspectADurableRun')} />
@@ -343,7 +347,7 @@ export function RunDetailContent({
           {filterLabel ? <p class="run-execution-filter"><code>{filterLabel}</code><Button type="button" onClick={() => onClearFilter?.()}>{t('workbench.runData.clearFilter')}</Button></p> : null}
           {detail.executions.length ? (
             <div class="execution-records">
-              {detail.executions.map(execution => <ExecutionRecord execution={execution} key={execution.id} onInspect={onInspect} onLocate={onLocate} />)}
+              {detail.executions.map(execution => <ExecutionRecord execution={execution} key={execution.id} onInspect={onInspect} onLocate={onLocate} ownership={ownership} runId={detail.run.id} />)}
             </div>
           ) : <p class="run-detail-empty">{t('workbench.noExecutionsHaveBeenCreatedForThisRun')}</p>}
           <PageControls
@@ -436,7 +440,7 @@ function RunFacts({ detail }: { detail: WorkbenchRunDetail }) {
   )
 }
 
-function ExecutionRecord({ execution, onInspect, onLocate }: { execution: WorkbenchRunExecution; onInspect?: ((id: string, attemptId?: string) => void) | undefined; onLocate?: ((id: string) => void) | undefined }) {
+function ExecutionRecord({ execution, onInspect, onLocate, ownership, runId }: { execution: WorkbenchRunExecution; onInspect?: ((id: string, attemptId?: string) => void) | undefined; onLocate?: ((id: string) => void) | undefined; ownership: WorkbenchPageProps | undefined; runId: string }) {
   return (
     <article class="execution-record" data-status={execution.status}>
       <header>
@@ -450,6 +454,7 @@ function ExecutionRecord({ execution, onInspect, onLocate }: { execution: Workbe
         {onLocate && execution.sourceNodeId ? <Button type="button" onClick={() => onLocate(execution.sourceNodeId!)}>{t('workbench.runData.locate')}</Button> : null}
       </div>
       {execution.blockedReason ? <p class="execution-warning">{t('workbench.blocked2')}{statusLabel(execution.blockedReason)}</p> : null}
+      {execution.operation === 'invoke' ? <PluginOwnership {...ownership} target={{ kind: 'execution', runId, executionId: execution.id }} /> : null}
       <dl>
         <div><dt>{t('workbench.updated')}</dt><dd>{formatTime(execution.updatedAt)}</dd></div>
         <div><dt>{t('workbench.generation')}</dt><dd>{execution.generation}</dd></div>

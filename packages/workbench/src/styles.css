@@ -1196,3 +1196,11 @@ button.command-center > span { min-width: 0; flex: 1; padding: 0 8px; overflow: 
   .system-checks { grid-template-columns: minmax(0, 1fr); }
   .runs-filters label { width: 100%; }
 }
+.plugin-ownership { margin-block: .5rem; font-size: .75rem; white-space: normal; }
+.plugin-ownership > summary { cursor: pointer; color: var(--wb-accent); }
+.plugin-ownership-content { display: grid; gap: .75rem; padding-block: .5rem; max-width: 36rem; overflow-wrap: anywhere; }
+.plugin-ownership-content > p { color: var(--wb-muted); margin: 0; }
+.plugin-owner { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem .5rem; margin-block: .4rem; }
+.plugin-owner > span, .plugin-owner-cause { flex-basis: 100%; }
+.plugin-owner-cause { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
+.plugin-row[data-selected="true"] { outline: 2px solid var(--wb-accent); outline-offset: 2px; scroll-margin-block: 1rem; }

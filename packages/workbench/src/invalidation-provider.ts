@@ -11,7 +11,8 @@ import {
   type WorkbenchInvalidationScope,
 } from './contracts.js'
 
-const scopeOrder: WorkbenchInvalidationScope[] = ['home', 'automations', 'automationCatalog', 'runs', 'connections', 'credentials']
+declare module 'cordis' { interface Events { 'numen/host-config-change'(): void } }
+const scopeOrder: WorkbenchInvalidationScope[] = ['home', 'automations', 'automationCatalog', 'runs', 'connections', 'credentials', 'plugins']
 const invalidationScope = z.union(scopeOrder).required()
 
 export const workbenchInvalidationSubscription: ConsoleSubscriptionDefinition<
@@ -54,6 +55,8 @@ export function workbenchInvalidationProviderPlugin(ctx: Context): void {
       const disposeAutomationPurge = ctx.on('numen/automation-purge', () => invalidate('home', 'automations', 'runs'))
       const disposeControl = ctx.on('numen/control-change', () => invalidate('automationCatalog'))
       const disposeCapability = ctx.on('numen/capability-change', () => invalidate('automationCatalog'))
+      const disposeRegistration = ctx.on('numen/registration-change', () => invalidate('plugins', 'connections', 'runs'))
+      const disposeHostConfig = ctx.on('numen/host-config-change', () => invalidate('plugins', 'connections', 'runs'))
       const disposeRun = ctx.on('numen/run-change', () => invalidate('home', 'runs', 'automations'))
       const disposeConnection = ctx.on('numen/connection-change', () => invalidate('home', 'automationCatalog', 'connections', 'credentials'))
       const disposeCredential = ctx.on('numen/credential-change', () => invalidate('credentials', 'connections'))
@@ -71,6 +74,8 @@ export function workbenchInvalidationProviderPlugin(ctx: Context): void {
         disposeTriggerRuntime()
         disposeAutomationPurge()
         disposeCapability()
+        disposeRegistration()
+        disposeHostConfig()
         disposeControl()
         disposeRun()
         disposeCredential()

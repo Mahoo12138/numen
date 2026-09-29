@@ -2,6 +2,7 @@ import { workbenchConnectionUsageRef, type WorkbenchConnectionUsage } from './ma
 import { Button, StatePanel } from '@numenjs/components'
 import { PluginsPage } from './PluginsPage.js'
 import { SystemPage } from './SystemPage.js'
+import { PluginOwnership } from './PluginOwnership.js'
 import { diagnosticText, t, metadataText, formatDateTime, statusLabel } from './i18n.js'
 import type { Context } from 'cordis'
 import { Activity, Cable, Home, Network, Pencil, Play, Plus } from '@lucide/vue'
@@ -344,7 +345,7 @@ function ConnectionsIndex({ state, desiredState, usage, navigation, selectedConn
                     <td>
                       <em data-connection-status={connection.status}>{statusLabel(connection.status)}</em>
                       <small class="connection-status-detail">{metadataText(`workbench.connectionStatus.${connection.status}`, connection.statusDetail)}</small>
-                      {connection.status === 'UNAVAILABLE' ? <Button type="button" onClick={() => navigation?.navigate(coreWorkbenchRoutes.plugins)}>{t('workbench.navigation.checkPlugins')}</Button> : null}
+                      <PluginOwnership {...(client ? { consoleClient: client } : {})} {...(navigation ? { navigation } : {})} target={{ kind: 'connection', connectionId: connection.id }} />
                       {connection.status === 'ERROR' || connection.status === 'STARTING' || connection.status === 'STOPPED' ? <Button type="button" onClick={() => navigation?.navigate(coreWorkbenchRoutes.system, { query: { connectionId: connection.id } })}>{t('workbench.navigation.connectionLogs')}</Button> : null}
                       {usage.status === 'READY' ? <details class="connection-usage"><summary>{t('workbench.navigation.usage')}</summary>
                         {usage.data.find(item => item.connectionId === connection.id)?.automations.map(automation => <button type="button" class="run-detail-link" onClick={() => navigation?.navigate(coreWorkbenchRoutes.automations, { query: { automation: automation.id } })}>{automation.name} · {automation.draft ? 'Draft' : ''}{automation.active ? ' / Active' : ''}</button>)}

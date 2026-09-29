@@ -1,7 +1,8 @@
 import { Button, StatePanel } from '@numenjs/components'
 import type { HostConfigMutationRequest, HostConfigMutationResult, HostConfigOperation, HostConfigPreview, HostConfigSnapshot, HostPluginEntry } from '@numenjs/config'
 import { Boxes, RefreshCw } from '@lucide/vue'
-import { computed, nextTick, onScopeDispose, ref } from 'vue'
+import { computed, nextTick, onScopeDispose, ref, watch } from 'vue'
+import { pluginReturnTarget } from './plugin-navigation.js'
 import { diagnosticText, t } from './i18n.js'
 import { workbenchPluginApplyRef, workbenchPluginPreviewRef, workbenchPluginsQueryRef } from './management-contracts.js'
 import { coreWorkbenchRoutes } from './routes.js'
@@ -10,12 +11,28 @@ import { useConsoleQuery } from './useConsoleQuery.js'
 import { defineSetupComponent } from './vue-component.js'
 
 export const PluginsPage = defineSetupComponent<WorkbenchPageProps>('PluginsPage', ['consoleClient', 'navigation'], props => {
-  const [query, reload, refresh] = useConsoleQuery<Record<string, never>, HostConfigSnapshot>(() => props.consoleClient, workbenchPluginsQueryRef, {})
+  const [query, reload, refresh] = useConsoleQuery<Record<string, never>, HostConfigSnapshot>(() => props.consoleClient, workbenchPluginsQueryRef, {}, 'plugins')
   const selected = ref(''), operation = ref<'setConfig' | 'setLabel' | 'move' | 'createGroup'>('setConfig')
   const label = ref(''), groupId = ref(''), parentId = ref(''), config = ref('')
   const editing = ref(false), busy = ref(false), error = ref(''), result = ref('')
   const preview = ref<HostConfigPreview>(), request = ref<HostConfigMutationRequest>()
   const snapshot = computed(() => query.status === 'READY' ? query.data : undefined)
+  const targetId = computed(() => new URLSearchParams(props.navigation?.route.search ?? '').get('entryId'))
+  const targetEntry = computed(() => snapshot.value?.entries.find(entry => entry.id === targetId.value))
+  const returnTarget = computed(() => pluginReturnTarget(new URLSearchParams(props.navigation?.route.search ?? '').get('from')))
+  const revealed = computed(() => {
+    const ids = new Set<string>(), entries = snapshot.value?.entries ?? []
+    let entry = targetEntry.value
+    while (entry && !ids.has(entry.id)) { ids.add(entry.id); entry = entries.find(parent => parent.id === entry!.parentId) }
+    return ids
+  })
+  watch([targetId, () => !!targetEntry.value], () => {
+    if (typeof document === 'undefined') return
+    void nextTick(() => {
+      const row = Array.from(document.querySelectorAll<HTMLElement>('[data-entry-id]')).find(element => element.dataset.entryId === targetId.value)
+      row?.focus({ preventScroll: true }); row?.scrollIntoView({ block: 'nearest' })
+    })
+  }, { immediate: true, flush: 'post' })
   const selectedEntry = computed(() => snapshot.value?.entries.find(entry => entry.id === selected.value))
   let controller: AbortController | undefined
   onScopeDispose(() => controller?.abort())
@@ -80,7 +97,7 @@ export const PluginsPage = defineSetupComponent<WorkbenchPageProps>('PluginsPage
     const entries = snapshot.value?.entries ?? [], byId = new Map(entries.map(entry => [entry.id, entry]))
     return entries.filter(entry => {
       let parent = entry.parentId, depth = 0
-      while (parent && depth++ <= entries.length) { const row = byId.get(parent); if (row?.collapsed) return false; parent = row?.parentId }
+      while (parent && depth++ <= entries.length) { const row = byId.get(parent); if (row?.collapsed && !revealed.value.has(row.id)) return false; parent = row?.parentId }
       return true
     })
   })
@@ -89,15 +106,18 @@ export const PluginsPage = defineSetupComponent<WorkbenchPageProps>('PluginsPage
       <Button variant="secondary" disabled={busy.value} onClick={reload} type="button" aria-label={t('workbench.management.refresh')}><RefreshCw size={16} /></Button>
       <Button variant="secondary" disabled={!writable.value} onClick={() => openEditor()} type="button">{t('workbench.management.createGroup')}</Button>
     </header>
+    {returnTarget.value ? <Button type="button" onClick={() => props.navigation?.navigate(...returnTarget.value!)}>{t('workbench.ownership.back')}</Button> : null}
     {query.status === 'ERROR' ? <StatePanel title={t('workbench.management.unavailable')} message={diagnosticText(query)} action={t('workbench.tryAgain')} onAction={reload} tone="error" /> : null}
     {query.status === 'DISABLED' ? <StatePanel title={t('workbench.runtimePreview')} message={t('workbench.management.unavailable')} /> : null}
     {query.status === 'LOADING' ? <StatePanel message="" busy title={t('workbench.management.loading')} /> : null}
     {snapshot.value ? <>
+      {targetId.value && !targetEntry.value ? <p role="status">{t('workbench.ownership.targetMissing', { id: targetId.value })}</p> : null}
+      {targetEntry.value ? <p role="status">{t('workbench.ownership.located', { name: targetEntry.value.label || targetEntry.value.id })}</p> : null}
       {!snapshot.value.writable ? <p role="status">{snapshot.value.readOnlyReason ?? t('workbench.management.readOnly')}</p> : null}
       {snapshot.value.restartRequired ? <p role="alert">{t('workbench.management.restartRequired')}</p> : null}
       <div class="management-layout">
         <section class="core-page-section plugin-list" aria-label={t('workbench.management.instances')}>
-          {visible.value.map(entry => <article class="plugin-row" key={entry.id} data-parent={!!entry.parentId} data-entry-id={entry.id}>
+          {visible.value.map(entry => <article class="plugin-row" key={entry.id} data-parent={!!entry.parentId} data-entry-id={entry.id} data-selected={entry.id === targetId.value} tabindex={-1}>
             <header><div><strong>{entry.label || entry.id}</strong><small>{entry.parentId ? `${entry.parentId} / ` : ''}{entry.id}</small></div>
               <span class="plugin-state" data-state={entry.actualState}>{t(`workbench.management.state.${entry.actualState}`)}</span>
             </header>

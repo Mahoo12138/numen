@@ -188,6 +188,7 @@ describe('Numen runtime', () => {
       expect.objectContaining({ definition: expect.objectContaining({ id: 'numen:manual-run-form', version: 1, kind: 'query' }), providerAvailable: true }),
       expect.objectContaining({ definition: expect.objectContaining({ id: 'numen:manual-run-start', version: 1, kind: 'action' }), providerAvailable: true }),
       expect.objectContaining({ definition: expect.objectContaining({ id: 'numen:plugin-apply', version: 1, kind: 'action' }), providerAvailable: configVersion === 2 }),
+      expect.objectContaining({ definition: expect.objectContaining({ id: 'numen:plugin-ownership', version: 1, kind: 'query' }), providerAvailable: configVersion === 2 }),
       expect.objectContaining({ definition: expect.objectContaining({ id: 'numen:plugin-preview', version: 1, kind: 'query' }), providerAvailable: configVersion === 2 }),
       expect.objectContaining({ definition: expect.objectContaining({ id: 'numen:plugins', version: 1, kind: 'query' }), providerAvailable: configVersion === 2 }),
       expect.objectContaining({
@@ -221,7 +222,7 @@ describe('Numen runtime', () => {
       },
       event => invalidations.push(event),
     )
-    expect(invalidations).toEqual([{ scopes: ['home', 'automations', 'automationCatalog', 'runs', 'connections', 'credentials'] }])
+    expect(invalidations).toEqual([{ scopes: ['home', 'automations', 'automationCatalog', 'runs', 'connections', 'credentials', 'plugins'] }])
     invalidations.length = 0
     application.context.emit('numen/run-change', 'synthetic-run')
     application.context.emit('numen/automation-change', 'synthetic-automation')

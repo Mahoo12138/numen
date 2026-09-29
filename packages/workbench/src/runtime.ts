@@ -1,5 +1,6 @@
 import { workbenchConnectionUsageQuery } from './connection-usage-provider.js'
 import { workbenchPluginsQuery, workbenchPluginPreview, workbenchPluginApply } from './management-provider.js'
+import { workbenchPluginOwnershipQuery } from './plugin-ownership-provider.js'
 import { workbenchSystemQuery } from './system-provider.js'
 import { workbenchLogsQuery, workbenchLogsChanged } from './logs-provider.js'
 export { workbenchLogsProviderPlugin } from './logs-provider.js'
@@ -99,6 +100,7 @@ export class WorkbenchRuntimeService extends Service {
     super(ctx, 'workbench')
     workbenchServerPlugin(ctx, config)
     ctx.console.define(ctx, workbenchPluginsQuery)
+    ctx.console.define(ctx, workbenchPluginOwnershipQuery)
     ctx.console.define(ctx, workbenchPluginPreview)
     ctx.console.define(ctx, workbenchPluginApply)
     ctx.console.define(ctx, workbenchSystemQuery)
