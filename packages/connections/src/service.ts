@@ -1,5 +1,5 @@
 import { withLogContext, withLogSecrets } from '@numenjs/logging'
-import { isNumenValue, isResourceRef, type NumenValue } from '@numenjs/core'
+import { isNumenValue, isResourceRef, trackRegistration, type NumenValue } from '@numenjs/core'
 import '@numenjs/credentials'
 import type { CredentialSecretSnapshot } from '@numenjs/credentials'
 import '@numenjs/database'
@@ -101,6 +101,7 @@ export interface ConnectionHealth {
 interface AdapterEntry {
   definition: ConnectionAdapterDefinition
   provider?: ConnectionAdapterProvider
+  releaseProvider?: () => void
 }
 
 interface ActiveRuntime {
@@ -223,10 +224,12 @@ export class ConnectionService extends Service {
     if (this.types.has(key)) throw new Error(`connection type already defined: ${key}`)
     return owner.effect(() => {
       this.types.set(key, definition)
+      const release = trackRegistration(this.ctx, owner, { kind: 'connection-type', id: definition.id, version: definition.version, role: 'definition' })
       this.ctx.emit('numen/connection-type-change', definition)
       this.emitTypeConnections(definition)
       return () => {
         this.types.delete(key)
+        release()
         this.ctx.emit('numen/connection-type-change', definition)
         this.emitTypeConnections(definition)
       }
@@ -255,10 +258,14 @@ export class ConnectionService extends Service {
         UPDATE connections SET type_id = ?, type_version = ?
         WHERE adapter_id = ? AND adapter_version = ? AND type_id = ''
       `).run(definition.type.id, definition.type.version, definition.id, definition.version)
-      this.adapters.set(key, { definition: definition as ConnectionAdapterDefinition })
+      const entry: AdapterEntry = { definition: definition as ConnectionAdapterDefinition }
+      this.adapters.set(key, entry)
+      const release = trackRegistration(this.ctx, owner, { kind: 'connection-adapter', id: definition.id, version: definition.version, role: 'definition' })
       this.emitAdapterConnections(definition)
       return () => {
         this.adapters.delete(key)
+        entry.releaseProvider?.()
+        release()
         this.emitAdapterConnections(definition)
       }
     }, `connections.defineAdapter(${JSON.stringify(key)})`)
@@ -276,9 +283,13 @@ export class ConnectionService extends Service {
     if (entry.provider) throw new Error(`connection adapter provider already registered: ${key}`)
     return owner.effect(() => {
       entry.provider = provider
+      const release = trackRegistration(this.ctx, owner, { kind: 'connection-adapter', id: ref.id, version: ref.version, role: 'provider' })
+      entry.releaseProvider = release
       this.emitAdapterConnections(ref)
       return () => {
         delete entry.provider
+        delete entry.releaseProvider
+        release()
         this.emitAdapterConnections(ref)
       }
     }, `connections.provideAdapter(${JSON.stringify(key)})`)

@@ -86,6 +86,27 @@ export interface HostConfigService {
   read(): Promise<HostConfigSnapshot>
   preview(input: HostConfigMutationRequest): Promise<HostConfigPreview>
   apply(input: HostConfigMutationRequest): Promise<HostConfigMutationResult>
+  diagnose(refs: HostRegistrationRef[]): Promise<HostRegistrationDiagnosis[]>
+}
+
+export interface HostRegistrationRef {
+  kind: 'capability' | 'connection-adapter' | 'connection-type'
+  id: string
+  version: number
+}
+
+export interface HostRegistrationOwner {
+  role: 'definition' | 'provider'
+  evidence: 'current' | 'previous' | 'unknown'
+  reason?: 'not-observed' | 'unmanaged' | 'entry-removed' | 'entry-replaced' | 'configuration-changed'
+  observedAt?: string
+  entry?: Pick<HostPluginEntry, 'id' | 'label' | 'actualState' | 'selfEnabled' | 'effectiveEnabled'>
+  /** Outermost first; these are current configuration ancestors, not registration-time paths. */
+  ancestors: Array<Pick<HostPluginEntry, 'id' | 'label' | 'actualState' | 'selfEnabled' | 'effectiveEnabled'>>
+}
+
+export interface HostRegistrationDiagnosis extends HostRegistrationRef {
+  owners: HostRegistrationOwner[]
 }
 
 export class HostConfigError extends Error {

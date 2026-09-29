@@ -56,6 +56,28 @@ async function createContext(path: string, defineAdapter = true): Promise<Contex
 }
 
 describe('ConnectionService', () => {
+  it('revokes adapter provider ownership with its definition and ignores the old provider disposal after replacement', async () => {
+    const root = await createContext(':memory:', false)
+    const changes: Array<{ role: string; active: boolean; token: symbol }> = []
+    root.on('numen/registration-change', (registration, active) => { changes.push({ role: registration.role, active, token: registration.token }) })
+    try {
+      const removeDefinition = root.connections.defineAdapter(root, adapter)
+      const removeProvider = root.connections.provideAdapter(root, adapter, { async open() { return { value: {} } } })
+      const oldProviderToken = changes.at(-1)!.token
+      removeDefinition()
+      expect(changes).toContainEqual({ role: 'provider', active: false, token: oldProviderToken })
+      expect(root.connections.getAdapter(adapter)).toBeUndefined()
+      root.connections.defineAdapter(root, adapter)
+      root.connections.provideAdapter(root, adapter, { async open() { return { value: {} } } })
+      const count = changes.length
+      removeProvider()
+      expect(changes).toHaveLength(count)
+      const connection = root.connections.create({ name: 'Replacement', adapter, config: { baseUrl: 'https://example.test' }, enabled: true })
+      await root.connections.reconcile()
+      expect(root.connections.getRuntimeState(connection.id)?.status).toBe('READY')
+    } finally { await root.fiber.dispose() }
+  })
+
   it('associates asynchronous adapter logs with the connection and redacts its decrypted credential', async () => {
     process.env[masterKeyEnv] = randomBytes(32).toString('base64')
     const root = await createContext(':memory:', false)

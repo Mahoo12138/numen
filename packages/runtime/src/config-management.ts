@@ -5,13 +5,18 @@ import {
   commitManagedConfig, flattenRuntimeEntries, HostConfigError, mutateManagedConfig, readManagedConfig,
   type HostConfigService, type HostConfigSnapshot, type HostConfigPreview, type HostConfigMutationResult,
   type HostConfigMutationRequest, type HostConfigOperation, type HostPluginState, type ManagedConfigDocument, type RuntimeEntry,
+  type HostRegistrationRef, type HostRegistrationDiagnosis,
 } from '@numenjs/config'
+import { owningEntry, RegistrationOwnership } from './registration-ownership.js'
 
 export function toCordisEntry(entry: RuntimeEntry): EntryOptions {
   return { id: entry.id, name: entry.name, config: entry.children ? entry.children.map(toCordisEntry) : entry.config, disabled: entry.disabled, ...(entry.children ? { group: true } : {}) }
 }
 
-declare module 'cordis' { interface Context { hostConfig: HostConfigService } }
+declare module 'cordis' {
+  interface Context { hostConfig: HostConfigService }
+  interface Events { 'numen/host-config-change'(): void }
+}
 
 interface HostConfigurationOptions {
   filename: string
@@ -61,15 +66,6 @@ function safeConfig(value: unknown, schemas: unknown[] = []): { value: unknown; 
   return { value: Object.fromEntries(entries), sensitive }
 }
 
-function owningEntry(fiber: Fiber): string | undefined {
-  let current: Fiber | undefined = fiber
-  while (current?.runtime) {
-    if (current.entry) return current.entry.id
-    current = current.parent.fiber
-  }
-  return undefined
-}
-
 function actualState(entry: Entry | undefined): HostPluginState {
   if (!entry) return 'UNLOADED'
   let ancestor: Entry | undefined = entry
@@ -85,10 +81,20 @@ export class HostConfigurationService extends Service implements HostConfigServi
   static inject = ['loader']
   private queue: Promise<unknown> = Promise.resolve()
   private attemptedFingerprint: string
+  private readonly ownership = new RegistrationOwnership()
 
   constructor(ctx: Context, private readonly options: HostConfigurationOptions) {
     super(ctx, 'hostConfig')
     this.attemptedFingerprint = options.fingerprint
+    ctx.on('numen/registration-change', (registration, active) => {
+      this.ownership.observe(registration, active, id => this.ctx.loader.store[id]?.options.name)
+    })
+    ctx.on('internal/status', () => ctx.emit('numen/host-config-change'))
+  }
+
+  async diagnose(refs: HostRegistrationRef[]): Promise<HostRegistrationDiagnosis[]> {
+    if (refs.length > 64) throw new HostConfigError('DIAGNOSTIC_LIMIT', 'At most 64 registrations can be inspected at once.')
+    return this.ownership.diagnose(refs, await this.read())
   }
 
   private document(): Promise<ManagedConfigDocument> { return readManagedConfig(this.options.filename, this.options.builtins, this.options.safeMode) }
@@ -218,6 +224,7 @@ export class HostConfigurationService extends Service implements HostConfigServi
       runtimeApplied = !rows.some(entry => affected.has(entry.id) && (entry.actualState === 'FAILED' || entry.actualState === 'UNLOADED' || entry.internal.some(child => child.state === 'FAILED')))
     } catch { runtimeApplied = false }
     const snapshot = this.snapshot(next)
+    this.ctx.emit('numen/host-config-change')
     return { saved: true, runtimeApplied, fingerprint: next.fingerprint, restartRequired: false, snapshot,
       ...(!runtimeApplied ? { error: { code: 'RUNTIME_APPLY_FAILED', message: 'Configuration was saved, but the runtime did not apply it successfully. Inspect plugin status and correct its configuration; the host will not retry automatically.' } } : {}),
     }

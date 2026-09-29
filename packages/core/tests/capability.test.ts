@@ -14,6 +14,26 @@ const definition: CapabilityDefinition<string, string> = {
 }
 
 describe('CapabilityRegistry', () => {
+  it('revokes Trigger registration evidence when its definition is removed and releases it only once', async () => {
+    const root = new Context()
+    await root.plugin(CapabilityRegistry)
+    const changes: Array<{ role: string; active: boolean }> = []
+    root.on('numen/registration-change', (registration, active) => { changes.push({ role: registration.role, active }) })
+    try {
+      const trigger = { ...definition, kind: 'trigger' as const }
+      const removeDefinition = root.capabilities.define(root, trigger)
+      const removeProvider = root.capabilities.provideTrigger(root, trigger, { activate() {} })
+      removeDefinition()
+      expect(changes).toEqual([
+        { role: 'definition', active: true }, { role: 'provider', active: true },
+        { role: 'provider', active: false }, { role: 'definition', active: false },
+      ])
+      removeProvider()
+      expect(changes).toHaveLength(4)
+      expect(root.capabilities.get(trigger)).toBeUndefined()
+    } finally { await root.fiber.dispose() }
+  })
+
   it('tracks definition and provider lifecycles with Cordis effects', async () => {
     const root = new Context()
     await root.plugin(CapabilityRegistry)

@@ -2,6 +2,7 @@ import { Service, type Context } from 'cordis'
 import type Schema from 'schemastery'
 import type { CapabilityRef } from './automation.js'
 import type { NumenValue } from './value.js'
+import { trackRegistration } from './registration.js'
 
 export type CapabilityKind = 'trigger' | 'query' | 'action'
 
@@ -100,6 +101,7 @@ interface RegistryEntry {
   definition: CapabilityDefinition
   provider?: CapabilityProvider
   triggerProvider?: TriggerProvider
+  releaseProvider?: () => void
 }
 
 declare module 'cordis' {
@@ -136,10 +138,14 @@ export class CapabilityRegistry extends Service {
     if (this.entries.has(key)) throw new Error(`capability already defined: ${key}`)
 
     return owner.effect(() => {
-      this.entries.set(key, { definition: definition as CapabilityDefinition })
+      const entry: RegistryEntry = { definition: definition as CapabilityDefinition }
+      this.entries.set(key, entry)
+      const release = trackRegistration(this.ctx, owner, { kind: 'capability', id: definition.id, version: definition.version, role: 'definition' })
       this.ctx.emit('numen/capability-change', definition)
       return () => {
         this.entries.delete(key)
+        entry.releaseProvider?.()
+        release()
         this.ctx.emit('numen/capability-change', definition)
       }
     }, `capabilities.define(${JSON.stringify(key)})`)
@@ -160,9 +166,13 @@ export class CapabilityRegistry extends Service {
 
     return owner.effect(() => {
       entry.provider = provider as CapabilityProvider
+      const release = trackRegistration(this.ctx, owner, { kind: 'capability', id: ref.id, version: ref.version, role: 'provider' })
+      entry.releaseProvider = release
       this.ctx.emit('numen/capability-change', ref)
       return () => {
         delete entry.provider
+        delete entry.releaseProvider
+        release()
         this.ctx.emit('numen/capability-change', ref)
       }
     }, `capabilities.provide(${JSON.stringify(key)})`)
@@ -183,9 +193,13 @@ export class CapabilityRegistry extends Service {
 
     return owner.effect(() => {
       entry.triggerProvider = provider as TriggerProvider
+      const release = trackRegistration(this.ctx, owner, { kind: 'capability', id: ref.id, version: ref.version, role: 'provider' })
+      entry.releaseProvider = release
       this.ctx.emit('numen/capability-change', ref)
       return () => {
         delete entry.triggerProvider
+        delete entry.releaseProvider
+        release()
         this.ctx.emit('numen/capability-change', ref)
       }
     }, `capabilities.provideTrigger(${JSON.stringify(key)})`)
