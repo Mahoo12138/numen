@@ -1,0 +1,41 @@
+import { describe, expect, it, vi } from 'vitest'
+import { automationDocumentNeedsProtection, createAutomationInputSession } from '../src/automation-input-session.js'
+
+describe('Automation local input protection', () => {
+  it('keeps independent pending fields until commit or actual disposal, including cancelled navigation', () => {
+    const confirm = vi.fn(() => false)
+    const session = createAutomationInputSession(confirm)
+    session.setField('echo:message', { dirty: true, invalid: false })
+    session.setField('wait:duration', { dirty: true, invalid: true })
+    expect(session.hasInvalid).toBe(true)
+    expect(session.confirmDiscard()).toBe(false)
+    expect(session.hasUncommitted).toBe(true)
+    expect(session.discardEpoch).toBe(0)
+    confirm.mockReturnValue(true)
+    expect(session.confirmDiscard()).toBe(true)
+    expect(session.hasUncommitted).toBe(false)
+    expect(session.hasInvalid).toBe(false)
+    expect(session.discardEpoch).toBe(1)
+    session.setField('echo:message', { dirty: true, invalid: false })
+    session.setField('wait:duration', { dirty: true, invalid: true })
+    session.removeField('echo:message')
+    expect(session.hasUncommitted).toBe(true)
+    session.setField('wait:duration', { dirty: false, invalid: false })
+    expect(session.hasInvalid).toBe(false)
+    expect(session.hasUncommitted).toBe(false)
+    expect(session.confirmDiscard()).toBe(true)
+    expect(session.discardEpoch).toBe(1)
+    expect(confirm).toHaveBeenCalledTimes(2)
+    session.setField('new-node:message', { dirty: true, invalid: false })
+    session.clear()
+    expect(session.hasUncommitted).toBe(false)
+  })
+
+  it('protects in-flight, failed and conflicted documents even with no pending field input', () => {
+    for (const phase of ['DIRTY', 'SAVING', 'ERROR', 'CONFLICT']) expect(automationDocumentNeedsProtection(phase)).toBe(true)
+    expect(automationDocumentNeedsProtection('CLEAN')).toBe(false)
+    expect(automationDocumentNeedsProtection('UNAVAILABLE')).toBe(false)
+    expect(automationDocumentNeedsProtection('CLEAN', true)).toBe(true)
+    expect(automationDocumentNeedsProtection('CLEAN', false, true)).toBe(true)
+  })
+})

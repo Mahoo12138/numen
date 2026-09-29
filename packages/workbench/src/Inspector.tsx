@@ -1,6 +1,6 @@
 import { Textarea, Input, Button, SelectMenu, FormSection as InspectorGroup } from '@numenjs/components'
 import { diagnosticText, t } from './i18n.js'
-import type { AutomationSource, CompileDiagnostic, NumenValue, WaitSource, ValueExpr } from '@numenjs/core'
+import type { AutomationSource, CompileDiagnostic, InvocationPolicy, NumenValue, WaitSource, ValueExpr } from '@numenjs/core'
 import type { SchemaUIResolver } from '@numenjs/webui/schema-ui'
 import { ChevronDown, X } from '@lucide/vue'
 import { CapabilityConnectionFields, CapabilityInputFields, TriggerConfigurationFields } from './CapabilityInspector.js'
@@ -12,6 +12,8 @@ import type {
   WorkbenchAutomationVariableCatalog,
 } from './contracts.js'
 import { automationSteps, type AutomationStep } from './model.js'
+import { ExecutionPolicyFields } from './ExecutionPolicyFields.js'
+import { useAutomationInputSession } from './automation-input-session.js'
 import { ValueExpressionField } from './ValueExpressionEditor.js'
 
 const noDiagnostics: CompileDiagnostic[] = []
@@ -33,6 +35,7 @@ export interface InspectorProps {
   catalog?: WorkbenchAutomationInsertCatalog
   variableCatalog?: WorkbenchAutomationVariableCatalog
   schemaUI?: SchemaUIResolver
+  onInvocationPolicyChange?(nodeId: string, policy?: InvocationPolicy): void
   onCapabilityConnectionChange?(nodeId: string, slotName: string, connectionId?: string): void
   onExtensionInputChange?(nodeId: string, fieldName: string, expression?: ValueExpr): void
   onCapabilityInputChange?(nodeId: string, fieldName: string, expression?: ValueExpr): void
@@ -63,6 +66,7 @@ function WaitConfiguration({
   focusRequest: number | undefined
   onChange?(nodeId: string, field: 'durationMs' | 'until', expression: ValueExpr): void
 }) {
+  const inputSession = useAutomationInputSession()
   const fieldName: 'durationMs' | 'until' = control.until ? 'until' : 'durationMs'
   const field: WorkbenchAutomationInputField = fieldName === 'durationMs'
     ? {
@@ -96,6 +100,7 @@ function WaitConfiguration({
           onChange={value => {
             const next = value as 'durationMs' | 'until'
             if (next === fieldName) return
+            if (inputSession && !inputSession.confirmDiscard()) return
             onChange?.(nodeId, next, next === 'durationMs'
               ? { type: 'literal', value: 60_000 }
               : { type: 'literal', value: new Date(Date.now() + 60 * 60 * 1_000).toISOString() })
@@ -133,6 +138,7 @@ export function Inspector({
   catalog,
   variableCatalog,
   schemaUI,
+  onInvocationPolicyChange,
   onCapabilityConnectionChange,
   onCapabilityInputChange,
   onTriggerConfigChange,
@@ -152,6 +158,7 @@ export function Inspector({
   const waitField = control?.type === 'wait' && control.until ? 'until' : 'durationMs'
   const waitProblem = stepProblems.find(problem => (
     problem.source?.fieldPath === waitField
+    || problem.source?.fieldPath?.startsWith(`${waitField}.`)
     || (problem.code === 'WAIT_SOURCE_INVALID' && !problem.source?.fieldPath)
   ))
   const controlField = control?.type === 'if' ? 'condition' : 'items'
@@ -196,18 +203,11 @@ export function Inspector({
             <label>{t('workbench.messageTemplate')}<Textarea value={'{{ summary }}'} /></label>
             <Button variant="secondary" class="secondary-button compact" type="button">{t('workbench.insertVariable')}<ChevronDown size={14} /></Button>
           </InspectorGroup>
-          <InspectorGroup title={t('workbench.executionPolicy')}>
-            <label>{t('workbench.onFailure')}<SelectMenu ariaLabel={t('workbench.onFailure')} value="continue" options={[{ value: 'continue', label: t('workbench.continueToNextStep') }]} disabled onChange={() => {}} /></label>
-            <label>{t('workbench.retry')}<SelectMenu ariaLabel={t('workbench.retry')} value="3" options={[{ value: '3', label: t('workbench.3Attempts') }]} disabled onChange={() => {}} /></label>
-            <label>{t('workbench.timeout')}<span class="input-with-unit"><Input value="30" /><span>s</span></span></label>
-            <label class="checkbox-row">
-              <Input checked type="checkbox" />
-              <span>{t('workbench.runStepOnlyIfPreviousStepsSucceeded')}</span>
-            </label>
-          </InspectorGroup>
+
         </>
       ) : trigger && step.sourceId ? (
         <>
+          {triggerDefinition && !triggerDefinition.providerAvailable ? <p class="inspector-schema-notice" role="status">{t('workbench.inspector.providerUnavailable')}</p> : null}
           {triggerDefinition?.connectionRequirements.length ? (
             <InspectorGroup title={t('workbench.connection3')}>
               <CapabilityConnectionFields
@@ -230,6 +230,7 @@ export function Inspector({
               problems={stepProblems}
               {...(schemaUI ? { schemaUI } : {})}
               trigger={trigger}
+              {...(fieldFocus?.nodeId === step.sourceId && fieldFocus.fieldPath ? { focusFieldPath: fieldFocus.fieldPath, focusRequest: fieldFocus.request } : {})}
             /> : <p class="inspector-schema-notice">{t('workbench.theTriggerContractIsUnavailableRestore')}{trigger.capability.id}@{trigger.capability.version}{t('workbench.toEditOrPublish')}</p>}
           </InspectorGroup>
           <InspectorGroup title={t('workbench.source')}>
@@ -260,7 +261,7 @@ export function Inspector({
           <WaitConfiguration
             canEdit={canEdit}
             control={control}
-            focusRequest={fieldFocus?.nodeId === step.sourceId && fieldFocus.fieldPath === waitField
+            focusRequest={fieldFocus?.nodeId === step.sourceId && fieldFocus.fieldPath?.split('.')[0] === waitField
               ? fieldFocus.request
               : undefined}
             nodeId={step.sourceId}
@@ -311,6 +312,7 @@ export function Inspector({
         </InspectorGroup>
       ) : control?.type === 'capability' && step.sourceId ? (
         <>
+          {capabilityDefinition && !capabilityDefinition.providerAvailable ? <p class="inspector-schema-notice" role="status">{t('workbench.inspector.providerUnavailable')}</p> : null}
           {capabilityDefinition?.connectionRequirements.length ? (
             <InspectorGroup title={t('workbench.connection3')}>
               <CapabilityConnectionFields
@@ -344,6 +346,13 @@ export function Inspector({
             ) : (
               <div class="inspector-schema-notice">{t('workbench.theCapabilityContractIsUnavailableTheDraftReferenceAndExistingInputsArePreserved')}</div>
             )}
+          </InspectorGroup>
+          <InspectorGroup title={t('workbench.executionPolicy')}>
+            <ExecutionPolicyFields nodeId={step.sourceId} canEdit={canEdit} problems={stepProblems}
+              {...(fieldFocus?.nodeId === step.sourceId && fieldFocus.fieldPath?.startsWith('policy') ? { focusFieldPath: fieldFocus.fieldPath, focusRequest: fieldFocus.request } : {})}
+              {...(control.policy ? { policy: control.policy } : {})}
+              {...(capabilityDefinition?.semantics ? { semantics: capabilityDefinition.semantics } : {})}
+              {...(onInvocationPolicyChange ? { onChange: onInvocationPolicyChange } : {})} />
           </InspectorGroup>
           <InspectorGroup title={t('workbench.source')}>
             <p class="inspector-summary">{step.summary}</p>

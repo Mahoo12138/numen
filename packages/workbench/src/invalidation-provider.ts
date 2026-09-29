@@ -2,6 +2,7 @@ import '@numenjs/automation'
 import '@numenjs/connections'
 import type { ConsoleSubscriptionDefinition } from '@numenjs/console'
 import '@numenjs/scheduler'
+import type {} from '@numenjs/triggers'
 import type { Context } from 'cordis'
 import z from 'schemastery'
 import {
@@ -49,6 +50,7 @@ export function workbenchInvalidationProviderPlugin(ctx: Context): void {
         queueMicrotask(flush)
       }
       const disposeAutomation = ctx.on('numen/automation-change', () => invalidate('home', 'automations'))
+      const disposeTriggerRuntime = ctx.on('numen/trigger-runtime-change', () => invalidate('home', 'automations'))
       const disposeAutomationPurge = ctx.on('numen/automation-purge', () => invalidate('home', 'automations', 'runs'))
       const disposeControl = ctx.on('numen/control-change', () => invalidate('automationCatalog'))
       const disposeCapability = ctx.on('numen/capability-change', () => invalidate('automationCatalog'))
@@ -66,6 +68,7 @@ export function workbenchInvalidationProviderPlugin(ctx: Context): void {
         disposed = true
         pending.clear()
         disposeAutomation()
+        disposeTriggerRuntime()
         disposeAutomationPurge()
         disposeCapability()
         disposeControl()

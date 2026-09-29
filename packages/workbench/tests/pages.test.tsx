@@ -18,6 +18,7 @@ import {
 
 function routerFor(state: BrowserRouteState): WorkbenchRouter {
   return {
+    beforeLeave: () => () => {},
     getSnapshot: () => state,
     subscribe: () => () => {},
     navigate: vi.fn(() => state),

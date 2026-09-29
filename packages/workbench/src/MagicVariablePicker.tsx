@@ -37,6 +37,7 @@ export const MagicVariablePicker = defineSetupComponent<MagicVariablePickerProps
   })
 
   const select = (item: MagicVariableCandidate) => {
+    if (item.unavailableReason) return
     props.onSelect(item)
     open.value = false
   }
@@ -78,12 +79,14 @@ export const MagicVariablePicker = defineSetupComponent<MagicVariablePickerProps
                 <section class="magic-variable-group" key={group}>
                   <h4>{t(`workbench.variableGroups.${group}`)}</h4>
                   {items.map(item => (
-                    <button class="magic-variable-item" key={`${item.path}:${item.conversion ?? 'direct'}`} onClick={() => select(item)} type="button">
+                    <button class="magic-variable-item" aria-disabled={!!item.unavailableReason} key={`${item.path}:${item.conversion ?? 'direct'}`} onClick={() => select(item)} type="button">
                       <span>
                         <strong>{item.label}</strong>
-                        <small>{item.sourceLabel}</small>
+                        <small>{item.sourceLabel}{item.sourceNodeId ? ` · ${item.sourceNodeId}` : null}</small>
                       </span>
                       <code>{item.path}</code>
+                      {item.description ? <small class="magic-variable-description">{item.description}</small> : null}
+                      {item.unavailableReason ? <small class="magic-variable-unavailable">{t(`workbench.inspector.unavailable.${item.unavailableReason}`)}</small> : null}
                       <span class="magic-variable-meta">
                         <em>{item.valueType}</em>
                         {item.conversion ? <small>{t('workbench.convertToText')}</small> : null}
@@ -99,7 +102,7 @@ export const MagicVariablePicker = defineSetupComponent<MagicVariablePickerProps
               </p>
             ) : null}
           </div>
-          <footer>{t('workbench.onlyVariablesVisibleBeforeThisStepAreShownPathsUseStableSourceIds')}</footer>
+          <footer>{t('workbench.inspector.variableAvailability')}</footer>
         </section>
       ) : null}
     </div>

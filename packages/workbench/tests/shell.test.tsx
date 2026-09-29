@@ -24,8 +24,9 @@ describe('WorkbenchShell', () => {
     }
     expect(markup).toContain('aria-label="Inspector"')
     expect(markup).toContain('aria-label="Bottom panel"')
-    expect(markup).toContain('Ready')
-    expect(markup).toContain('Saved')
+    expect(markup).toContain('Preview only')
+    expect(markup).not.toContain('>Saved<')
+    expect(markup).not.toContain('>Preview</button>')
   })
 
   it('renders the selected Automation editor and inspector state', async () => {
@@ -42,7 +43,10 @@ describe('WorkbenchShell', () => {
     }
     expect(markup).toContain('aria-pressed="true"')
     expect(markup).toContain('{{ summary }}')
-    expect(markup).toContain('Continue to next step')
+    expect(markup).toContain('Message template')
+    // Preview data has no Runtime policy metadata; it must not invent editable execution behavior.
+    expect(markup).not.toContain('>Execution policy<')
+    expect(markup).not.toContain('Continue to next step')
   })
 
   it('delegates activity-specific workspace chrome to the Page definition', async () => {

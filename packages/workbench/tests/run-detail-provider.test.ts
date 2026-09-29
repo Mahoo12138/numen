@@ -1,5 +1,6 @@
 import { workbenchManualRunFormQuery, workbenchStartManualRunAction } from '../src/manual-run-provider.js'
-import { projectWorkbenchRunDetail } from '../src/run-detail-projection.js'
+import { workbenchExecutionDataQuery } from '../src/execution-data-provider.js'
+import { projectWorkbenchRunDetail, sourceNodeIdForExecution } from '../src/run-detail-projection.js'
 import { AutomationService } from '@numenjs/automation'
 import { ConsoleProcedureUnavailableError, ConsoleService, type ConsoleRequestContext } from '@numenjs/console'
 import { CapabilityRegistry, ControlRegistry, type CapabilityDefinition } from '@numenjs/core'
@@ -59,6 +60,7 @@ describe('Workbench Run detail Provider', () => {
     await root.plugin(SchedulerService, { autoDispatch: false })
     await root.plugin(ConsoleService)
     root.console.define(root, workbenchRunDetailQuery)
+    root.console.define(root, workbenchExecutionDataQuery)
     root.console.define(root, workbenchManualRunFormQuery)
     root.console.define(root, workbenchStartManualRunAction)
     root.console.define(root, workbenchCancelRunAction)
@@ -78,6 +80,24 @@ describe('Workbench Run detail Provider', () => {
     expect(detail.flow.root).toMatchObject({ executionCount: 2, status: 'COMPLETED', children: [{
       id: 'twice', type: 'extension', title: 'Record twice', detail: 'test:twice@1', executionCount: 2, status: 'COMPLETED', children: [],
     }] })
+    const firstPage = await root.console.query(workbenchRunDetailQuery, { runId: run.id, sourceNodeId: 'twice', executionLimit: 1, eventLimit: 1 }, request())
+    expect(firstPage.executions).toHaveLength(1)
+    expect(firstPage.executions[0]?.sourceNodeId).toBe('twice')
+    expect(firstPage.nextExecutionCursor).toBeTruthy()
+    const secondPage = await root.console.query(workbenchRunDetailQuery, { runId: run.id, sourceNodeId: 'twice', executionLimit: 1, executionCursor: firstPage.nextExecutionCursor, eventLimit: 1 }, request())
+    expect(secondPage.executions[0]?.sourceNodeId).toBe('twice')
+    expect(secondPage.executions[0]?.id).not.toBe(firstPage.executions[0]?.id)
+    expect(secondPage.nextExecutionCursor).toBeUndefined()
+    const exact = await root.console.query(workbenchRunDetailQuery, { runId: run.id, executionId: firstPage.executions[0]!.id, executionLimit: 25, eventLimit: 1 }, request())
+    expect(exact.executions.map(item => item.id)).toEqual([firstPage.executions[0]!.id])
+    const unknown = await root.console.query(workbenchRunDetailQuery, { runId: run.id, sourceNodeId: 'absent', executionLimit: 25, eventLimit: 1 }, request())
+    expect(unknown.executions).toEqual([])
+    expect(sourceNodeIdForExecution(revision, '__internal-termination')).toBeUndefined()
+    const namedSource = structuredClone(revision)
+    namedSource.source.flow.id = '__user-node'
+    namedSource.compiledPlan.sourceMap = { 'twice.first': { nodeId: '__user-node' }, 'twice.second': { nodeId: 'missing-source' } }
+    expect(sourceNodeIdForExecution(namedSource, 'twice.first')).toBe('__user-node')
+    expect(sourceNodeIdForExecution(namedSource, 'twice.second')).toBeUndefined()
     const inspection = root.scheduler.inspectRun(run.id)!
     const pending = inspection.instructionExecutions.find(item => item.instructionId === 'twice.second')!
     pending.statusCounts.COMPLETED = 0
@@ -117,6 +137,7 @@ describe('Workbench Run detail Provider', () => {
     await root.plugin(SchedulerService, { autoDispatch: false })
     await root.plugin(ConsoleService)
     root.console.define(root, workbenchRunDetailQuery)
+    root.console.define(root, workbenchExecutionDataQuery)
     root.console.define(root, workbenchManualRunFormQuery)
     root.console.define(root, workbenchStartManualRunAction)
     root.console.define(root, workbenchCancelRunAction)

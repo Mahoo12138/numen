@@ -1,4 +1,5 @@
 import '@numenjs/automation'
+import type {} from '@numenjs/triggers'
 import {
   AutomationActivationConflictError,
   AutomationArchivedError,
@@ -91,6 +92,11 @@ const automationDetail = z.object({
   automation: z.object(automationIdentityFields).required(),
   draft: automationDraftSchema.required(),
   revisions: z.array(automationRevisionSummarySchema).required(),
+  triggerRuntime: z.union([z.object({
+    status: z.union(['DISABLED', 'NO_REVISION', 'NO_TRIGGERS', 'UNAVAILABLE', 'WAITING', 'READY']).required(),
+    activationGeneration: z.number().required(), revisionId: z.string(),
+    expected: z.number().required(), active: z.number().required(),
+  }), z.const(undefined)]),
 })
 
 export const workbenchAutomationDetailQuery: ConsoleQueryDefinition<
@@ -135,6 +141,18 @@ export function summarizeAutomationIndex(
 }
 
 export function workbenchAutomationsProviderPlugin(ctx: Context): void {
+  let readTriggerRuntime: ((automationId: string) => WorkbenchAutomationDetail['triggerRuntime']) | undefined
+  // Trigger health is optional; its lifecycle must not suspend Draft authoring.
+  ctx.inject(['triggers'], triggerCtx => {
+    triggerCtx.fiber.effect(() => {
+      readTriggerRuntime = automationId => triggerCtx.triggers.automationHealth(automationId)
+      ctx.emit('numen/trigger-runtime-change')
+      return () => {
+        readTriggerRuntime = undefined
+        ctx.emit('numen/trigger-runtime-change')
+      }
+    })
+  })
   ctx.console.provideAction(ctx, workbenchCreateAutomationActionRef, {
     action({ input }: { input: WorkbenchCreateAutomationInput }): WorkbenchCreateAutomationResult {
       return ctx.automations.create({ name: input.name })
@@ -174,9 +192,11 @@ export function workbenchAutomationsProviderPlugin(ctx: Context): void {
       const automation = ctx.automations.get(input.automationId)
       const draft = ctx.automations.getDraft(input.automationId)
       if (!automation || !draft) return null
+      const triggerRuntime = readTriggerRuntime?.(input.automationId)
       return {
         automation,
         draft,
+        ...(triggerRuntime ? { triggerRuntime } : {}),
         revisions: ctx.automations.listRevisions(input.automationId).map(revision => ({
           id: revision.id,
           number: revision.number,

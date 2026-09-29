@@ -1,9 +1,11 @@
+import { workbenchConnectionUsageRef, type WorkbenchConnectionUsage } from './management-contracts.js'
 import { Button, StatePanel } from '@numenjs/components'
-import { LogsView } from './LogsView.js'
+import { PluginsPage } from './PluginsPage.js'
+import { SystemPage } from './SystemPage.js'
 import { diagnosticText, t, metadataText, formatDateTime, statusLabel } from './i18n.js'
 import type { Context } from 'cordis'
-import { Activity, Boxes, Cable, Home, Network, Pencil, Play, Plus, Settings } from '@lucide/vue'
-import { computed, reactive, ref } from 'vue'
+import { Activity, Cable, Home, Network, Pencil, Play, Plus } from '@lucide/vue'
+import { computed, ref } from 'vue'
 import { AutomationPageChrome, AutomationWorkspacePage } from './AutomationWorkspace.js'
 import { RunDetailPage } from './RunDetailPage.js'
 import { CredentialsPage } from './CredentialsPage.js'
@@ -14,7 +16,7 @@ import {
   workbenchRunsIndexQueryRef,
   type WorkbenchConnectionsIndex,
   type WorkbenchHomeOverview,
-  type WorkbenchRunsCursor,
+  type WorkbenchRunStatus,
   type WorkbenchRunsIndex,
   type WorkbenchRunsQueryInput,
 } from './contracts.js'
@@ -36,7 +38,7 @@ export type { WorkbenchPageComponent, WorkbenchPageDefinition, WorkbenchPageProp
 const emptyQueryInput: Record<string, never> = {}
 const formatTime = formatDateTime
 
-const HomePage = defineSetupComponent<WorkbenchPageProps>('HomePage', ['consoleClient', 'schemaUI'], props => {
+const HomePage = defineSetupComponent<WorkbenchPageProps>('HomePage', ['consoleClient', 'schemaUI', 'navigation'], props => {
   const [overview, reload] = useConsoleQuery<Record<string, never>, WorkbenchHomeOverview>(
     () => props.consoleClient,
     workbenchHomeOverviewQueryRef,
@@ -46,12 +48,13 @@ const HomePage = defineSetupComponent<WorkbenchPageProps>('HomePage', ['consoleC
   return () => (
     <main class="main-workbench core-page">
       <header class="core-page-header"><Home size={22} /><div><h1>{t('workbench.home')}</h1><p>{t('workbench.yourPersonalAutomationWorkspace')}</p></div></header>
-      <HomeOverview state={overview} onReload={reload} />
+      <HomeOverview state={overview} onReload={reload} {...(props.navigation ? { navigation: props.navigation } : {})} />
     </main>
   )
 })
 
-function HomeOverview({ state, onReload }: {
+function HomeOverview({ state, onReload, navigation }: {
+  navigation?: WorkbenchPageProps['navigation']
   state: ConsoleQueryState<WorkbenchHomeOverview>
   onReload(): void
 }) {
@@ -77,6 +80,7 @@ function HomeOverview({ state, onReload }: {
           tone={data.connections.errors || data.connections.unavailable ? 'warning' : 'default'}
         />
       </section>
+      {data.connections.errors || data.connections.unavailable ? <Button variant="secondary" type="button" onClick={() => navigation?.navigate(coreWorkbenchRoutes.connections)}>{t('workbench.navigation.connectionErrors')}</Button> : null}
       <section class="core-page-section home-section">
         <h2>{t('workbench.recentAutomations')}</h2>
         {data.automations.recent.length ? (
@@ -84,7 +88,7 @@ function HomeOverview({ state, onReload }: {
             {data.automations.recent.map(automation => (
               <div key={automation.id}>
                 <Network size={17} />
-                <span><strong>{automation.name}</strong><small>{automation.enabled ? t('workbench.enabled') : t('workbench.disabled')}{t('workbench.updated2')}{formatTime(automation.updatedAt)}</small></span>
+                <span><button class="run-detail-link" type="button" disabled={!navigation} onClick={() => navigation?.navigate(coreWorkbenchRoutes.automations, { query: { automation: automation.id } })}><strong>{automation.name}</strong></button><small>{automation.enabled ? t('workbench.enabled') : t('workbench.disabled')}{t('workbench.updated2')}{formatTime(automation.updatedAt)}</small></span>
               </div>
             ))}
           </div>
@@ -97,7 +101,7 @@ function HomeOverview({ state, onReload }: {
             {data.runs.recent.map(run => (
               <div key={run.id}>
                 <Activity size={17} />
-                <span><strong>{run.automationName}</strong><small><em data-status={run.status}>{statusLabel(run.status)}</em>{t('workbench.started2')}{formatTime(run.createdAt)}</small></span>
+                <span><button class="run-detail-link" type="button" disabled={!navigation} onClick={() => navigation?.navigate(coreWorkbenchRunFlowRoute, { parameters: { id: run.id } })}><strong>{run.automationName}</strong></button><small><em data-status={run.status}>{statusLabel(run.status)}</em>{t('workbench.started2')}{formatTime(run.createdAt)}</small></span>
               </div>
             ))}
           </div>
@@ -118,17 +122,23 @@ function HomeMetric({ label, value, detail, tone = 'default' }: {
 
 const QueryStatePanel = StatePanel
 
-interface RunsPosition {
-  cursor?: WorkbenchRunsCursor
-  history: Array<WorkbenchRunsCursor | null>
-}
-
 const RunsPage = defineSetupComponent<WorkbenchPageProps>('RunsPage', ['consoleClient', 'schemaUI', 'navigation'], props => {
-  const position = reactive<RunsPosition>({ history: [] })
+  const filters = computed(() => new URLSearchParams(props.navigation?.route.search ?? ''))
+  const history = () => {
+    try {
+      const value: unknown = JSON.parse(filters.value.get('history') ?? '[]')
+      return Array.isArray(value) && value.length <= 100 && value.every(item => item === null || typeof item === 'string') ? value as Array<string | null> : []
+    } catch { return [] }
+  }
   const input = computed<WorkbenchRunsQueryInput>(() => ({
     limit: 20,
-    ...(position.cursor ? { cursor: position.cursor } : {}),
+    ...(filters.value.get('cursor') ? { cursor: filters.value.get('cursor')! } : {}),
+    ...(filters.value.get('automationId') ? { automationId: filters.value.get('automationId')! } : {}),
+    ...(filters.value.get('status') ? { status: filters.value.get('status') as WorkbenchRunStatus } : {}),
   }))
+  const setFilters = (values: Record<string, string | undefined>) => {
+    props.navigation?.navigate(coreWorkbenchRoutes.runs, { query: { ...Object.fromEntries(filters.value), ...values } })
+  }
   const [index, reload] = useConsoleQuery<WorkbenchRunsQueryInput, WorkbenchRunsIndex>(
     () => props.consoleClient,
     workbenchRunsIndexQueryRef,
@@ -138,27 +148,34 @@ const RunsPage = defineSetupComponent<WorkbenchPageProps>('RunsPage', ['consoleC
   const goNext = () => {
     const next = index.status === 'READY' ? index.data.nextCursor : undefined
     if (!next) return
-    position.history.push(position.cursor ?? null)
-    position.cursor = next
+    setFilters({ cursor: next, history: JSON.stringify([...history(), filters.value.get('cursor')].slice(-100)) })
   }
   const goPrevious = () => {
-    const previous = position.history.pop()
-    if (previous) position.cursor = previous
-    else delete position.cursor
+    const cursors = history()
+    const previous = cursors.pop()
+    setFilters({ cursor: previous ?? undefined, history: cursors.length ? JSON.stringify(cursors) : undefined })
   }
   const openRun = (runId: string) => {
-    props.navigation?.navigate(coreWorkbenchRunFlowRoute, { parameters: { id: runId } })
+    props.navigation?.navigate(coreWorkbenchRunFlowRoute, { parameters: { id: runId }, query: { from: props.navigation.route.search } })
   }
   return () => (
     <main class="main-workbench core-page">
       <header class="core-page-header"><Play size={22} /><div><h1>{t('workbench.runs')}</h1><p>{t('workbench.inspectDurableAutomationExecutionsAndTheirOutcomes')}</p></div></header>
+      <section class="runs-filters" aria-label={t('workbench.navigation.runFilters')}>
+        <label>{t('workbench.status')}<select aria-label={t('workbench.status')} value={filters.value.get('status') ?? ''} onChange={event => { setFilters({ history: undefined, status: (event.target as HTMLSelectElement).value || undefined, cursor: undefined }) }}>
+          <option value="">{t('workbench.navigation.allStatuses')}</option>{(['QUEUED', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLING', 'CANCELLED'] as const).map(status => <option value={status}>{statusLabel(status)}</option>)}
+        </select></label>
+        {filters.value.get('automationId') ? <span>{t('workbench.automation')}: <code>{filters.value.get('automationId')}</code></span> : null}
+        <Button variant="secondary" type="button" onClick={() => { setFilters({ history: undefined, status: undefined, automationId: undefined, cursor: undefined }) }}>{t('workbench.navigation.clearFilters')}</Button>
+        <Button variant="secondary" type="button" onClick={reload}>{t('workbench.management.refresh')}</Button>
+      </section>
       <RunsIndex
         onNext={goNext}
         onPrevious={goPrevious}
         {...(props.navigation ? { onOpenRun: openRun } : {})}
         onReload={reload}
         state={index}
-        canGoPrevious={position.history.length > 0}
+        canGoPrevious={!!filters.value.get('cursor')}
       />
     </main>
   )
@@ -247,30 +264,38 @@ const ConnectionsPage = defineSetupComponent<WorkbenchPageProps>('ConnectionsPag
     emptyQueryInput,
     'connections',
   )
+  const [usage, reloadUsage, refreshUsage] = useConsoleQuery<Record<string, never>, WorkbenchConnectionUsage[]>(() => props.consoleClient, workbenchConnectionUsageRef, emptyQueryInput, ['automations', 'connections'])
+  const selectedConnection = computed(() => new URLSearchParams(props.navigation?.route.search ?? '').get('connectionId'))
   const desiredState = useConnectionDesiredState(() => props.consoleClient, refresh)
   const configuration = ref<'create' | string>()
   return () => (
     <main class="main-workbench core-page">
       <header class="core-page-header"><Cable size={22} /><div><h1>{t('workbench.connections')}</h1><p>{t('workbench.manageTheSystemsAndAccountsAvailableToAutomations')}</p></div></header>
-      <div class="credential-navigation"><Button variant="secondary" class="secondary-button" disabled={!props.navigation} onClick={() => props.navigation?.navigate(coreWorkbenchCredentialsRoute)} type="button">{t('workbench.manageCredentials')}</Button></div>
+      <div class="credential-navigation"><Button variant="secondary" type="button" onClick={() => { reload(); reloadUsage() }}>{t('workbench.management.refresh')}</Button><Button variant="secondary" class="secondary-button" disabled={!props.navigation} onClick={() => props.navigation?.navigate(coreWorkbenchCredentialsRoute)} type="button">{t('workbench.manageCredentials')}</Button></div>
       <ConnectionsIndex
         {...(props.consoleClient ? { client: props.consoleClient } : {})}
         {...(configuration.value ? { configuration: configuration.value } : {})}
         desiredState={desiredState}
+        usage={usage}
+        selectedConnection={selectedConnection.value}
+        {...(props.navigation ? { navigation: props.navigation } : {})}
         {...(props.schemaUI ? { schemaUI: props.schemaUI } : {})}
         state={index}
         onCloseConfiguration={() => { configuration.value = undefined }}
         onConfigure={connectionId => { configuration.value = connectionId ?? 'create' }}
-        onMutated={() => { configuration.value = undefined; refresh() }}
-        onReload={reload}
+        onMutated={() => { configuration.value = undefined; refresh(); refreshUsage() }}
+        onReload={() => { reload(); reloadUsage() }}
       />
     </main>
   )
 })
 
-function ConnectionsIndex({ state, desiredState, client, schemaUI, configuration, onReload, onConfigure, onCloseConfiguration, onMutated }: {
+function ConnectionsIndex({ state, desiredState, usage, navigation, selectedConnection, client, schemaUI, configuration, onReload, onConfigure, onCloseConfiguration, onMutated }: {
   state: ConsoleQueryState<WorkbenchConnectionsIndex>
   desiredState: ConnectionDesiredState
+  usage: ConsoleQueryState<WorkbenchConnectionUsage[]>
+  navigation?: WorkbenchPageProps['navigation']
+  selectedConnection: string | null
   client?: WorkbenchPageProps['consoleClient']
   schemaUI?: WorkbenchPageProps['schemaUI']
   configuration?: 'create' | string
@@ -314,11 +339,18 @@ function ConnectionsIndex({ state, desiredState, client, schemaUI, configuration
               <tbody>
                 {items.map(connection => {
                   const desired = desiredState.view(connection)
-                  return <tr key={connection.id}>
-                    <td><strong>{connection.name}</strong><small>{connection.credentialBound ? t('workbench.credentialBound') : t('workbench.noCredential')}</small></td>
+                  return <tr key={connection.id} data-selected={selectedConnection === connection.id}>
+                    <td><strong>{connection.name}</strong><small>{connection.id}</small><small>{connection.credentialBound ? t('workbench.credentialBound') : t('workbench.noCredential')}</small></td>
                     <td>
                       <em data-connection-status={connection.status}>{statusLabel(connection.status)}</em>
                       <small class="connection-status-detail">{metadataText(`workbench.connectionStatus.${connection.status}`, connection.statusDetail)}</small>
+                      {connection.status === 'UNAVAILABLE' ? <Button type="button" onClick={() => navigation?.navigate(coreWorkbenchRoutes.plugins)}>{t('workbench.navigation.checkPlugins')}</Button> : null}
+                      {connection.status === 'ERROR' || connection.status === 'STARTING' || connection.status === 'STOPPED' ? <Button type="button" onClick={() => navigation?.navigate(coreWorkbenchRoutes.system, { query: { connectionId: connection.id } })}>{t('workbench.navigation.connectionLogs')}</Button> : null}
+                      {usage.status === 'READY' ? <details class="connection-usage"><summary>{t('workbench.navigation.usage')}</summary>
+                        {usage.data.find(item => item.connectionId === connection.id)?.automations.map(automation => <button type="button" class="run-detail-link" onClick={() => navigation?.navigate(coreWorkbenchRoutes.automations, { query: { automation: automation.id } })}>{automation.name} · {automation.draft ? 'Draft' : ''}{automation.active ? ' / Active' : ''}</button>)}
+                        <small>{t('workbench.navigation.usageScope')}</small>
+                        {!usage.data.find(item => item.connectionId === connection.id)?.complete ? <small>{t('workbench.navigation.usageUnknown')}</small> : null}
+                      </details> : <small>{t('workbench.navigation.usageUnavailable')}</small>}
                     </td>
                     <td><strong>{connection.adapterTitle}</strong><small>{connection.adapterId}@{connection.adapterVersion}</small></td>
                     <td class="connection-desired-cell">
@@ -361,31 +393,6 @@ function ConnectionsIndex({ state, desiredState, client, schemaUI, configuration
         /> : null}
       </div>
     </div>
-  )
-}
-
-function PluginsPage() {
-  return <CoreIndexPage icon={Boxes} title={t('workbench.plugins')} description={t('workbench.reviewInstalledCapabilitiesAndExtendNumen')} />
-}
-
-function SystemPage(props: WorkbenchPageProps) {
-  const runId = new URLSearchParams(props.navigation?.route.search ?? '').get('runId') || undefined
-  return <main class="main-workbench secondary-view system-logs-page"><header><h1>{t('workbench.logs.title')}</h1><p>{t('workbench.logs.description')}</p></header><LogsView {...(props.consoleClient ? { consoleClient: props.consoleClient } : {})} {...(runId ? { runId } : {})} /></main>
-}
-
-function CoreIndexPage({ icon: Icon, title, description }: {
-  icon: typeof Home
-  title: string
-  description: string
-}) {
-  return (
-    <main class="main-workbench core-page">
-      <header class="core-page-header"><Icon size={22} /><div><h1>{title}</h1><p>{description}</p></div></header>
-      <section class="core-page-section core-page-empty">
-        <span>{title}</span>
-        <p>{t('workbench.currentRuntimeDataWillAppearHereThroughItsTypedConsoleQuery')}</p>
-      </section>
-    </main>
   )
 }
 

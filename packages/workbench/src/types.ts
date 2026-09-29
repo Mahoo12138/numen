@@ -1,7 +1,7 @@
 import type { ConsoleProcedureRef } from '@numenjs/console'
 import type { FrontendPage } from '@numenjs/webui/extensions'
 import type { FrontendExtensionRef } from '@numenjs/webui/extensions'
-import type { BrowserNavigateOptions, BrowserRouteState } from '@numenjs/webui/router'
+import type { BrowserNavigateOptions, BrowserNavigationGuard, BrowserRouteState } from '@numenjs/webui/router'
 import type { SchemaUIResolver } from '@numenjs/webui/schema-ui'
 import type { Component } from 'vue'
 
@@ -25,6 +25,7 @@ export interface WorkbenchPageProps {
 export interface WorkbenchNavigation {
   route: BrowserRouteState
   navigate(ref: FrontendExtensionRef, options?: BrowserNavigateOptions): BrowserRouteState
+  beforeLeave?(guard: BrowserNavigationGuard): () => void
 }
 
 export type WorkbenchPageComponent = Component<WorkbenchPageProps>

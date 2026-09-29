@@ -19,8 +19,12 @@ import {
 import {
   applyAutomationSourceCommand,
   automationSourceHasNode,
+  automationNodeCopyError,
+  automationStepEditOptions,
+  type AutomationInsertTarget,
   type AutomationSourceCommand,
 } from './automation-source-editing.js'
+import { collapsedAutomationNodes, reconcileAutomationPresentation } from './automation-presentation.js'
 import type { WorkbenchConsoleClient } from './types.js'
 
 export type AutomationDraftSavePhase =
@@ -75,13 +79,16 @@ export interface AutomationDraftDocumentState {
   pendingPublish: PendingPublish | undefined
   publishError: string | undefined
   problems: CompileDiagnostic[]
+  editError?: string | undefined
 }
 
 export type AutomationDraftDocumentAction =
   | { type: 'SELECT'; automationId?: string }
   | { type: 'SERVER'; automationId: string; draft: WorkbenchAutomationDraft }
-  | { type: 'SELECT_NODE'; nodeId?: string }
-  | { type: 'EDIT'; command: AutomationSourceCommand }
+  | { type: 'SELECT_NODE'; nodeId?: string; reveal?: boolean }
+  | { type: 'EDIT'; command: AutomationSourceCommand; copiedPresentation?: Record<string, NumenValue> }
+  | { type: 'COLLAPSE'; nodeId: string; collapsed: boolean }
+  | { type: 'EDIT_ERROR'; code: string }
   | { type: 'UNDO' }
   | { type: 'REDO' }
   | { type: 'SAVE_REQUEST' }
@@ -155,6 +162,7 @@ function changedState(
     problems: [],
     publishError: undefined,
     saveError: undefined,
+    editError: undefined,
   }
 }
 
@@ -212,14 +220,34 @@ export function reduceAutomationDraftDocument(
       if (!state.document || !automationSourceHasNode(state.document.source, action.nodeId)) {
         return action.nodeId === undefined ? { ...state, selectedNodeId: undefined } : state
       }
+      const presentation = action.nodeId && action.reveal !== false ? reconcileAutomationPresentation(state.document.presentation, state.document.source, { revealNodeId: action.nodeId }) : state.document.presentation
+      if (presentation !== state.document.presentation && canChangeDocument(state)) {
+        return changedState(state, { ...state.document, presentation }, state.undoStack, state.redoStack, action.nodeId)
+      }
       return state.selectedNodeId === action.nodeId ? state : { ...state, selectedNodeId: action.nodeId }
+    case 'EDIT_ERROR': return { ...state, editError: action.code }
+    case 'COLLAPSE': {
+      if (!state.document || !canChangeDocument(state) || !automationSourceHasNode(state.document.source, action.nodeId)) return state
+      const collapsed = new Set(collapsedAutomationNodes(state.document.presentation))
+      if (collapsed.has(action.nodeId) === action.collapsed) return state
+      if (action.collapsed) collapsed.add(action.nodeId)
+      else collapsed.delete(action.nodeId)
+      return changedState(state,
+        { ...state.document, presentation: { ...state.document.presentation, collapsedNodes: [...collapsed] } },
+        [...state.undoStack.slice(-(historyLimit - 1)), snapshot(state.document, state.selectedNodeId)], [], state.selectedNodeId)
+    }
     case 'EDIT': {
       if (!state.document || !canChangeDocument(state)) return state
       const result = applyAutomationSourceCommand(state.document.source, action.command)
+      if (result.error) return { ...state, editError: result.error.code }
       if (result.source === state.document.source) return state
       return changedState(
         state,
-        { ...state.document, source: result.source },
+        { ...state.document, source: result.source, presentation: reconcileAutomationPresentation(state.document.presentation, result.source, {
+          ...(result.idMap ? { idMap: result.idMap } : {}),
+          ...(action.copiedPresentation ? { copiedPresentation: action.copiedPresentation } : {}),
+          ...(result.selectedNodeId ? { revealNodeId: result.selectedNodeId } : {}),
+        }) },
         [...state.undoStack.slice(-(historyLimit - 1)), snapshot(state.document, state.selectedNodeId)],
         [],
         Object.hasOwn(result, 'selectedNodeId') ? result.selectedNodeId : state.selectedNodeId,
@@ -412,8 +440,16 @@ export interface AutomationDraftDocumentModel {
   canRedo: boolean
   deleteStep(nodeId: string): void
   moveStep(nodeId: string, direction: 'up' | 'down'): void
-  insert(item: WorkbenchAutomationInsertItem): void
-  selectNode(nodeId?: string): void
+  editError?: string | undefined
+  clipboard?: { mode: 'copy' | 'cut'; nodeId: string } | undefined
+  collapsedNodes: string[]
+  edit(command: AutomationSourceCommand): boolean
+  insert(item: WorkbenchAutomationInsertItem, target: AutomationInsertTarget): boolean
+  copyStep(nodeId: string): void
+  cutStep(nodeId: string): void
+  paste(target: AutomationInsertTarget): boolean
+  toggleCollapse(nodeId: string, collapsed: boolean): void
+  selectNode(nodeId?: string, reveal?: boolean): void
   setCapabilityConnection(nodeId: string, slotName: string, connectionId?: string): void
   setTriggerConfig(nodeId: string, fieldName: string, value?: NumenValue): void
   setExtensionInput(nodeId: string, fieldName: string, expression?: ValueExpr): void
@@ -462,13 +498,20 @@ export function useAutomationDraftDocument({
   autosaveDelayMs?: number
 }): AutomationDraftDocumentModel {
   const state = shallowRef(initialState)
+  const clipboard = shallowRef<{
+    mode: 'copy' | 'cut'; nodeId: string; automationId: string
+    source: AutomationSource; presentation: Record<string, NumenValue>
+  }>()
   const dispatch = (action: AutomationDraftDocumentAction) => {
     state.value = reduceAutomationDraftDocument(state.value, action)
+    // A cut is a pending move of this live node, never a reference to a future reused ID.
+    if (clipboard.value?.mode === 'cut' && (action.type === 'RELOAD' || !state.value.document
+      || !automationSourceHasNode(state.value.document.source, clipboard.value.nodeId))) clipboard.value = undefined
   }
 
   watch(
     () => toValue(automationId),
-    id => dispatch({ type: 'SELECT', ...(id ? { automationId: id } : {}) }),
+    id => { clipboard.value = undefined; dispatch({ type: 'SELECT', ...(id ? { automationId: id } : {}) }) },
     { immediate: true },
   )
 
@@ -524,11 +567,37 @@ export function useAutomationDraftDocument({
     onCleanup(() => controller.abort())
   })
 
-  const insert = (item: WorkbenchAutomationInsertItem) => {
-    dispatch({ type: 'EDIT', command: { type: 'INSERT', item } })
+  const edit = (command: AutomationSourceCommand, copiedPresentation?: Record<string, NumenValue>): boolean => {
+    const before = state.value.document
+    dispatch({ type: 'EDIT', command, ...(copiedPresentation ? { copiedPresentation } : {}) })
+    return !!before && state.value.document !== before
   }
-  const selectNode = (nodeId?: string) => {
-    dispatch({ type: 'SELECT_NODE', ...(nodeId ? { nodeId } : {}) })
+  const insert = (item: WorkbenchAutomationInsertItem, target: AutomationInsertTarget) => edit({ type: 'INSERT', item, target })
+  const copyStep = (nodeId: string) => {
+    const document = state.value.document
+    if (!document || !canChangeDocument(state.value)) return
+    if (automationNodeCopyError(document.source, nodeId)) { dispatch({ type: 'EDIT_ERROR', code: 'COPY_UNAVAILABLE' }); return }
+    clipboard.value = { mode: 'copy', nodeId, automationId: document.automationId, source: document.source, presentation: document.presentation }
+  }
+  const cutStep = (nodeId: string) => {
+    const document = state.value.document
+    if (!document || !canChangeDocument(state.value)) return
+    if (!automationStepEditOptions(document.source, nodeId).canMoveTo) { dispatch({ type: 'EDIT_ERROR', code: 'CUT_UNAVAILABLE' }); return }
+    clipboard.value = { mode: 'cut', nodeId, automationId: document.automationId, source: document.source, presentation: document.presentation }
+  }
+  const paste = (target: AutomationInsertTarget): boolean => {
+    const copied = clipboard.value
+    if (!copied || copied.automationId !== state.value.document?.automationId) {
+      dispatch({ type: 'EDIT_ERROR', code: 'CLIPBOARD_UNAVAILABLE' }); return false
+    }
+    const changed = copied.mode === 'copy'
+      ? edit({ type: 'COPY_TO', nodeId: copied.nodeId, target, source: copied.source }, copied.presentation)
+      : edit({ type: 'MOVE_TO', nodeId: copied.nodeId, target })
+    if (changed && copied.mode === 'cut') clipboard.value = undefined
+    return changed
+  }
+  const selectNode = (nodeId?: string, reveal = true) => {
+    dispatch({ type: 'SELECT_NODE', reveal, ...(nodeId ? { nodeId } : {}) })
   }
   const setCapabilityConnection = (nodeId: string, slotName: string, connectionId?: string) => {
     dispatch({
@@ -612,6 +681,9 @@ export function useAutomationDraftDocument({
     get publishPending() { return state.value.publishPending },
     get publishError() { return state.value.publishError },
     get problems() { return state.value.problems },
+    get editError() { return state.value.editError },
+    get clipboard() { return clipboard.value && { mode: clipboard.value.mode, nodeId: clipboard.value.nodeId } },
+    get collapsedNodes() { return state.value.document ? collapsedAutomationNodes(state.value.document.presentation) : [] },
     get canEdit() {
       return !!state.value.document
         && state.value.savePhase !== 'CONFLICT'
@@ -638,6 +710,11 @@ export function useAutomationDraftDocument({
     deleteStep: nodeId => dispatch({ type: 'EDIT', command: { type: 'DELETE_STEP', nodeId } }),
     moveStep: (nodeId, direction) => dispatch({ type: 'EDIT', command: { type: 'MOVE_STEP', nodeId, direction } }),
     insert,
+    edit,
+    copyStep,
+    cutStep,
+    paste,
+    toggleCollapse: (nodeId, collapsed) => dispatch({ type: 'COLLAPSE', nodeId, collapsed }),
     selectNode,
     setCapabilityConnection,
     setCapabilityInput,

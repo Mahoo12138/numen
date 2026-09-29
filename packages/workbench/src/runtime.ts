@@ -1,3 +1,6 @@
+import { workbenchConnectionUsageQuery } from './connection-usage-provider.js'
+import { workbenchPluginsQuery, workbenchPluginPreview, workbenchPluginApply } from './management-provider.js'
+import { workbenchSystemQuery } from './system-provider.js'
 import { workbenchLogsQuery, workbenchLogsChanged } from './logs-provider.js'
 export { workbenchLogsProviderPlugin } from './logs-provider.js'
 import { workbenchManualRunFormQuery, workbenchStartManualRunAction } from './manual-run-provider.js'
@@ -32,6 +35,8 @@ import {
 import { workbenchHomeOverviewQuery } from './home-provider.js'
 import { workbenchInvalidationSubscription } from './invalidation-provider.js'
 import { workbenchCancelRunAction, workbenchRunDetailQuery, workbenchRunsIndexQuery } from './runs-provider.js'
+import { workbenchExecutionDataQuery } from './execution-data-provider.js'
+export { workbenchExecutionDataQuery, provideExecutionData } from './execution-data-provider.js'
 import { workbenchServerPlugin, type WorkbenchServerConfig } from './server.js'
 
 export {
@@ -93,6 +98,11 @@ export class WorkbenchRuntimeService extends Service {
   constructor(ctx: Context, config: WorkbenchRuntimeConfig = {}) {
     super(ctx, 'workbench')
     workbenchServerPlugin(ctx, config)
+    ctx.console.define(ctx, workbenchPluginsQuery)
+    ctx.console.define(ctx, workbenchPluginPreview)
+    ctx.console.define(ctx, workbenchPluginApply)
+    ctx.console.define(ctx, workbenchSystemQuery)
+    ctx.console.define(ctx, workbenchConnectionUsageQuery)
     ctx.console.define(ctx, workbenchLogsQuery)
     ctx.console.define(ctx, workbenchLogsChanged)
     ctx.console.define(ctx, workbenchActivateAutomationRevisionAction)
@@ -120,6 +130,7 @@ export class WorkbenchRuntimeService extends Service {
     ctx.console.define(ctx, workbenchHomeOverviewQuery)
     ctx.console.define(ctx, workbenchInvalidationSubscription)
     ctx.console.define(ctx, workbenchRunDetailQuery)
+    ctx.console.define(ctx, workbenchExecutionDataQuery)
     ctx.console.define(ctx, workbenchManualRunFormQuery)
     ctx.console.define(ctx, workbenchStartManualRunAction)
     ctx.console.define(ctx, workbenchCancelRunAction)

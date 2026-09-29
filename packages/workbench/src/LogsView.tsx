@@ -6,8 +6,8 @@ import type { WorkbenchConsoleClient } from './types.js'
 import { defineSetupComponent, useTextDraft } from './vue-component.js'
 import { useLogFeed } from './useLogFeed.js'
 
-export interface LogsViewProps { consoleClient?: WorkbenchConsoleClient; automationId?: string; runId?: string; compact?: boolean }
-export const LogsView = defineSetupComponent<LogsViewProps>('LogsView', ['consoleClient', 'automationId', 'runId', 'compact'], props => {
+export interface LogsViewProps { consoleClient?: WorkbenchConsoleClient; automationId?: string; runId?: string; connectionId?: string; compact?: boolean }
+export const LogsView = defineSetupComponent<LogsViewProps>('LogsView', ['consoleClient', 'automationId', 'runId', 'connectionId', 'compact'], props => {
   const { t, locale } = useWorkbenchI18n()
   const timestamp = computed(() => new Intl.DateTimeFormat(locale.value, {
     year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3,
@@ -18,6 +18,7 @@ export const LogsView = defineSetupComponent<LogsViewProps>('LogsView', ['consol
   const before = ref<LogCursor>()
   const parameters = computed<LogQuery>(() => ({ limit: 100, maxLevel: maxLevel.value,
     ...(namespace.value ? { namespace: namespace.value } : {}), ...(search.value ? { search: search.value } : {}),
+    ...(props.connectionId ? { connectionId: props.connectionId } : {}),
     ...(props.automationId ? { automationId: props.automationId } : {}),
     ...(props.runId || correlation.value ? { runId: props.runId || correlation.value } : {}),
     ...(before.value ? { before: before.value } : {}),

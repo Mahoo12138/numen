@@ -44,10 +44,12 @@ async function main(): Promise<void> {
     />
   ))
   app.mount(rootElement)
-  globalThis.addEventListener('beforeunload', () => {
+  // beforeunload is cancellable: teardown there would destroy a retained Draft.
+  globalThis.addEventListener('pagehide', event => {
+    if (event.persisted) return
     app.unmount()
     void runtime.stop()
-  }, { once: true })
+  })
 }
 
 void main().catch((error) => {

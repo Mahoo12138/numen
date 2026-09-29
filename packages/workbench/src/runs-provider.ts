@@ -21,6 +21,7 @@ import {
   type WorkbenchRunsIndex,
 } from './contracts.js'
 import { projectWorkbenchRunDetail } from './run-detail-projection.js'
+import { provideExecutionData } from './execution-data-provider.js'
 
 const runStatus = z.union([
   'QUEUED',
@@ -62,6 +63,8 @@ interface WorkbenchRunsProviderInput extends RunListFilters {
 
 interface WorkbenchRunDetailProviderInput {
   runId: string
+  sourceNodeId?: string
+  executionId?: string
   executionLimit: number
   executionCursor: ExecutionListCursor | undefined
   eventLimit: number
@@ -143,6 +146,8 @@ export const workbenchRunDetailQuery: ConsoleQueryDefinition<Record<string, unkn
   description: 'A bounded durable Run snapshot with Execution diagnostics and semantic Journal events.',
   input: z.object({
     runId: z.string().required(),
+    sourceNodeId: z.string().max(200),
+    executionId: z.string().max(200),
     executionLimit: z.number().step(1).min(1).max(50).required(),
     executionCursor: executionCursorInput,
     eventLimit: z.number().step(1).min(1).max(100).required(),
@@ -184,6 +189,7 @@ export const workbenchRunDetailQuery: ConsoleQueryDefinition<Record<string, unkn
     executions: z.array(z.object({
       id: z.string().required(),
       instructionId: z.string().required(),
+      sourceNodeId: z.string(),
       title: z.string().required(),
       operation: z.string().required(),
       status: executionStatus,
@@ -224,6 +230,7 @@ export const workbenchRunDetailQuery: ConsoleQueryDefinition<Record<string, unkn
 
 export function workbenchRunsProviderPlugin(ctx: Context): void {
   provideManualRuns(ctx)
+  provideExecutionData(ctx)
   ctx.console.provideQuery(ctx, workbenchRunsIndexQueryRef, {
     query({ input }: { input: WorkbenchRunsProviderInput }): WorkbenchRunsIndex {
       if (input.automationId && !ctx.automations.get(input.automationId)) throw new ConsoleProcedureError(404, 'AUTOMATION_NOT_FOUND', 'The Automation was not found.')
@@ -270,6 +277,11 @@ export function workbenchRunsProviderPlugin(ctx: Context): void {
         run.id,
         input.executionLimit,
         input.executionCursor,
+        {
+          ...(input.sourceNodeId ? { instructionIds: Object.keys(revision?.compiledPlan.instructions ?? {}).filter(id =>
+            (revision?.compiledPlan.sourceMap?.[id]?.nodeId ?? id) === input.sourceNodeId) } : {}),
+          ...(input.executionId ? { executionId: input.executionId } : {}),
+        },
       )
       const events = ctx.scheduler.listRunEventsPage(run.id, input.eventLimit, input.eventCursor)
       return projectWorkbenchRunDetail(

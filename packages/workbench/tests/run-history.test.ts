@@ -10,6 +10,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { ResourceService } from '../../resources/src/index.js'
 import { workbenchRunsIndexQuery, workbenchRunsProviderPlugin, workbenchCancelRunAction, workbenchRunDetailQuery } from '../src/runs-provider.js'
+import { workbenchExecutionDataQuery } from '../src/execution-data-provider.js'
 import { workbenchManualRunFormQuery, workbenchStartManualRunAction } from '../src/manual-run-provider.js'
 import { advanceRunHistory, changeRunHistoryStatus, previousRunHistory, type RunHistoryPosition } from '../src/AutomationRuns.js'
 
@@ -27,6 +28,7 @@ describe('Automation Run history', () => {
       await root.plugin(ConsoleService)
       root.console.define(root, workbenchRunsIndexQuery)
       root.console.define(root, workbenchRunDetailQuery)
+      root.console.define(root, workbenchExecutionDataQuery)
       root.console.define(root, workbenchCancelRunAction)
       root.console.define(root, workbenchManualRunFormQuery)
       root.console.define(root, workbenchStartManualRunAction)

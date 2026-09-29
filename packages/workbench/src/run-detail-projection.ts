@@ -66,9 +66,11 @@ export function projectWorkbenchRunDetail(
     context: projectRunContext(inspection.context),
     executions: diagnostics.items.map(({ execution, attempts }): WorkbenchRunExecution => {
       const instruction = instructions[execution.instructionId]
+      const sourceNodeId = sourceNodeIdForExecution(revision, execution.instructionId)
       return {
         id: execution.id,
         instructionId: execution.instructionId,
+        ...(sourceNodeId ? { sourceNodeId } : {}),
         title: instructionTitle(instruction, execution.instructionId, capabilityTitles),
         operation: instruction?.op ?? 'unknown',
         status: execution.status,
@@ -100,6 +102,22 @@ export function projectWorkbenchRunDetail(
       items: events.items.map(projectRunEvent),
       ...(events.nextCursor ? { nextCursor: events.nextCursor } : {}),
     },
+  }
+}
+
+/** Resolve against the actual, visible immutable Source tree, never an instruction-name convention. */
+export function sourceNodeIdForExecution(revision: AutomationRevision | undefined, instructionId: string): string | undefined {
+  if (!revision) return
+  const candidate = revision.compiledPlan.sourceMap?.[instructionId]?.nodeId ?? instructionId
+  const pending = [revision.source.flow]
+  for (let count = 0; pending.length && count < 250; count++) {
+    const node = pending.pop()!
+    if (node.id === candidate) return candidate
+    const children = node.type === 'block' ? node.steps
+      : node.type === 'if' ? [node.then, ...(node.else ? [node.else] : [])]
+        : node.type === 'foreach' ? [node.body]
+          : node.type === 'parallel' || node.type === 'race' ? node.branches : []
+    pending.push(...children.slice().reverse())
   }
 }
 
@@ -330,6 +348,12 @@ function projectRunEvent(event: RunEventPage['items'][number]): WorkbenchRunTime
 
 function eventDetail(type: string, payload: Record<string, NumenValue> | undefined): string | undefined {
   if (!payload) return
+  if (type === 'RunAccepted') {
+    const source = stringValue(payload.source)
+    const revisionId = stringValue(payload.revisionId)
+    const requestId = stringValue(payload.requestId)
+    return [source ? `Source: ${humanizeToken(source)}` : undefined, revisionId ? `Revision: ${revisionId}` : undefined, requestId ? `Request: ${requestId}` : undefined].filter(Boolean).join(' · ') || undefined
+  }
   const error = errorSummary(payload.error)
   if (error) return error
   const reason = stringValue(payload.reason)

@@ -1,11 +1,27 @@
-import type { AutomationSource, BlockSource, ControlSource, NumenValue, TriggerSource, ValueExpr } from '@numenjs/core'
+import type { AutomationSource, BlockSource, ControlSource, InvocationPolicy, NumenValue, TriggerSource, ValueExpr } from '@numenjs/core'
 import type { WorkbenchAutomationInsertItem } from './contracts.js'
+import { copyAutomationControl, controlCopyError } from './automation-source-copy.js'
+
+export type AutomationInsertTarget =
+  | { kind: 'block'; blockId: string; beforeNodeId?: string }
+  | { kind: 'triggers'; beforeTriggerId?: string }
+  | { kind: 'root'; beforeNodeId?: string }
+
+export interface AutomationSourceCommandError {
+  code: 'TARGET_INVALID' | 'NODE_NOT_FOUND' | 'STRUCTURAL_SLOT' | 'DESCENDANT_TARGET' | 'COPY_UNSAFE' | 'INVALID_BRANCH' | 'MIN_BRANCHES'
+  message: string
+}
 
 export type AutomationSourceCommand =
   | { type: 'SET_AUTOMATION_INPUTS'; inputs: AutomationSource['inputs'] }
   | { type: 'DELETE_STEP'; nodeId: string }
   | { type: 'MOVE_STEP'; nodeId: string; direction: 'up' | 'down' }
-  | { type: 'INSERT'; item: WorkbenchAutomationInsertItem }
+  | { type: 'INSERT'; item: WorkbenchAutomationInsertItem; target: AutomationInsertTarget }
+  | { type: 'MOVE_TO'; nodeId: string; target: AutomationInsertTarget }
+  | { type: 'COPY_TO'; nodeId: string; target: AutomationInsertTarget; source?: AutomationSource }
+  | { type: 'ADD_ELSE' | 'REMOVE_ELSE' | 'ADD_BRANCH' | 'CLEAR_BLOCK'; nodeId: string }
+  | { type: 'REMOVE_BRANCH'; nodeId: string; branchId: string }
+  | { type: 'SET_INVOCATION_POLICY'; nodeId: string; policy?: InvocationPolicy }
   | { type: 'SET_CAPABILITY_CONNECTION'; nodeId: string; slotName: string; connectionId?: string }
   | { type: 'SET_TRIGGER_CONFIG'; nodeId: string; fieldName: string; value?: NumenValue }
   | { type: 'SET_EXTENSION_INPUT'; nodeId: string; fieldName: string; expression?: ValueExpr }
@@ -16,6 +32,9 @@ export type AutomationSourceCommand =
 export interface AutomationSourceCommandResult {
   source: AutomationSource
   selectedNodeId?: string | undefined
+  error?: AutomationSourceCommandError
+  idMap?: Record<string, string>
+  removedNodeIds?: string[]
 }
 
 function collectControlIds(source: AutomationSource): Set<string> {
@@ -69,21 +88,50 @@ function availableId(ids: Set<string>, prefix: string): string {
   return id
 }
 
-function appendControl(source: AutomationSource, control: ControlSource, ids: Set<string>): AutomationSource {
-  if (source.flow.type === 'block') {
-    return {
-      ...source,
-      flow: { ...source.flow, steps: [...source.flow.steps, control] },
+function fail(source: AutomationSource, code: AutomationSourceCommandError['code'], message: string): AutomationSourceCommandResult {
+  return { source, error: { code, message } }
+}
+
+/** A stale insertion anchor never changes the destination or falls back to root. */
+export function automationInsertTargetError(
+  source: AutomationSource,
+  target: AutomationInsertTarget,
+  itemKind?: 'trigger' | 'step',
+): string | undefined {
+  if (!target) return 'Choose an explicit insertion target.'
+  if (itemKind === 'trigger' && target.kind !== 'triggers') return 'Triggers can only be inserted in the trigger list.'
+  if (itemKind === 'step' && target.kind === 'triggers') return 'Flow steps cannot be inserted in the trigger list.'
+  if (target.kind === 'triggers') {
+    if (target.beforeTriggerId !== undefined && !source.triggers.some(trigger => trigger.id === target.beforeTriggerId)) {
+      return 'The trigger insertion position no longer exists.'
     }
+    return
   }
-  return {
-    ...source,
-    flow: {
-      type: 'block',
-      id: availableId(ids, 'flow'),
-      steps: [source.flow, control],
-    },
+  if (target.kind === 'root') {
+    if (source.flow.type === 'block') return 'The root flow changed. Choose its current block as the target.'
+    if (target.beforeNodeId !== undefined && target.beforeNodeId !== source.flow.id) return 'The root insertion position no longer exists.'
+    return
   }
+  if (target.kind !== 'block') return 'The insertion target is not supported.'
+  const block = findAutomationControl(source, target.blockId)
+  if (!block || block.type !== 'block') return 'The target block no longer exists.'
+  if (target.beforeNodeId !== undefined && !block.steps.some(step => step.id === target.beforeNodeId)) {
+    return 'The insertion position no longer belongs to the target block.'
+  }
+}
+
+function insertControlAt(source: AutomationSource, control: ControlSource, target: Exclude<AutomationInsertTarget, { kind: 'triggers' }>, ids: Set<string>): AutomationSource {
+  if (target.kind === 'root') {
+    return { ...source, flow: { type: 'block', id: availableId(ids, 'flow'), steps: target.beforeNodeId ? [control, source.flow] : [source.flow, control] } }
+  }
+  const result = editControl(source.flow, target.blockId, node => {
+    if (node.type !== 'block') return node
+    const steps = [...node.steps]
+    const index = target.beforeNodeId === undefined ? steps.length : steps.findIndex(step => step.id === target.beforeNodeId)
+    steps.splice(index, 0, control)
+    return { ...node, steps }
+  })
+  return { ...source, flow: result.control }
 }
 
 function createInsertControl(
@@ -145,24 +193,23 @@ function createInsertControl(
   }
 }
 
-function insertItem(source: AutomationSource, item: WorkbenchAutomationInsertItem): AutomationSourceCommandResult {
+function insertItem(source: AutomationSource, item: WorkbenchAutomationInsertItem, target: AutomationInsertTarget): AutomationSourceCommandResult {
+  const error = automationInsertTargetError(source, target, item.kind === 'trigger' ? 'trigger' : 'step')
+  if (error) return fail(source, 'TARGET_INVALID', error)
   const ids = collectControlIds(source)
-  if (item.kind === 'trigger') {
+  if (item.kind === 'trigger' && target.kind === 'triggers') {
     const config = Object.fromEntries(item.inputFields.flatMap(field => (
       field.defaultValue === undefined ? [] : [[field.name, structuredClone(field.defaultValue)]]
     )))
-    const trigger: TriggerSource = {
-      id: availableId(ids, 'trigger'),
-      capability: item.capability,
-      config,
-    }
-    return { source: { ...source, triggers: [...source.triggers, trigger] }, selectedNodeId: trigger.id }
+    const trigger: TriggerSource = { id: availableId(ids, 'trigger'), capability: structuredClone(item.capability), config }
+    const triggers = [...source.triggers]
+    const index = target.beforeTriggerId === undefined ? triggers.length : triggers.findIndex(node => node.id === target.beforeTriggerId)
+    triggers.splice(index, 0, trigger)
+    return { source: { ...source, triggers }, selectedNodeId: trigger.id }
   }
-  const control = createInsertControl(item, ids)
-  return {
-    source: appendControl(source, control, ids),
-    selectedNodeId: control.id,
-  }
+  if (item.kind === 'trigger' || target.kind === 'triggers') return fail(source, 'TARGET_INVALID', 'The item and insertion target do not match.')
+  const control = createInsertControl(structuredClone(item), ids)
+  return { source: insertControlAt(source, control, target, ids), selectedNodeId: control.id }
 }
 
 function editControl(
@@ -343,6 +390,8 @@ export interface AutomationStepEditOptions {
   canDelete: boolean
   canMoveUp: boolean
   canMoveDown: boolean
+  canMoveTo: boolean
+  canCopy: boolean
 }
 
 function sequencePosition(source: AutomationSource, nodeId: string): { block: BlockSource; index: number } | undefined {
@@ -370,6 +419,8 @@ export function automationStepEditOptions(source: AutomationSource, nodeId: stri
   const position = nodeId ? sequencePosition(source, nodeId) : undefined
   return {
     canDelete: triggerIndex >= 0 || !!position || (source.flow.type !== 'block' && source.flow.id === nodeId),
+    canMoveTo: triggerIndex >= 0 || !!position,
+    canCopy: !!nodeId && automationNodeCopyError(source, nodeId) === undefined,
     canMoveUp: triggerIndex > 0 || (!!position && position.index > 0),
     canMoveDown: (triggerIndex >= 0 && triggerIndex < source.triggers.length - 1) || (!!position && position.index < position.block.steps.length - 1),
   }
@@ -390,15 +441,16 @@ function editSequence(source: AutomationSource, nodeId: string, direction?: 'up'
     triggers.splice(triggerIndex, 1)
     return {
       source: { ...source, triggers },
+      removedNodeIds: [nodeId],
       selectedNodeId: triggers[triggerIndex]?.id ?? triggers[triggerIndex - 1]?.id,
     }
   }
   const position = sequencePosition(source, nodeId)
   if (!position) {
     if (!direction && source.flow.id === nodeId && source.flow.type !== 'block') {
-      return { source: { ...source, flow: { type: 'block', id: source.flow.id, steps: [] } }, selectedNodeId: undefined }
+      return { source: { ...source, flow: { type: 'block', id: availableId(collectControlIds(source), 'flow'), steps: [] } }, selectedNodeId: undefined, removedNodeIds: subtreeIds(source.flow) }
     }
-    return { source }
+    return fail(source, findAutomationControl(source, nodeId) ? 'STRUCTURAL_SLOT' : 'NODE_NOT_FOUND', 'Required branch and body blocks cannot be removed or reordered as steps.')
   }
   const { block, index } = position
   const steps = [...block.steps]
@@ -415,7 +467,163 @@ function editSequence(source: AutomationSource, nodeId: string, direction?: 'up'
       ?? (block.id === source.flow.id ? undefined : block.id)
   }
   const result = editControl(source.flow, block.id, () => ({ ...block, steps }))
-  return { source: { ...source, flow: result.control }, selectedNodeId }
+  return { source: { ...source, flow: result.control }, selectedNodeId, ...(!direction ? { removedNodeIds: subtreeIds(block.steps[index]!) } : {}) }
+}
+
+function visitControls(control: ControlSource, visit: (node: ControlSource) => void): void {
+  visit(control)
+  switch (control.type) {
+    case 'block': control.steps.forEach(child => visitControls(child, visit)); break
+    case 'if': visitControls(control.then, visit); if (control.else) visitControls(control.else, visit); break
+    case 'foreach': visitControls(control.body, visit); break
+    case 'parallel': case 'race': control.branches.forEach(child => visitControls(child, visit)); break
+  }
+}
+
+function subtreeIds(control: ControlSource): string[] {
+  const ids: string[] = []
+  visitControls(control, node => ids.push(node.id))
+  return ids
+}
+
+/** Resolve before/after once when opening the picker; do not resolve again when accepting it. */
+export function automationRelativeInsertTarget(source: AutomationSource, nodeId: string, position: 'before' | 'after'): AutomationInsertTarget | undefined {
+  const triggerIndex = source.triggers.findIndex(trigger => trigger.id === nodeId)
+  if (triggerIndex >= 0) {
+    const beforeTriggerId = source.triggers[triggerIndex + (position === 'after' ? 1 : 0)]?.id
+    return { kind: 'triggers', ...(beforeTriggerId === undefined ? {} : { beforeTriggerId }) }
+  }
+  const found = sequencePosition(source, nodeId)
+  if (found) {
+    const beforeNodeId = found.block.steps[found.index + (position === 'after' ? 1 : 0)]?.id
+    return { kind: 'block', blockId: found.block.id, ...(beforeNodeId === undefined ? {} : { beforeNodeId }) }
+  }
+  if (source.flow.id === nodeId && source.flow.type !== 'block') {
+    return { kind: 'root', ...(position === 'before' ? { beforeNodeId: nodeId } : {}) }
+  }
+}
+
+export function automationBlockDestinations(source: AutomationSource): Array<{ blockId: string; label: string }> {
+  const destinations: Array<{ blockId: string; label: string }> = []
+  visitControls(source.flow, node => {
+    if (node.type === 'block') destinations.push({ blockId: node.id, label: node.id })
+  })
+  return destinations
+}
+
+export function automationNodeCopyError(source: AutomationSource, nodeId: string): string | undefined {
+  const trigger = findAutomationTrigger(source, nodeId)
+  if (trigger) return trigger.id.includes('.') ? 'Copy is unavailable for dotted node IDs.' : undefined
+  const control = findAutomationControl(source, nodeId)
+  if (!control) return 'The source node no longer exists.'
+  return controlCopyError(control, source)
+}
+
+function moveTo(source: AutomationSource, nodeId: string, target: AutomationInsertTarget): AutomationSourceCommandResult {
+  const trigger = findAutomationTrigger(source, nodeId)
+  const control = findAutomationControl(source, nodeId)
+  if (!trigger && !control) return fail(source, 'NODE_NOT_FOUND', 'The step to move no longer exists.')
+  const error = automationInsertTargetError(source, target, trigger ? 'trigger' : 'step')
+  if (error) return fail(source, 'TARGET_INVALID', error)
+  if (trigger && target.kind === 'triggers') {
+    if (target.beforeTriggerId === nodeId) return { source }
+    const triggers = source.triggers.filter(node => node.id !== nodeId)
+    const index = target.beforeTriggerId === undefined ? triggers.length : triggers.findIndex(node => node.id === target.beforeTriggerId)
+    triggers.splice(index, 0, trigger)
+    if (triggers.every((node, i) => node === source.triggers[i])) return { source }
+    return { source: { ...source, triggers }, selectedNodeId: nodeId }
+  }
+  if (!control || target.kind === 'triggers') return fail(source, 'TARGET_INVALID', 'The step and target do not match.')
+  const position = sequencePosition(source, nodeId)
+  if (!position) return fail(source, 'STRUCTURAL_SLOT', 'Root flows and required branch/body blocks cannot be moved as steps.')
+  if (target.kind === 'block' && subtreeIds(control).includes(target.blockId)) {
+    return fail(source, 'DESCENDANT_TARGET', 'A step cannot be moved into itself or one of its descendants.')
+  }
+  if (target.kind === 'block' && target.blockId === position.block.id) {
+    const nextNodeId = position.block.steps[position.index + 1]?.id
+    if (target.beforeNodeId === nodeId || target.beforeNodeId === nextNodeId) return { source }
+  }
+  // Validate against the original source before detaching. The selected node is retained atomically.
+  const detached = editSequence(source, nodeId).source
+  return { source: insertControlAt(detached, control, target, collectControlIds(source)), selectedNodeId: nodeId }
+}
+
+function copyTo(source: AutomationSource, nodeId: string, target: AutomationInsertTarget, snapshot: AutomationSource): AutomationSourceCommandResult {
+  const trigger = findAutomationTrigger(snapshot, nodeId)
+  const control = findAutomationControl(snapshot, nodeId)
+  if (!trigger && !control) return fail(source, 'NODE_NOT_FOUND', 'The node to copy no longer exists.')
+  const targetError = automationInsertTargetError(source, target, trigger ? 'trigger' : 'step')
+  if (targetError) return fail(source, 'TARGET_INVALID', targetError)
+  const copyError = automationNodeCopyError(snapshot, nodeId)
+  if (copyError) return fail(source, 'COPY_UNSAFE', copyError)
+  const ids = collectControlIds(source)
+  // The snapshot may outlive the original subtree. Its old IDs must still receive fresh IDs.
+  for (const id of collectControlIds(snapshot)) ids.add(id)
+  if (trigger && target.kind === 'triggers') {
+    const id = availableId(ids, 'trigger')
+    const triggers = [...source.triggers]
+    const index = target.beforeTriggerId === undefined ? triggers.length : triggers.findIndex(node => node.id === target.beforeTriggerId)
+    triggers.splice(index, 0, { ...structuredClone(trigger), id })
+    return { source: { ...source, triggers }, selectedNodeId: id, idMap: { [nodeId]: id } }
+  }
+  if (!control || target.kind === 'triggers') return fail(source, 'TARGET_INVALID', 'The step and target do not match.')
+  const { control: copied, idMap } = copyAutomationControl(control, snapshot, oldId => availableId(ids, `${oldId}-copy`))
+  return { source: insertControlAt(source, copied, target, ids), selectedNodeId: copied.id, idMap }
+}
+
+function editContainer(
+  source: AutomationSource,
+  command: Extract<AutomationSourceCommand, { type: 'ADD_ELSE' | 'REMOVE_ELSE' | 'ADD_BRANCH' | 'REMOVE_BRANCH' | 'CLEAR_BLOCK' }>,
+): AutomationSourceCommandResult {
+  const node = findAutomationControl(source, command.nodeId)
+  if (!node) return fail(source, 'NODE_NOT_FOUND', 'The container no longer exists.')
+  const ids = collectControlIds(source)
+  let edited: ControlSource
+  let selectedNodeId = node.id
+  let removedNodeIds: string[] = []
+  switch (command.type) {
+    case 'ADD_ELSE': {
+      if (node.type !== 'if') return fail(source, 'INVALID_BRANCH', 'Only If supports an else branch.')
+      if (node.else) return { source }
+      const branch: BlockSource = { type: 'block', id: availableId(ids, `${node.id}-else`), steps: [] }
+      edited = { ...node, else: branch }
+      selectedNodeId = branch.id
+      break
+    }
+    case 'REMOVE_ELSE': {
+      if (node.type !== 'if') return fail(source, 'INVALID_BRANCH', 'Only If supports an else branch.')
+      if (!node.else) return { source }
+      removedNodeIds = subtreeIds(node.else)
+      const { else: _else, ...rest } = node
+      edited = rest
+      break
+    }
+    case 'ADD_BRANCH': {
+      if (node.type !== 'parallel' && node.type !== 'race') return fail(source, 'INVALID_BRANCH', 'Only Parallel and Race support additional branches.')
+      const branch: BlockSource = { type: 'block', id: availableId(ids, `${node.id}-branch`), steps: [] }
+      edited = { ...node, branches: [...node.branches, branch] }
+      selectedNodeId = branch.id
+      break
+    }
+    case 'REMOVE_BRANCH': {
+      if (node.type !== 'parallel' && node.type !== 'race') return fail(source, 'INVALID_BRANCH', 'Only Parallel and Race support removable branches.')
+      const branch = node.branches.find(candidate => candidate.id === command.branchId)
+      if (!branch) return fail(source, 'INVALID_BRANCH', 'The branch no longer belongs to this container.')
+      if (node.branches.length <= 2) return fail(source, 'MIN_BRANCHES', 'Parallel and Race require at least two branches.')
+      removedNodeIds = subtreeIds(branch)
+      edited = { ...node, branches: node.branches.filter(candidate => candidate.id !== command.branchId) }
+      break
+    }
+    case 'CLEAR_BLOCK': {
+      if (node.type !== 'block') return fail(source, 'STRUCTURAL_SLOT', 'Only a block can be cleared.')
+      if (!node.steps.length) return { source }
+      removedNodeIds = node.steps.flatMap(subtreeIds)
+      edited = { ...node, steps: [] }
+      break
+    }
+  }
+  const result = editControl(source.flow, node.id, () => edited)
+  return { source: { ...source, flow: result.control }, selectedNodeId, removedNodeIds }
 }
 
 /** Applies one structured edit while preserving AutomationSource as the sole semantic truth. */
@@ -430,7 +638,19 @@ export function applyAutomationSourceCommand(
     }
     case 'DELETE_STEP': return editSequence(source, command.nodeId)
     case 'MOVE_STEP': return editSequence(source, command.nodeId, command.direction)
-    case 'INSERT': return insertItem(source, command.item)
+    case 'INSERT': return insertItem(source, command.item, command.target)
+    case 'MOVE_TO': return moveTo(source, command.nodeId, command.target)
+    case 'COPY_TO': return copyTo(source, command.nodeId, command.target, command.source ?? source)
+    case 'ADD_ELSE': case 'REMOVE_ELSE': case 'ADD_BRANCH': case 'REMOVE_BRANCH': case 'CLEAR_BLOCK':
+      return editContainer(source, command)
+    case 'SET_INVOCATION_POLICY': {
+      const result = editControl(source.flow, command.nodeId, control => {
+        if (control.type !== 'capability' || JSON.stringify(control.policy) === JSON.stringify(command.policy)) return control
+        const { policy: _policy, ...rest } = control
+        return command.policy === undefined ? rest : { ...rest, policy: structuredClone(command.policy) }
+      })
+      return { source: result.changed ? { ...source, flow: result.control } : source }
+    }
     case 'SET_CAPABILITY_CONNECTION': return {
       source: setCapabilityConnection(source, command.nodeId, command.slotName, command.connectionId),
     }

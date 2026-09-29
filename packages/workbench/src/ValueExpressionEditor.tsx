@@ -1,4 +1,4 @@
-import { Button, Input, Textarea, SelectMenu } from '@numenjs/components'
+import { Button, Input, Textarea, SelectMenu, type SchemaDraftState } from '@numenjs/components'
 import { diagnosticText, t } from './i18n.js'
 import {
   coreExpressionFunctions,
@@ -13,7 +13,7 @@ import {
 } from '@numenjs/core'
 import type { SchemaUIResolver } from '@numenjs/webui/schema-ui'
 import { AlertCircle, Plus, Trash2 } from '@lucide/vue'
-import { h, nextTick, ref, watch, watchEffect, type VNodeChild } from 'vue'
+import { h, nextTick, onScopeDispose, ref, watch, watchEffect, type VNodeChild } from 'vue'
 import {
   insertTemplateReference,
   magicVariableExpression,
@@ -25,9 +25,10 @@ import type {
   WorkbenchAutomationInputField,
   WorkbenchAutomationVariableCatalog,
 } from './contracts.js'
+import { useAutomationFieldDraft } from './automation-field-draft.js'
 import { MagicVariablePicker } from './MagicVariablePicker.js'
 import type { SchemaLiteralRenderer } from './SchemaRenderers.js'
-import { defineSetupComponent, useTextDraft } from './vue-component.js'
+import { defineSetupComponent } from './vue-component.js'
 
 export type EditableValueMode = 'literal' | 'reference' | 'template' | 'expression'
 export type ValueMode = EditableValueMode | 'preserved'
@@ -155,7 +156,7 @@ function modeExpression(
   variables: MagicVariableCandidate[] = [],
 ): ValueExpr | undefined {
   if (mode === 'reference') {
-    const firstDirect = variables.find(variable => variable.compatibility === 'direct')
+    const firstDirect = variables.find(variable => !variable.unavailableReason && variable.compatibility === 'direct')
     return firstDirect ? magicVariableExpression(firstDirect) : { type: 'ref', path: 'trigger.value' }
   }
   if (mode === 'template') return { type: 'template', parts: [''] }
@@ -168,10 +169,10 @@ function modeExpression(
 }
 
 function fieldDescription(field: WorkbenchAutomationInputField, mode: ValueMode): string | undefined {
-  if (mode === 'reference') return 'Use a stable path such as trigger.payload or steps.fetch.output.'
-  if (mode === 'template') return 'Insert references with {{ trigger.value }}. Templates stay structured and never run JavaScript.'
-  if (mode === 'expression') return 'Compose a pure, deterministic Call from the stable core function catalog.'
-  if (mode === 'preserved') return 'This structured expression is preserved. Choose another mode to replace it.'
+  if (mode === 'reference') return t('workbench.inspector.referenceHelp')
+  if (mode === 'template') return t('workbench.inspector.templateHelp')
+  if (mode === 'expression') return t('workbench.inspector.expressionHelp')
+  if (mode === 'preserved') return t('workbench.inspector.preservedHelp')
   return field.description
 }
 
@@ -191,15 +192,37 @@ export interface ValueExpressionFieldProps {
   variables?: MagicVariableCandidate[]
   focusRequest?: number
   depth?: number
+  discardEpoch?: number
+  onDraftStateChange?(state: SchemaDraftState): void
+  confirmDiscard?(): boolean
   onChange(expression?: ValueExpr): void
 }
 
-const ReferenceEditor = defineSetupComponent<ValueExpressionFieldProps>('ReferenceEditor', ['nodeId', 'field', 'expression', 'problem', 'canEdit', 'schemaUI', 'source', 'variableCatalog', 'variables', 'focusRequest', 'depth', 'onChange'], props => {
-  const draft = useTextDraft(() => props.expression?.type === 'ref' ? props.expression.path : 'trigger.value')
+function useExpressionDraft(props: Readonly<ValueExpressionFieldProps>, value: () => string, valid: (text: string) => boolean) {
+  const text = ref(value())
+  let disposed = false
+  const report = () => { if (!disposed) props.onDraftStateChange?.({ dirty: text.value !== value(), invalid: text.value !== value() && !valid(text.value) }) }
+  onScopeDispose(() => { disposed = true; props.onDraftStateChange?.({ dirty: false, invalid: false }) })
+  watch(value, (next, previous) => {
+    if (text.value === previous || text.value === next) text.value = next
+    report()
+  })
+  watch(() => `${props.nodeId}:${props.field.name}`, () => { text.value = value(); report() })
+  return {
+    text,
+    set(value: string) { text.value = value; report() },
+    onInput(event: Event) { text.value = (event.target as HTMLInputElement).value; report() },
+    accept(next: string) { text.value = next; props.onDraftStateChange?.({ dirty: false, invalid: false }); void nextTick(report) },
+    report,
+  }
+}
+
+const ReferenceEditor = defineSetupComponent<ValueExpressionFieldProps>('ReferenceEditor', ['nodeId', 'field', 'expression', 'problem', 'canEdit', 'schemaUI', 'source', 'variableCatalog', 'variables', 'focusRequest', 'depth', 'onDraftStateChange', 'confirmDiscard', 'onChange'], props => {
+  const draft = useExpressionDraft(props, () => props.expression?.type === 'ref' ? props.expression.path : 'trigger.value', text => referencePattern.test(text.trim()))
   const localError = ref<string>()
   const problemId = inputProblemId(props.nodeId, props.field.name)
   const localProblemId = `${problemId}-reference`
-  watch(() => props.expression, () => { localError.value = undefined })
+  watch(() => props.expression, () => { if (referencePattern.test(draft.text.value.trim())) localError.value = undefined })
   return () => {
     const value = props.expression?.type === 'ref' ? props.expression.path : 'trigger.value'
     return <>
@@ -207,20 +230,23 @@ const ReferenceEditor = defineSetupComponent<ValueExpressionFieldProps>('Referen
         <Input
           aria-describedby={[props.problem ? problemId : undefined, localError.value ? localProblemId : undefined].filter(Boolean).join(' ') || undefined}
           aria-invalid={!!props.problem || !!localError.value}
+          aria-required={props.field.required}
           autofocus={props.focusRequest !== undefined}
           value={draft.text.value}
           onInput={draft.onInput}
           disabled={!props.canEdit}
           id={`${props.nodeId}-input-${props.field.name}`}
-          key={`${props.nodeId}:${props.field.name}:${value}:${props.focusRequest ?? 'idle'}`}
+          key={`${props.nodeId}:${props.field.name}:${props.focusRequest ?? 'idle'}`}
           onBlur={event => {
             const path = (event.target as HTMLInputElement).value.trim()
             if (!referencePattern.test(path)) {
               localError.value = 'workbench.validation.reference'
+              draft.report()
               return
             }
             localError.value = undefined
             if (path !== value) props.onChange({ type: 'ref', path })
+            draft.accept(path)
           }}
           onKeydown={event => { if (event.key === 'Enter') (event.target as HTMLElement).blur() }}
           placeholder="trigger.value"
@@ -229,7 +255,7 @@ const ReferenceEditor = defineSetupComponent<ValueExpressionFieldProps>('Referen
         <MagicVariablePicker
           candidates={props.variables ?? []}
           disabled={!props.canEdit}
-          onSelect={item => props.onChange(magicVariableExpression(item))}
+          onSelect={item => { props.onChange(magicVariableExpression(item)); draft.accept(item.path) }}
         />
       </div>
       {localError.value ? <p class="inspector-field-error" id={localProblemId} role="alert">{t(localError.value)}</p> : null}
@@ -237,15 +263,15 @@ const ReferenceEditor = defineSetupComponent<ValueExpressionFieldProps>('Referen
   }
 })
 
-const TemplateEditor = defineSetupComponent<ValueExpressionFieldProps>('TemplateEditor', ['nodeId', 'field', 'expression', 'problem', 'canEdit', 'schemaUI', 'source', 'variableCatalog', 'variables', 'focusRequest', 'depth', 'onChange'], props => {
-  const draft = useTextDraft(() => props.expression?.type === 'template' ? printAutomationTemplate(props.expression) : '')
+const TemplateEditor = defineSetupComponent<ValueExpressionFieldProps>('TemplateEditor', ['nodeId', 'field', 'expression', 'problem', 'canEdit', 'schemaUI', 'source', 'variableCatalog', 'variables', 'focusRequest', 'depth', 'onDraftStateChange', 'confirmDiscard', 'onChange'], props => {
+  const draft = useExpressionDraft(props, () => props.expression?.type === 'template' ? printAutomationTemplate(props.expression) : '', text => { try { parseAutomationTemplate(text); return true } catch { return false } })
   const localError = ref<string>()
   const textareaRef = ref<HTMLTextAreaElement>()
   const selectionStart = ref(0)
   const selectionEnd = ref(0)
   const problemId = inputProblemId(props.nodeId, props.field.name)
   const localProblemId = `${problemId}-template`
-  watch(() => props.expression, () => { localError.value = undefined })
+  watch(() => props.expression, () => { try { parseAutomationTemplate(draft.text.value); localError.value = undefined } catch { /* Keep the uncommitted format error. */ } })
   return () => {
     const value = props.expression?.type === 'template' ? printAutomationTemplate(props.expression) : ''
     const rememberSelection = () => {
@@ -257,12 +283,13 @@ const TemplateEditor = defineSetupComponent<ValueExpressionFieldProps>('Template
         <Textarea
           aria-describedby={[props.problem ? problemId : undefined, localError.value ? localProblemId : undefined].filter(Boolean).join(' ') || undefined}
           aria-invalid={!!props.problem || !!localError.value}
+          aria-required={props.field.required}
           autofocus={props.focusRequest !== undefined}
           value={draft.text.value}
           onInput={draft.onInput}
           disabled={!props.canEdit}
           id={`${props.nodeId}-input-${props.field.name}`}
-          key={`${props.nodeId}:${props.field.name}:${value}:${props.focusRequest ?? 'idle'}`}
+          key={`${props.nodeId}:${props.field.name}:${props.focusRequest ?? 'idle'}`}
           onSelect={rememberSelection}
           onKeyup={rememberSelection}
           onBlur={event => {
@@ -270,8 +297,10 @@ const TemplateEditor = defineSetupComponent<ValueExpressionFieldProps>('Template
               const next = parseAutomationTemplate((event.target as HTMLInputElement).value)
               localError.value = undefined
               if (JSON.stringify(next) !== JSON.stringify(props.expression)) props.onChange(next)
+              draft.accept(printAutomationTemplate(next))
             } catch (error) {
               localError.value = 'workbench.validation.template'
+              draft.report()
             }
           }}
           placeholder={t('workbench.helloTriggerName')}
@@ -284,8 +313,10 @@ const TemplateEditor = defineSetupComponent<ValueExpressionFieldProps>('Template
           onSelect={item => {
             const current = textareaRef.value?.value ?? value
             const next = insertTemplateReference(current, item.path, selectionStart.value, selectionEnd.value)
+            draft.set(next.value)
             try {
               props.onChange(parseAutomationTemplate(next.value))
+              draft.accept(next.value)
               localError.value = undefined
               void nextTick(() => {
                 textareaRef.value?.focus()
@@ -293,6 +324,7 @@ const TemplateEditor = defineSetupComponent<ValueExpressionFieldProps>('Template
               })
             } catch (error) {
               localError.value = 'workbench.validation.template'
+              draft.report()
             }
           }}
         />
@@ -319,7 +351,11 @@ function CallExpressionEditor(props: Readonly<ValueExpressionFieldProps> & {
       <label class="structured-call-function">
         <span>{t('workbench.function')}</span>
         <SelectMenu ariaLabel={t('workbench.value0ExpressionFunction', { value0: props.field.label })} disabled={!props.canEdit}
-          onChange={value => { const next = getCoreExpressionFunction(value); if (next) props.onChange(createCallExpression(props.field, next)) }}
+          onChange={value => {
+            if (value === props.expression.function || (props.confirmDiscard && !props.confirmDiscard())) return
+            const next = getCoreExpressionFunction(value)
+            if (next) props.onChange(createCallExpression(props.field, next))
+          }}
           value={props.expression.function} options={[
             ...(!definition ? [{ value: props.expression.function, label: t('workbench.unavailable') + props.expression.function, disabled: true }] : []),
             ...selectable.map(item => ({ value: item.id, label: item.title })),
@@ -341,10 +377,10 @@ function CallExpressionEditor(props: Readonly<ValueExpressionFieldProps> & {
                 <Button
                   aria-label={t('workbench.removeUnexpectedArgumentValue0', { value0: index + 1 })}
                   disabled={!props.canEdit}
-                  onClick={() => props.onChange({
-                    ...props.expression,
-                    arguments: props.expression.arguments.filter((_item, itemIndex) => itemIndex !== index),
-                  })}
+                  onClick={() => {
+                    if (props.confirmDiscard && !props.confirmDiscard()) return
+                    props.onChange({ ...props.expression, arguments: props.expression.arguments.filter((_item, itemIndex) => itemIndex !== index) })
+                  }}
                   type="button"
                 ><Trash2 aria-hidden="true" size={13} /></Button>
               </div>
@@ -371,10 +407,10 @@ function CallExpressionEditor(props: Readonly<ValueExpressionFieldProps> & {
                   aria-label={t('workbench.removeValue0', { value0: argumentField.label })}
                   class="structured-call-remove"
                   disabled={!props.canEdit}
-                  onClick={() => props.onChange({
-                    ...props.expression,
-                    arguments: props.expression.arguments.filter((_item, itemIndex) => itemIndex !== index),
-                  })}
+                  onClick={() => {
+                    if (props.confirmDiscard && !props.confirmDiscard()) return
+                    props.onChange({ ...props.expression, arguments: props.expression.arguments.filter((_item, itemIndex) => itemIndex !== index) })
+                  }}
                   type="button"
                 ><Trash2 aria-hidden="true" size={13} /></Button>
               ) : null}
@@ -411,6 +447,7 @@ function renderValueExpressionField(props: Readonly<ValueExpressionFieldProps>):
         field: props.field,
         catalog: props.variableCatalog,
         mode: mode === 'template' ? 'template' : 'reference',
+        includeUnavailable: true,
       })
     : [])
   const functions = compatibleFunctions(props.field)
@@ -419,8 +456,8 @@ function renderValueExpressionField(props: Readonly<ValueExpressionFieldProps>):
     type: props.field.type,
   }, 'editor')
   let editor: VNodeChild
-  if (mode === 'reference') editor = <ReferenceEditor {...props} variables={variables} />
-  else if (mode === 'template') editor = <TemplateEditor {...props} variables={variables} />
+  if (mode === 'reference') editor = <ReferenceEditor {...props} key={props.discardEpoch ?? 0} variables={variables} />
+  else if (mode === 'template') editor = <TemplateEditor {...props} key={props.discardEpoch ?? 0} variables={variables} />
   else if (mode === 'expression' && props.expression?.type === 'call') {
     editor = <CallExpressionEditor {...props} depth={props.depth ?? 0} expression={props.expression} />
   } else if (mode === 'preserved') {
@@ -433,7 +470,9 @@ function renderValueExpressionField(props: Readonly<ValueExpressionFieldProps>):
       field: props.field,
       inputId,
       invalid: !!props.problem,
-      ...(props.focusRequest !== undefined ? { autofocus: true, key: props.focusRequest } : {}),
+      key: `${props.discardEpoch ?? 0}:${props.focusRequest ?? 'idle'}`,
+      ...(props.focusRequest !== undefined ? { autofocus: true } : {}),
+      ...(props.onDraftStateChange ? { onDraftStateChange: props.onDraftStateChange } : {}),
       onCommit: (value?: NumenValue) => props.onChange(value === undefined ? undefined : { type: 'literal', value }),
       ...(props.expression?.type === 'literal' ? { value: props.expression.value } : {}),
     })
@@ -446,10 +485,16 @@ function renderValueExpressionField(props: Readonly<ValueExpressionFieldProps>):
     field={props.field}
     mode={mode}
     nodeId={props.nodeId}
-    onModeChange={next => props.onChange(modeExpression(props.field, next, variables))}
+    onModeChange={next => {
+      if (next === mode) return
+      if (props.confirmDiscard && !props.confirmDiscard()) return
+      props.onDraftStateChange?.({ dirty: false, invalid: false })
+      props.onChange(modeExpression(props.field, next, variables))
+    }}
     supportsExpression={functions.length > 0}
     {...(description ? { description } : {})}
-    {...(mode === 'literal' ? { inputId } : {})}
+    {...(mode === 'literal' || mode === 'reference' || mode === 'template' ? { inputId } : {})}
+    {...(props.focusRequest !== undefined ? { focusRequest: props.focusRequest } : {})}
     {...(props.problem ? { problem: props.problem } : {})}
   >{editor}</FieldShell>
 }
@@ -460,17 +505,33 @@ interface FieldShellProps {
   problem?: CompileDiagnostic
   description?: string
   inputId?: string
+  focusRequest?: number
   mode: ValueMode
   canEdit: boolean
   supportsExpression: boolean
   onModeChange(mode: EditableValueMode): void
 }
 
-const FieldShell = defineSetupComponent<FieldShellProps>('FieldShell', ['field', 'nodeId', 'problem', 'description', 'inputId', 'mode', 'canEdit', 'supportsExpression', 'onModeChange'], (props, context) => () => {
+const FieldShell = defineSetupComponent<FieldShellProps>('FieldShell', ['field', 'nodeId', 'problem', 'description', 'inputId', 'focusRequest', 'mode', 'canEdit', 'supportsExpression', 'onModeChange'], (props, context) => {
+  const fieldRoot = ref<HTMLElement>()
+  // HTML autofocus only runs opportunistically on insertion. Problems navigation
+  // needs a repeatable request after the selected field and its renderer update.
+  watch(() => [props.nodeId, props.field.name, props.focusRequest] as const, async ([, , request], _previous, onCleanup) => {
+    if (request === undefined) return
+    let current = true
+    onCleanup(() => { current = false })
+    await nextTick()
+    if (!current) return
+    const root = fieldRoot.value
+    const editor = root?.querySelector<HTMLElement>('.schema-value-control')
+    const control = editor?.querySelector<HTMLElement>('input:not(:disabled), textarea:not(:disabled), select:not(:disabled), button:not(:disabled), [contenteditable="true"]')
+    ;(control ?? root)?.focus()
+  }, { flush: 'post', immediate: true })
+  return () => {
   const { field, nodeId, problem, description, inputId, mode, canEdit, onModeChange } = props
   const problemId = inputProblemId(nodeId, field.name)
   return (
-    <div class="schema-field" data-invalid={!!problem}>
+    <div class="schema-field" data-invalid={!!problem} ref={fieldRoot} tabindex={-1}>
       <div class="schema-field-row">
         <span class="schema-field-label">
           <label {...(inputId ? { for: inputId } : {})}>{field.label}</label>
@@ -489,15 +550,24 @@ const FieldShell = defineSetupComponent<FieldShellProps>('FieldShell', ['field',
         </span>
       </div>
       {description ? <p class="inspector-field-help">{description}</p> : null}
+      {mode !== 'literal' && field.description ? <p class="inspector-field-help">{field.description}</p> : null}
+      {field.defaultValue !== undefined ? <p class="inspector-field-help">{t('workbench.inspector.defaultValue')} <code>{JSON.stringify(field.defaultValue)}</code></p> : null}
+      {mode === 'literal' && field.type === 'json' ? <p class="inspector-field-help">{t('workbench.inspector.jsonField', { label: field.label, type: field.schemaType })}</p> : null}
       {problem ? <p class="inspector-field-error" id={problemId}>{diagnosticText(problem)}</p> : null}
     </div>
   )
+  }
 })
 
-export const ValueExpressionField = defineSetupComponent<ValueExpressionFieldProps>('ValueExpressionField', ['nodeId', 'field', 'expression', 'problem', 'canEdit', 'schemaUI', 'source', 'variableCatalog', 'variables', 'focusRequest', 'depth', 'onChange'], props => {
+export const ValueExpressionField = defineSetupComponent<ValueExpressionFieldProps>('ValueExpressionField', ['nodeId', 'field', 'expression', 'problem', 'canEdit', 'schemaUI', 'source', 'variableCatalog', 'variables', 'focusRequest', 'depth', 'onDraftStateChange', 'confirmDiscard', 'onChange'], props => {
   const revision = useSchemaRevision(() => props.schemaUI)
+  const draft = useAutomationFieldDraft(() => props.nodeId, () => `input.${props.field.name}`)
   return () => {
     revision.value
-    return renderValueExpressionField(props)
+    return renderValueExpressionField({ ...props,
+      discardEpoch: draft.discardEpoch,
+      onDraftStateChange: state => { draft.report(state); props.onDraftStateChange?.(state) },
+      confirmDiscard: () => draft.confirmDiscard(),
+    })
   }
 })

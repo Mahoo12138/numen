@@ -1,7 +1,9 @@
 import { Button } from '@numenjs/components'
 import { diagnosticText, t, metadataText, formatDateTime, statusLabel } from './i18n.js'
 import { Ban, Braces, ChevronLeft, Clock3, GitBranch, ListTree, RotateCcw, ScrollText } from '@lucide/vue'
-import { computed, onScopeDispose, reactive, shallowReactive, watch } from 'vue'
+import { computed, nextTick, onScopeDispose, reactive, ref, shallowReactive, watch } from 'vue'
+import { ExecutionDataPanel } from './ExecutionDataPanel.js'
+import { useExecutionData } from './useExecutionData.js'
 import {
   workbenchCancelRunActionRef,
   workbenchRunDetailQueryRef,
@@ -38,7 +40,15 @@ export const RunDetailPage = defineSetupComponent<WorkbenchPageProps>(
   props => {
     const position = reactive<RunDetailPosition>({ executionHistory: [], eventHistory: [] })
     const runId = computed(() => props.navigation?.route.parameters.id ?? '')
+    const sourceFilter = ref<string>()
+    const executionFilter = ref<string>()
+    const selectedSourceNode = ref<string>()
+    const inspection = useExecutionData(() => props.consoleClient, runId)
+    let inspectionTrigger: HTMLElement | undefined
     watch(runId, () => {
+      sourceFilter.value = undefined
+      executionFilter.value = undefined
+      selectedSourceNode.value = undefined
       delete position.executionCursor
       position.executionHistory.splice(0)
       delete position.eventCursor
@@ -46,6 +56,8 @@ export const RunDetailPage = defineSetupComponent<WorkbenchPageProps>(
     }, { flush: 'sync' })
     const input = computed<WorkbenchRunDetailQueryInput>(() => ({
       runId: runId.value,
+      ...(sourceFilter.value ? { sourceNodeId: sourceFilter.value } : {}),
+      ...(executionFilter.value ? { executionId: executionFilter.value } : {}),
       executionLimit: 25,
       ...(position.executionCursor ? { executionCursor: position.executionCursor } : {}),
       eventLimit: 50,
@@ -76,7 +88,12 @@ export const RunDetailPage = defineSetupComponent<WorkbenchPageProps>(
       delete cancellation.error
       delete cancellation.confirmedStatus
     }, { flush: 'sync' })
-    const openRuns = () => props.navigation?.navigate(coreWorkbenchRoutes.runs)
+    const returnQuery = () => {
+      const source = new URLSearchParams(props.navigation?.route.search ?? '').get('from') ?? ''
+      const search = new URLSearchParams(source)
+      return Object.fromEntries([...search].filter(([key]) => ['status', 'automationId', 'cursor', 'history'].includes(key)))
+    }
+    const openRuns = () => props.navigation?.navigate(coreWorkbenchRoutes.runs, { query: returnQuery() })
     const olderExecutions = () => {
       const next = detail.status === 'READY' ? detail.data?.nextExecutionCursor : undefined
       if (!next) return
@@ -98,8 +115,36 @@ export const RunDetailPage = defineSetupComponent<WorkbenchPageProps>(
       const route = view === 'flow'
         ? coreWorkbenchRunFlowRoute
         : view === 'timeline' ? coreWorkbenchRunTimelineRoute : coreWorkbenchRunContextRoute
-      props.navigation?.navigate(route, { parameters: { id: runId.value } })
+      props.navigation?.navigate(route, { parameters: { id: runId.value }, query: { from: new URLSearchParams(props.navigation.route.search).get('from') ?? undefined } })
     }
+    const clearExecutionPage = () => { delete position.executionCursor; position.executionHistory.splice(0) }
+    const selectSource = (id: string) => {
+      inspection.close()
+      selectedSourceNode.value = id
+      selectView('flow')
+    }
+    const filterExecutions = (sourceNodeId?: string, executionId?: string) => {
+      inspection.close()
+      clearExecutionPage()
+      sourceFilter.value = sourceNodeId
+      executionFilter.value = executionId
+      selectView('timeline')
+    }
+    const inspect = (executionId: string, attemptId?: string) => {
+      inspectionTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : undefined
+      inspection.open(executionId, attemptId)
+      void nextTick(() => { const panel = document.querySelector<HTMLElement>('.run-data-panel'); panel?.focus(); panel?.scrollIntoView({ block: 'nearest' }) })
+    }
+    const closeInspection = () => { inspection.close(); inspectionTrigger?.focus() }
+    watch(() => [activeView.value, selectedSourceNode.value, detail.status], () => {
+      if (activeView.value !== 'flow' || !selectedSourceNode.value) return
+      void nextTick(() => {
+        const target = Array.from(document.querySelectorAll<HTMLElement>('[data-run-source-id]'))
+          .find(element => element.dataset.runSourceId === selectedSourceNode.value)
+        target?.focus()
+        target?.scrollIntoView({ block: 'nearest' })
+      })
+    }, { flush: 'post' })
     const cancelRun = () => {
       const client = props.consoleClient
       if (!client || !runId.value || cancellation.pending) return
@@ -134,7 +179,8 @@ export const RunDetailPage = defineSetupComponent<WorkbenchPageProps>(
 
     return () => (
       <main class="main-workbench core-page run-detail-page">
-        <RunDetailHeader onLogs={() => props.navigation?.navigate(coreWorkbenchRoutes.system, { query: { runId: runId.value } })} cancellation={cancellation} onBack={openRuns} onCancel={cancelRun} state={detail} />
+        <RunDetailHeader onAutomation={() => { if (detail.status === 'READY' && detail.data) props.navigation?.navigate(coreWorkbenchRoutes.automations, { query: { automation: detail.data.run.automationId } }) }} onLogs={() => props.navigation?.navigate(coreWorkbenchRoutes.system, { query: { runId: runId.value, from: new URLSearchParams(props.navigation?.route.search ?? '').get('from') ?? undefined } })} cancellation={cancellation} onBack={openRuns} onCancel={cancelRun} state={detail} />
+        <ExecutionDataPanel state={inspection.state.value} onClose={closeInspection} onLocate={selectSource} />
         <RunDetailContent
           activeView={activeView.value}
           canShowNewerEvents={position.eventHistory.length > 0}
@@ -145,6 +191,13 @@ export const RunDetailPage = defineSetupComponent<WorkbenchPageProps>(
           onNewerExecutions={newerExecutions}
           onReload={reload}
           onSelectView={selectView}
+          onInspect={inspect}
+          onLocate={selectSource}
+          onSelectNode={id => filterExecutions(id)}
+          onSelectExecution={id => filterExecutions(undefined, id)}
+          onClearFilter={() => filterExecutions()}
+          filterLabel={sourceFilter.value ?? executionFilter.value}
+          selectedSourceNodeId={selectedSourceNode.value}
           state={detail}
         />
       </main>
@@ -152,12 +205,13 @@ export const RunDetailPage = defineSetupComponent<WorkbenchPageProps>(
   },
 )
 
-function RunDetailHeader({ state, cancellation, onBack, onCancel, onLogs }: {
+function RunDetailHeader({ state, cancellation, onBack, onCancel, onLogs, onAutomation }: {
   state: ConsoleQueryState<WorkbenchRunDetail | null>
   cancellation: { pending: boolean; error?: string; confirmedStatus?: WorkbenchCancelRunResult['status'] }
   onBack(): void
   onCancel(): void
   onLogs(): void
+  onAutomation(): void
 }) {
   const run = state.status === 'READY' ? state.data?.run : undefined
   const status = cancellation.confirmedStatus ?? run?.status
@@ -173,6 +227,7 @@ function RunDetailHeader({ state, cancellation, onBack, onCancel, onLogs }: {
       </div>
       {run ? (
         <div class="run-detail-actions">
+          <Button variant="secondary" class="secondary-button" type="button" onClick={onAutomation}>{t('workbench.navigation.openAutomation')}</Button>
           <Button variant="secondary" class="secondary-button" type="button" onClick={onLogs}>{t('workbench.logs.viewRun')}</Button>
           {cancellable ? (
             <Button
@@ -201,6 +256,13 @@ export function RunDetailContent({
   onOlderExecutions,
   onNewerEvents,
   onOlderEvents,
+  onInspect,
+  onLocate,
+  onSelectNode,
+  onSelectExecution,
+  onClearFilter,
+  filterLabel,
+  selectedSourceNodeId,
 }: {
   activeView: RunDetailView
   state: ConsoleQueryState<WorkbenchRunDetail | null>
@@ -212,6 +274,13 @@ export function RunDetailContent({
   onOlderExecutions(): void
   onNewerEvents(): void
   onOlderEvents(): void
+  onInspect?(executionId: string, attemptId?: string): void
+  onLocate?(nodeId: string): void
+  onSelectNode?(nodeId: string): void
+  onSelectExecution?(executionId: string): void
+  onClearFilter?(): void
+  filterLabel?: string | undefined
+  selectedSourceNodeId?: string | undefined
 }) {
   if (state.status === 'DISABLED') {
     return <RunDetailState title={t('workbench.runtimePreview')} message={t('workbench.openThisPageFromARunningNumenRuntimeToInspectADurableRun')} />
@@ -234,7 +303,7 @@ export function RunDetailContent({
         <RunViewTab active={activeView === 'timeline'} icon={ScrollText} label={t('workbench.timeline')} onClick={() => onSelectView('timeline')} />
         <RunViewTab active={activeView === 'context'} icon={Braces} label={t('workbench.context')} onClick={() => onSelectView('context')} />
       </nav>
-      {activeView === 'flow' ? <RunFlowView detail={detail} /> : null}
+      {activeView === 'flow' ? <RunFlowView detail={detail} onSelectNode={onSelectNode} selectedNodeId={selectedSourceNodeId} /> : null}
       {activeView === 'context' ? <RunContextView detail={detail} /> : null}
       {activeView === 'timeline' ? (
       <div class="run-detail-columns">
@@ -252,6 +321,7 @@ export function RunDetailContent({
                     <strong>{metadataText(`workbench.events.${event.type}`, event.title)}</strong>
                     {event.detail ? <p>{event.detail}</p> : null}
                     <small>#{event.sequence} · {formatTime(event.occurredAt)}</small>
+                    {event.executionId && onSelectExecution ? <Button type="button" onClick={() => onSelectExecution(event.executionId!)}>{t('workbench.runData.showExecution')}</Button> : null}
                   </div>
                 </li>
               ))}
@@ -270,9 +340,10 @@ export function RunDetailContent({
             <div><h2 id="execution-diagnostics-title">{t('workbench.executionDiagnostics')}</h2><span>{t('workbench.newestDurableUnitsFirst')}</span></div>
             <strong>{detail.executionSummary.total}</strong>
           </div>
+          {filterLabel ? <p class="run-execution-filter"><code>{filterLabel}</code><Button type="button" onClick={() => onClearFilter?.()}>{t('workbench.runData.clearFilter')}</Button></p> : null}
           {detail.executions.length ? (
             <div class="execution-records">
-              {detail.executions.map(execution => <ExecutionRecord execution={execution} key={execution.id} />)}
+              {detail.executions.map(execution => <ExecutionRecord execution={execution} key={execution.id} onInspect={onInspect} onLocate={onLocate} />)}
             </div>
           ) : <p class="run-detail-empty">{t('workbench.noExecutionsHaveBeenCreatedForThisRun')}</p>}
           <PageControls
@@ -302,7 +373,7 @@ function RunViewTab({ active, icon: Icon, label, onClick }: {
   )
 }
 
-function RunFlowView({ detail }: { detail: WorkbenchRunDetail }) {
+function RunFlowView({ detail, onSelectNode, selectedNodeId }: { detail: WorkbenchRunDetail; onSelectNode?: ((id: string) => void) | undefined; selectedNodeId?: string | undefined }) {
   return (
     <section aria-labelledby="run-flow-title" class="run-detail-section run-flow-view">
       <div class="run-detail-section-heading">
@@ -310,22 +381,23 @@ function RunFlowView({ detail }: { detail: WorkbenchRunDetail }) {
         <strong>{detail.flow.root.executionCount}</strong>
       </div>
       <ol class="run-flow-tree">
-        <RunFlowNode node={detail.flow.root} />
+        <RunFlowNode node={detail.flow.root} onSelectNode={onSelectNode} selectedNodeId={selectedNodeId} selectable={false} />
       </ol>
       {detail.flow.truncated ? <p class="run-projection-note">{t('workbench.thisFlowExceedsThe250NodeInspectionLimitTheRemainingStructureIsHidden')}</p> : null}
     </section>
   )
 }
 
-function RunFlowNode({ node }: { node: WorkbenchRunDetail['flow']['root'] }) {
+function RunFlowNode({ node, onSelectNode, selectedNodeId, selectable = true }: { node: WorkbenchRunDetail['flow']['root']; onSelectNode?: ((id: string) => void) | undefined; selectedNodeId?: string | undefined; selectable?: boolean }) {
   return (
     <li>
-      <div class="run-flow-node" data-status={node.status}>
+      <div class="run-flow-node" data-status={node.status} data-selected={node.id === selectedNodeId}>
         <span aria-hidden="true" class="run-flow-marker" />
         <div><strong>{node.title}</strong><p>{node.detail}</p><code>{node.id}</code></div>
         <em data-status={node.status}>{statusLabel(node.status)}</em>
+        {onSelectNode && selectable ? <Button data-run-source-id={node.id} aria-label={t('workbench.runData.executionsFor', { node: node.id })} onClick={() => onSelectNode(node.id)} type="button">{t('workbench.runData.executions')}</Button> : null}
       </div>
-      {node.children.length ? <ol>{node.children.map(child => <RunFlowNode key={child.id} node={child} />)}</ol> : null}
+      {node.children.length ? <ol>{node.children.map(child => <RunFlowNode key={child.id} node={child} onSelectNode={onSelectNode} selectedNodeId={selectedNodeId} />)}</ol> : null}
     </li>
   )
 }
@@ -364,7 +436,7 @@ function RunFacts({ detail }: { detail: WorkbenchRunDetail }) {
   )
 }
 
-function ExecutionRecord({ execution }: { execution: WorkbenchRunExecution }) {
+function ExecutionRecord({ execution, onInspect, onLocate }: { execution: WorkbenchRunExecution; onInspect?: ((id: string, attemptId?: string) => void) | undefined; onLocate?: ((id: string) => void) | undefined }) {
   return (
     <article class="execution-record" data-status={execution.status}>
       <header>
@@ -373,6 +445,10 @@ function ExecutionRecord({ execution }: { execution: WorkbenchRunExecution }) {
       </header>
       <h3>{execution.title}</h3>
       <code>{execution.instructionId}</code>
+      <div class="run-execution-actions">
+        {onInspect ? <Button type="button" onClick={() => onInspect(execution.id)}>{t('workbench.runData.inspect')}</Button> : null}
+        {onLocate && execution.sourceNodeId ? <Button type="button" onClick={() => onLocate(execution.sourceNodeId!)}>{t('workbench.runData.locate')}</Button> : null}
+      </div>
       {execution.blockedReason ? <p class="execution-warning">{t('workbench.blocked2')}{statusLabel(execution.blockedReason)}</p> : null}
       <dl>
         <div><dt>{t('workbench.updated')}</dt><dd>{formatTime(execution.updatedAt)}</dd></div>
@@ -390,6 +466,7 @@ function ExecutionRecord({ execution }: { execution: WorkbenchRunExecution }) {
                 <em data-attempt-status={attempt.status}>{statusLabel(attempt.status)}</em>
                 <small>{attempt.providerRef} · {formatDuration(attempt.startedAt, attempt.finishedAt)}</small>
                 {attempt.errorSummary ? <p>{attempt.errorSummary}</p> : null}
+                {onInspect ? <Button type="button" onClick={() => onInspect(execution.id, attempt.id)}>{t('workbench.runData.attemptData')}</Button> : null}
               </article>
             ))}
           </div>

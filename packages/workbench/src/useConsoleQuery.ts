@@ -17,7 +17,7 @@ export function useConsoleQuery<Input, Output>(
   client: MaybeRefOrGetter<WorkbenchConsoleClient | undefined>,
   ref: ConsoleProcedureRef,
   input: MaybeRefOrGetter<Input>,
-  invalidationScope?: WorkbenchInvalidationScope,
+  invalidationScope?: WorkbenchInvalidationScope | readonly WorkbenchInvalidationScope[],
 ): [ConsoleQueryState<Output>, () => void, () => void] {
   const state = shallowReactive<ConsoleQueryState<Output>>(
     toValue(client) ? { status: 'LOADING' } : { status: 'DISABLED' },
@@ -77,7 +77,7 @@ export function useConsoleQuery<Input, Output>(
             {},
             {
               event: event => {
-                if (acceptInvalidations && event.scopes.includes(invalidationScope)) execute(false)
+                if (acceptInvalidations && (typeof invalidationScope === 'string' ? event.scopes.includes(invalidationScope) : invalidationScope.some(scope => event.scopes.includes(scope)))) execute(false)
               },
             },
             lifecycle.signal,

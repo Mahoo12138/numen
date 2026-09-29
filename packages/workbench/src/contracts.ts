@@ -100,6 +100,8 @@ export const workbenchRunDetailQueryRef = {
 
 export interface WorkbenchRunDetailQueryInput {
   runId: string
+  sourceNodeId?: string
+  executionId?: string
   executionLimit: number
   executionCursor?: string
   eventLimit: number
@@ -146,6 +148,7 @@ export interface WorkbenchRunExecutionAttempt {
 export interface WorkbenchRunExecution {
   id: string
   instructionId: string
+  sourceNodeId?: string
   title: string
   operation: string
   status: ExecutionStatus
@@ -158,6 +161,33 @@ export interface WorkbenchRunExecution {
   createdAt: string
   updatedAt: string
   attempts: WorkbenchRunExecutionAttempt[]
+}
+
+/** Values are fetched explicitly and retained only by the current data panel. */
+export const workbenchExecutionDataQueryRef = { id: 'numen:execution-data', version: 1 } as const satisfies ConsoleProcedureRef
+
+export interface WorkbenchExecutionDataInput {
+  runId: string
+  executionId: string
+  attemptId?: string
+}
+
+export interface WorkbenchInspectedValue {
+  value: NumenValue
+  hidden: number
+  truncated: boolean
+  available: boolean
+}
+
+export interface WorkbenchExecutionData {
+  runId: string
+  executionId: string
+  sourceNodeId?: string
+  /** Attempts do not persist separate values; these are the Execution's current durable values. */
+  provenance: 'execution-current'
+  attempt?: { id: string; number: number }
+  input: WorkbenchInspectedValue
+  output: WorkbenchInspectedValue
 }
 
 export interface WorkbenchRunTimelineEvent {
@@ -462,6 +492,13 @@ export interface WorkbenchAutomationDetail {
   automation: WorkbenchAutomationIdentity
   draft: WorkbenchAutomationDraft
   revisions: WorkbenchAutomationRevisionSummary[]
+  triggerRuntime?: {
+    status: 'DISABLED' | 'NO_REVISION' | 'NO_TRIGGERS' | 'UNAVAILABLE' | 'WAITING' | 'READY'
+    activationGeneration: number
+    revisionId?: string
+    expected: number
+    active: number
+  } | undefined
 }
 
 export const workbenchAutomationInsertCatalogQueryRef = {
@@ -529,6 +566,7 @@ export type WorkbenchAutomationInsertItem =
     kind: 'capability'
     capability: CapabilityRef
     capabilityKind: 'query' | 'action'
+    semantics: { retrySafe: boolean; defaultTimeoutMs?: number }
     title: string
     description?: string
     providerAvailable: boolean
@@ -708,8 +746,16 @@ export interface WorkbenchAutomationActivationResult {
 
 export const workbenchManualRunFormQueryRef = { id: 'numen:manual-run-form', version: 1 } as const satisfies ConsoleProcedureRef
 export const workbenchStartManualRunActionRef = { id: 'numen:manual-run-start', version: 1 } as const satisfies ConsoleProcedureRef
+export type WorkbenchRunLaunchMode = 'manual' | 'revision-test'
+export interface WorkbenchManualRunFormInput {
+  automationId: string
+  mode: WorkbenchRunLaunchMode
+  revisionId?: string
+}
 export interface WorkbenchManualRunForm {
   automationId: string
+  mode: WorkbenchRunLaunchMode
+  revisions: Array<{ id: string; number: number; active: boolean }>
   revisionId: string
   revisionNumber: number
   inputs?: NonNullable<AutomationSource['inputs']>
@@ -717,7 +763,9 @@ export interface WorkbenchManualRunForm {
 export interface WorkbenchStartManualRunInput {
   automationId: string
   requestId: string
-  expectedRevisionId: string
+  mode: WorkbenchRunLaunchMode
+  revisionId: string
   input: Record<string, NumenValue>
+  trigger: NumenValue
 }
 export interface WorkbenchStartManualRunResult { runId: string }

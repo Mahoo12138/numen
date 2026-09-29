@@ -18,6 +18,8 @@ export interface MagicVariableCandidate {
   compatibility: MagicVariableCompatibility
   conversion?: 'core:to-string'
   description?: string
+  sourceNodeId?: string
+  unavailableReason?: 'out-of-scope' | 'requires-loop' | 'type-mismatch'
 }
 
 export interface ProjectMagicVariablesOptions {
@@ -26,6 +28,7 @@ export interface ProjectMagicVariablesOptions {
   field: WorkbenchAutomationInputField
   catalog: WorkbenchAutomationVariableCatalog
   mode: 'reference' | 'template'
+  includeUnavailable?: boolean
 }
 
 interface LexicalScope {
@@ -109,9 +112,10 @@ function candidate(
   field: WorkbenchAutomationInputField,
   mode: 'reference' | 'template',
   value: Omit<MagicVariableCandidate, 'compatibility' | 'conversion'>,
+  includeUnavailable = false,
 ): MagicVariableCandidate | undefined {
   const match = compatibility(field, value.valueType, mode)
-  return match ? { ...value, ...match } : undefined
+  return match ? { ...value, ...match } : includeUnavailable ? { ...value, compatibility: 'direct', unavailableReason: value.unavailableReason ?? 'type-mismatch' } : undefined
 }
 
 function triggerCandidates(
@@ -151,7 +155,7 @@ function triggerCandidates(
       group: 'trigger',
       valueType,
       ...(field.description ? { description: field.description } : {}),
-    })
+    }, options.includeUnavailable)
     return projected ? [projected] : []
   })
 }
@@ -161,7 +165,17 @@ function stepCandidates(
   definitions: Map<string, WorkbenchAutomationVariableDefinition>,
   scope: LexicalScope,
 ): MagicVariableCandidate[] {
-  return scope.priorCapabilities.flatMap(step => {
+  const visible = new Set(scope.priorCapabilities.map(step => step.id))
+  const all: CapabilitySource[] = []
+  const visit = (control: ControlSource): void => {
+    if (control.type === 'capability') all.push(control)
+    else if (control.type === 'block') control.steps.forEach(visit)
+    else if (control.type === 'if') { visit(control.then); if (control.else) visit(control.else) }
+    else if (control.type === 'foreach') visit(control.body)
+    else if (control.type === 'parallel' || control.type === 'race') control.branches.forEach(visit)
+  }
+  if (options.includeUnavailable) visit(options.source.flow)
+  return (options.includeUnavailable ? all : scope.priorCapabilities).flatMap(step => {
     const definition = definitions.get(capabilityKey(step.capability))
     if (!definition) return []
     return definition.outputFields.flatMap(field => {
@@ -170,10 +184,12 @@ function stepCandidates(
         path,
         label: field.path.length ? field.label : 'Output',
         sourceLabel: definition.title,
+        sourceNodeId: step.id,
+        ...(!visible.has(step.id) ? { unavailableReason: 'out-of-scope' as const } : {}),
         group: 'steps',
         valueType: field.valueType,
         ...(field.description ? { description: field.description } : {}),
-      })
+      }, options.includeUnavailable)
       return value ? [value] : []
     })
   })
@@ -185,14 +201,14 @@ function contextCandidates(options: ProjectMagicVariablesOptions, inLoop: boolea
     { path: 'run.automationId', label: 'Automation ID', sourceLabel: 'Run', group: 'run', valueType: 'string' },
     { path: 'run.revisionId', label: 'Revision ID', sourceLabel: 'Run', group: 'run', valueType: 'string' },
   ]
-  if (inLoop) {
+  if (inLoop || options.includeUnavailable) {
     values.unshift(
-      { path: 'loop.item', label: 'Current item', sourceLabel: 'For each', group: 'loop', valueType: 'unknown' },
-      { path: 'loop.index', label: 'Current index', sourceLabel: 'For each', group: 'loop', valueType: 'number' },
+      { path: 'loop.item', label: 'Current item', sourceLabel: 'For each', group: 'loop', valueType: 'unknown', ...(!inLoop ? { unavailableReason: 'requires-loop' as const } : {}) },
+      { path: 'loop.index', label: 'Current index', sourceLabel: 'For each', group: 'loop', valueType: 'number', ...(!inLoop ? { unavailableReason: 'requires-loop' as const } : {}) },
     )
   }
   return values.flatMap(value => {
-    const projected = candidate(options.field, options.mode, value)
+    const projected = candidate(options.field, options.mode, value, options.includeUnavailable)
     return projected ? [projected] : []
   })
 }
@@ -207,7 +223,7 @@ export function projectMagicVariables(options: ProjectMagicVariablesOptions): Ma
   const definitions = definitionMap(options.catalog)
   return [
     ...Object.entries(options.source.inputs ?? {}).flatMap(([name, field]) => {
-      const projected = candidate(options.field, options.mode, { path: `input.${name}`, label: field.title || name, sourceLabel: 'Automation inputs', group: 'input', valueType: field.type, ...(field.description ? { description: field.description } : {}) })
+      const projected = candidate(options.field, options.mode, { path: `input.${name}`, label: field.title || name, sourceLabel: 'Automation inputs', group: 'input', valueType: field.type, ...(field.description ? { description: field.description } : {}) }, options.includeUnavailable)
       return projected ? [projected] : []
     }),
     ...triggerCandidates(options, definitions),

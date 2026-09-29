@@ -81,6 +81,7 @@ const insertItemSchema = z.union([
     kind: z.const('capability').required(),
     capability: capabilityRefSchema.required(),
     capabilityKind: z.union(['query', 'action']).required(),
+    semantics: z.object({ retrySafe: z.boolean().required(), defaultTimeoutMs: z.number() }).required(),
     title: z.string().required(),
     description: z.string(),
     providerAvailable: z.boolean().required(),
@@ -243,7 +244,7 @@ export function projectAutomationInsertCatalog(
       }
       return status.definition.kind === 'trigger'
         ? { kind: 'trigger', ...shared }
-        : { kind: 'capability', capabilityKind: status.definition.kind, ...shared }
+        : { kind: 'capability', capabilityKind: status.definition.kind, semantics: { retrySafe: status.definition.semantics.retrySafe, ...(status.definition.semantics.defaultTimeoutMs !== undefined ? { defaultTimeoutMs: status.definition.semantics.defaultTimeoutMs } : {}) }, ...shared }
     }
   const triggers = statuses
     .filter(status => status.definition.kind === 'trigger')

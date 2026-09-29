@@ -1,5 +1,5 @@
 import { SelectMenu } from '@numenjs/components'
-import { diagnosticText, t } from './i18n.js'
+import { diagnosticText, statusLabel, t } from './i18n.js'
 import type { AutomationSource, CapabilitySource, CompileDiagnostic, NumenValue, TriggerSource, ValueExpr } from '@numenjs/core'
 import type { SchemaUIResolver } from '@numenjs/webui/schema-ui'
 import { AlertCircle } from '@lucide/vue'
@@ -15,6 +15,7 @@ import {
   printAutomationTemplate,
 } from './ValueExpressionEditor.js'
 import { h } from 'vue'
+import { AutomationLiteralField } from './AutomationLiteralField.js'
 import type { SchemaLiteralRenderer } from './SchemaRenderers.js'
 import { defineSetupComponent } from './vue-component.js'
 
@@ -70,6 +71,7 @@ export function CapabilityConnectionFields({
     const options = compatibleConnections(slot, connections)
     const selected = bindings[slot.name] ?? ''
     const missingSelection = selected && !options.some(option => option.id === selected)
+    const selectedConnection = options.find(option => option.id === selected)
     const problem = problems.find(item => item.source?.fieldPath === `connections.${slot.name}`)
     const problemId = `${nodeId}-connection-${slot.name}-problem`
     return (
@@ -89,6 +91,7 @@ export function CapabilityConnectionFields({
             ? t('workbench.acceptsValue0', { value0: slot.accepts.length ? slot.accepts.join(', ') : 'any Connection Type' })
             : t('workbench.noCompatibleConnectionsConfiguredValue0', { value0: slot.accepts.length ? ` for ${slot.accepts.join(', ')}` : '' })}
         </p>
+        {selectedConnection && (!selectedConnection.enabled || !selectedConnection.adapterAvailable || selectedConnection.status !== 'READY') ? <p class="inspector-field-error" role="status">{t('workbench.inspector.connectionUnavailable', { name: selectedConnection.name, reason: !selectedConnection.enabled ? t('workbench.disabled') : !selectedConnection.adapterAvailable ? t('workbench.inspector.adapterUnavailable') : statusLabel(selectedConnection.status) })}</p> : null}
         {problem ? <p class="inspector-field-error" id={problemId}>{diagnosticText(problem)}</p> : null}
       </div>
     )
@@ -114,9 +117,10 @@ export const CapabilityInputFields = defineSetupComponent<CapabilityInputFieldsP
     return <div class="inspector-schema-notice"><AlertCircle size={15} /><span>{t('workbench.thisStepDoesNotExposeAnObjectInputSchemaSupportedByTheCoreInspector')}</span></div>
   }
   if (!props.definition.inputFields.length) return <p class="inspector-summary">{t('workbench.thisStepHasNoConfigurableInputs')}</p>
-  return props.definition.inputFields.map(field => {
-    const expression = props.control.input[field.name]
+  return props.definition.inputFields.map((field, index) => {
+    const expression = props.control.input?.[field.name]
     const problem = fieldProblem(props.problems, field.name)
+      ?? (index === 0 ? props.problems.find(item => item.source?.fieldPath === 'input') : undefined)
     return <ValueExpressionField
       canEdit={props.canEdit}
       field={field}
@@ -125,7 +129,7 @@ export const CapabilityInputFields = defineSetupComponent<CapabilityInputFieldsP
       onChange={expression => props.onChange?.(props.nodeId, field.name, expression)}
       {...(expression ? { expression } : {})}
       {...(problem ? { problem } : {})}
-      {...(props.focusFieldPath === `input.${field.name}` && props.focusRequest !== undefined
+      {...((props.focusFieldPath === `input.${field.name}` || props.focusFieldPath?.startsWith(`input.${field.name}.`) || (index === 0 && props.focusFieldPath === 'input')) && props.focusRequest !== undefined
         ? { focusRequest: props.focusRequest }
         : {})}
       {...(props.schemaUI ? { schemaUI: props.schemaUI } : {})}
@@ -144,6 +148,8 @@ export function TriggerConfigurationFields({
   problems,
   canEdit,
   schemaUI,
+  focusFieldPath,
+  focusRequest,
   onChange,
 }: {
   nodeId: string
@@ -152,6 +158,8 @@ export function TriggerConfigurationFields({
   problems: CompileDiagnostic[]
   canEdit: boolean
   schemaUI?: SchemaUIResolver
+  focusFieldPath?: string
+  focusRequest?: number
   onChange?(nodeId: string, fieldName: string, value?: NumenValue): void
 }) {
   if (!definition.inputSchemaSupported) {
@@ -159,7 +167,7 @@ export function TriggerConfigurationFields({
   }
   if (!definition.inputFields.length) return <p class="inspector-summary">{t('workbench.thisTriggerHasNoConfigurableFields')}</p>
   return <>{definition.inputFields.map((field, index) => {
-    const problem = problems.find(item => item.source?.fieldPath === `config.${field.name}`)
+    const problem = problems.find(item => item.source?.fieldPath === `config.${field.name}` || item.source?.fieldPath?.startsWith(`config.${field.name}.`))
       ?? (index === 0 ? problems.find(item => item.source?.fieldPath === 'config') : undefined)
     const problemId = `${nodeId}-config-${field.name}-problem`
     const inputId = `${nodeId}-config-${field.name}`
@@ -174,7 +182,10 @@ export function TriggerConfigurationFields({
           {field.required ? <em>{t('workbench.required')}</em> : null}
         </span>
         <span class="schema-value-editor trigger-config-editor">
-          <span class="schema-value-control">{Renderer ? h(Renderer, {
+          <span class="schema-value-control">{Renderer ? h(AutomationLiteralField, {
+            renderer: Renderer,
+            fieldPath: `config.${field.name}`,
+            ...((focusFieldPath === `config.${field.name}` || focusFieldPath?.startsWith(`config.${field.name}.`) || (index === 0 && focusFieldPath === 'config')) && focusRequest !== undefined ? { focusRequest } : {}),
             canEdit,
             controlId: nodeId,
             ...(problem ? { describedBy: problemId } : {}),
@@ -187,6 +198,8 @@ export function TriggerConfigurationFields({
         </span>
       </div>
       {field.description ? <p class="inspector-field-help">{field.description}</p> : null}
+      {field.defaultValue !== undefined ? <p class="inspector-field-help">{t('workbench.inspector.defaultValue')} <code>{JSON.stringify(field.defaultValue)}</code></p> : null}
+      {field.type === 'json' ? <p class="inspector-field-help">{t('workbench.inspector.jsonField', { label: field.label, type: field.schemaType })}</p> : null}
       {problem ? <p class="inspector-field-error" id={problemId}>{diagnosticText(problem)}</p> : null}
     </div>
   })}</>

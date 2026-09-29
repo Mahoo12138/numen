@@ -7,6 +7,7 @@ import { automations } from './model.js'
 import { SelectMenu } from './SelectMenu.js'
 import type { ConsoleQueryState } from './useConsoleQuery.js'
 import { defineSetupComponent } from './vue-component.js'
+import { useCommandRegistration } from './commands.js'
 
 export interface AutomationSidebarProps {
   activeId?: string
@@ -21,6 +22,7 @@ export interface AutomationSidebarProps {
   onRemoveArchived?(id: string, expectedArchivedAt: string): Promise<boolean>
   createError?: string
   creating?: boolean
+  createRequest?: number
   mutationPending?: boolean
   mutationError?: string
   state?: ConsoleQueryState<WorkbenchAutomationsIndex>
@@ -42,7 +44,7 @@ interface AutomationSidebarItem {
 
 export const AutomationSidebar = defineSetupComponent<AutomationSidebarProps>('AutomationSidebar', [
   'activeId', 'onChange', 'onOpen', 'onCreate', 'onCreateDismiss', 'onReload', 'createError', 'creating', 'state',
-  'onArchiveViewChange', 'onArchive', 'onRestore', 'onRemoveArchived', 'mutationPending', 'mutationError',
+  'onArchiveViewChange', 'onArchive', 'onRestore', 'onRemoveArchived', 'mutationPending', 'mutationError', 'createRequest',
 ], props => {
   const { t } = useWorkbenchI18n()
   const createOpen = ref(false)
@@ -52,6 +54,8 @@ export const AutomationSidebar = defineSetupComponent<AutomationSidebarProps>('A
   const menuAutomationId = ref<string>()
   const name = ref('')
   const nameInput = ref<HTMLInputElement>()
+  const openCreate = () => { createOpen.value = true; props.onCreateDismiss?.(); void nextTick(() => nameInput.value?.focus()) }
+  watch(() => props.createRequest, value => { if (value && props.onCreate) openCreate() }, { immediate: true })
   watch(createOpen, async open => {
     if (!open) return
     await nextTick()
@@ -107,6 +111,12 @@ export const AutomationSidebar = defineSetupComponent<AutomationSidebarProps>('A
     if (props.onOpen) props.onOpen(id, tab)
     else props.onChange(id)
   }
+  const commands = useCommandRegistration(() => [
+    { id: 'automation.new', label: t('workbench.createAutomation'), shortcut: { mod: true, alt: true, key: 'n' },
+      ...(!props.onCreate || props.creating ? { disabledReason: t(props.creating ? 'workbench.creating' : 'workbench.commands.runtimeRequired') } : {}), execute: openCreate },
+    ...items.value.map(item => ({ id: `automation.open.${item.id}`, label: t('workbench.commands.openAutomation', { name: item.label }), description: item.id,
+      execute: () => openAutomation(item.id, item.archived ? 'Runs' : 'Editor') })),
+  ])
   const archive = async (item: AutomationSidebarItem) => {
     if (!props.onArchive || !window.confirm(t('workbench.archiveAutomationConfirm', { value0: item.label }))) return
     if (await props.onArchive(item.id, item.activationGeneration ?? 0)) { filterStatus.value = 'archived'; menuAutomationId.value = undefined }
@@ -137,7 +147,7 @@ export const AutomationSidebar = defineSetupComponent<AutomationSidebarProps>('A
             aria-label={t('workbench.createAutomation')}
             class="icon-button"
             disabled={!props.onCreate || props.creating}
-            onClick={() => { createOpen.value = !createOpen.value; props.onCreateDismiss?.() }}
+            onClick={() => { if (createOpen.value) closeCreate(); else if (commands) commands.execute('automation.new'); else openCreate() }}
             type="button"
           ><Plus size={16} /></Button>
           <Button variant="ghost" size="icon"

@@ -27,7 +27,7 @@ describe('Canvas structural Source commands', () => {
       : type === 'foreach' ? { type, id: 'parent', items: { type: 'literal', value: [] }, body, concurrency: 2 }
       : { type, id: 'parent', branches: [body, block('other', [])] }
     const original = source(flow)
-    expect(options(original, 'body')).toEqual({ canDelete: false, canMoveUp: false, canMoveDown: false })
+    expect(options(original, 'body')).toEqual({ canDelete: false, canMoveUp: false, canMoveDown: false, canCopy: true, canMoveTo: false })
     expect(apply(original, { type: 'DELETE_STEP', nodeId: 'body' }).source).toBe(original)
     expect(apply(original, { type: 'MOVE_STEP', nodeId: 'body', direction: 'up' }).source).toBe(original)
     const moved = apply(original, { type: 'MOVE_STEP', nodeId: 'a', direction: 'down' })
@@ -54,11 +54,12 @@ describe('Canvas structural Source commands', () => {
 
   it('keeps a valid empty flow when removing a root leaf or structured control and deletes Trigger declarations', () => {
     const original = { ...source(wait('root')), triggers: [{ id: 'trigger', capability: { id: 'test:event', version: 1 }, config: {} }] }
-    expect(apply(original, { type: 'DELETE_STEP', nodeId: 'root' }).source).toEqual({ ...original, flow: block('root', []) })
+    expect(apply(original, { type: 'DELETE_STEP', nodeId: 'root' }).source).toEqual({ ...original, flow: block('flow-1', []) })
     expect(options(original, 'trigger').canDelete).toBe(true)
     expect(apply(original, { type: 'DELETE_STEP', nodeId: 'trigger' })).toEqual({
       source: { ...original, triggers: [] },
       selectedNodeId: undefined,
+      removedNodeIds: ['trigger'],
     })
     const root = source({ type: 'foreach', id: 'loop', items: { type: 'literal', value: [] }, body: block('body', [wait('child')]) })
     expect(projectAutomationSteps(apply(root, { type: 'DELETE_STEP', nodeId: 'loop' }).source)).toEqual([])
@@ -66,7 +67,7 @@ describe('Canvas structural Source commands', () => {
 
   it('treats boundary moves and missing IDs as no-ops', () => {
     const original = source(block('root', [wait('only')]))
-    expect(options(original, 'only')).toEqual({ canDelete: true, canMoveUp: false, canMoveDown: false })
+    expect(options(original, 'only')).toEqual({ canDelete: true, canMoveUp: false, canMoveDown: false, canCopy: true, canMoveTo: true })
     for (const direction of ['up', 'down'] as const) expect(apply(original, { type: 'MOVE_STEP', nodeId: 'only', direction }).source).toBe(original)
     expect(apply(original, { type: 'DELETE_STEP', nodeId: 'missing' }).source).toBe(original)
   })
@@ -78,7 +79,7 @@ describe('Canvas structural Source commands', () => {
     if (moved.source.flow.type !== 'block') throw Error('fixture')
     expect(moved.source.flow.steps[1]).toBe(extension)
     const deleted = apply(original, { type: 'DELETE_STEP', nodeId: 'wait-1' })
-    const inserted = apply(deleted.source, { type: 'INSERT', item: { kind: 'control', control: 'wait', title: 'Wait', description: '' } })
+    const inserted = apply(deleted.source, { type: 'INSERT', target: { kind: 'block', blockId: deleted.source.flow.id }, item: { kind: 'control', control: 'wait', title: 'Wait', description: '' } })
     expect(inserted.selectedNodeId).toBe('wait-2')
     expect(inserted.source.flow).toMatchObject({ steps: [{ id: 'consumer', durationMs: { type: 'ref', path: 'steps.wait-1.value' } }, { id: 'wait-2' }] })
   })

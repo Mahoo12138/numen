@@ -34,14 +34,14 @@ describe('manual Run contract and acceptance', () => {
       provideManualRuns(root)
       const source: AutomationSource = { inputs: { message: { type: 'string', required: true }, count: { type: 'number', default: 2 } }, triggers: [], flow: { type: 'capability', id: 'echo', capability: { id: definition.id, version: 1 }, input: { message: { type: 'ref', path: 'input.message' } } } }
       const { automation } = root.automations.create({ name: 'Manual', source })
-      await expect(root.console.query(workbenchManualRunFormQuery, { automationId: automation.id }, request())).rejects.toMatchObject({ code: 'AUTOMATION_NOT_ACTIVE' })
+      await expect(root.console.query(workbenchManualRunFormQuery, { automationId: automation.id, mode: 'manual' }, request())).rejects.toMatchObject({ code: 'AUTOMATION_NOT_ACTIVE' })
       const first = root.automations.publishDraft(automation.id, 1)
       root.automations.activateRevision(automation.id, first.id)
-      const form = await root.console.query(workbenchManualRunFormQuery, { automationId: automation.id }, request())
+      const form = await root.console.query(workbenchManualRunFormQuery, { automationId: automation.id, mode: 'manual' }, request())
       expect(form).toMatchObject({ revisionId: first.id, inputs: source.inputs })
       let requestNumber = 0
       const submit = (input: unknown, revisionId = first.id, requestId = `manual-provider-${String(++requestNumber).padStart(4, '0')}`) => root.console.action(workbenchStartManualRunAction, {
-        automationId: automation.id, requestId, expectedRevisionId: revisionId, input: input as never,
+        automationId: automation.id, requestId, mode: 'manual', revisionId, input: input as never, trigger: { type: 'manual' },
       }, request())
       for (const invalid of [{}, { message: 1 }, { message: 'ok', unknown: 'hidden' }, []]) await expect(submit(invalid)).rejects.toMatchObject({ status: 422, code: 'AUTOMATION_INPUT_INVALID' })
       expect(root.scheduler.listRuns()).toHaveLength(0)

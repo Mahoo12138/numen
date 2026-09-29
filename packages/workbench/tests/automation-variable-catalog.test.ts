@@ -133,6 +133,19 @@ describe('scope-aware Automation variable projection', () => {
       .toContain('loop.item')
   })
 
+  it('explains unavailable output scope and field types without making them selectable defaults', () => {
+    const source: AutomationSource = { triggers: [], flow: { type: 'block', id: 'root', steps: [
+      capability('before'), capability('target'), capability('later'),
+    ] } }
+    const field: WorkbenchAutomationInputField = { name: 'count', label: 'Count', type: 'number', schemaType: 'number', required: true }
+    const choices = projectMagicVariables({ source, nodeId: 'target', field, catalog, mode: 'reference', includeUnavailable: true })
+    expect(choices.find(item => item.path === 'steps.before.count')).toMatchObject({ sourceNodeId: 'before', compatibility: 'direct' })
+    expect(choices.find(item => item.path === 'steps.before.name')).toMatchObject({ unavailableReason: 'type-mismatch' })
+    expect(choices.find(item => item.path === 'steps.later.count')).toMatchObject({ sourceNodeId: 'later', unavailableReason: 'out-of-scope' })
+    expect(choices.find(item => item.path === 'loop.index')).toMatchObject({ unavailableReason: 'requires-loop' })
+    expect(choices.filter(item => !item.unavailableReason).map(item => item.path)).toEqual(['steps.before.count'])
+  })
+
   it('creates typed reference/conversion expressions and inserts template tokens at the selection', () => {
     expect(magicVariableExpression({
       path: 'steps.lookup.count',

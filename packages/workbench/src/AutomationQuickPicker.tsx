@@ -13,7 +13,8 @@ import {
   Sparkles,
   X,
 } from '@lucide/vue'
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, ref, shallowRef, Teleport, watch } from 'vue'
+import type { AutomationInsertTarget } from './automation-source-editing.js'
 import type {
   WorkbenchAutomationControlKind,
   WorkbenchAutomationInsertCatalog,
@@ -70,14 +71,32 @@ function PickerItem({ item, onInsert }: {
 interface AutomationQuickPickerProps {
   state?: ConsoleQueryState<WorkbenchAutomationInsertCatalog>
   disabled?: boolean
-  onInsert?(item: WorkbenchAutomationInsertItem): void
+  target?: AutomationInsertTarget
+  triggerTarget?: AutomationInsertTarget
+  label?: string
+  compact?: boolean
+  onInsert?(item: WorkbenchAutomationInsertItem, target: AutomationInsertTarget): boolean | void
   onReload?(): void
 }
 
-export const AutomationQuickPicker = defineSetupComponent<AutomationQuickPickerProps>('AutomationQuickPicker', ['state', 'disabled', 'onInsert', 'onReload'], props => {
+export const AutomationQuickPicker = defineSetupComponent<AutomationQuickPickerProps>('AutomationQuickPicker', ['state', 'disabled', 'target', 'triggerTarget', 'label', 'compact', 'onInsert', 'onReload'], props => {
   const open = ref(false)
   const query = ref('')
   const inputRef = ref<HTMLInputElement>()
+  const anchorRef = ref<HTMLElement>()
+  const capturedTarget = shallowRef<AutomationInsertTarget>()
+  const capturedTriggerTarget = shallowRef<AutomationInsertTarget>()
+  const failed = ref(false)
+  const openPicker = () => {
+    capturedTarget.value = props.target ? { ...props.target } : undefined
+    capturedTriggerTarget.value = props.triggerTarget ? { ...props.triggerTarget } : undefined
+    failed.value = false
+    open.value = true
+  }
+  const closePicker = () => {
+    open.value = false
+    nextTick(() => anchorRef.value?.querySelector('button')?.focus())
+  }
 
   watch(open, async (isOpen) => {
     if (!isOpen) {
@@ -89,13 +108,17 @@ export const AutomationQuickPicker = defineSetupComponent<AutomationQuickPickerP
   })
 
   const filtered = computed(() => {
-    const items = props.state?.status === 'READY' ? props.state.data.items : []
+    const items = props.state?.status === 'READY' ? props.state.data.items.filter(item => item.kind !== 'trigger' || !!capturedTriggerTarget.value) : []
     const normalized = query.value.trim().toLowerCase()
     return normalized ? items.filter(item => searchableText(item).includes(normalized)) : items
   })
 
   const insert = (item: WorkbenchAutomationInsertItem) => {
-    props.onInsert?.(item)
+    const target = item.kind === 'trigger' ? capturedTriggerTarget.value : capturedTarget.value
+    if (!target || !props.onInsert || props.onInsert(item, target) === false) {
+      failed.value = true
+      return
+    }
     open.value = false
   }
 
@@ -106,25 +129,32 @@ export const AutomationQuickPicker = defineSetupComponent<AutomationQuickPickerP
     const triggers = filtered.value.filter(item => item.kind === 'trigger')
     const capabilities = filtered.value.filter(item => item.kind === 'capability')
     if (!live) {
-      return <Button class="add-step-button" disabled={props.disabled ?? false} type="button"><Plus size={15} />{t('workbench.addStep')}</Button>
+      return <Button class="add-step-button" disabled type="button"><Plus size={15} />{props.label ?? t('workbench.addStep')}</Button>
     }
     return (
-    <div class="quick-picker-anchor" onKeydown={event => {
-      if (event.key === 'Escape') open.value = false
-    }}>
+    <div class="quick-picker-anchor" data-compact={props.compact ?? false} ref={anchorRef}>
       <Button
         aria-expanded={open.value}
         aria-haspopup="dialog"
+        aria-label={props.label ?? t('workbench.addStep')}
         class="add-step-button"
-        disabled={props.disabled ?? false}
-        onClick={() => { open.value = !open.value }}
+        disabled={props.disabled || !props.target}
+        onClick={openPicker}
         type="button"
-      ><Plus size={15} />{t('workbench.addStep')}</Button>
+      ><Plus size={15} />{props.compact ? null : props.label ?? t('workbench.addStep')}</Button>
       {open.value ? (
-        <section aria-label={t('workbench.addAutomationStep')} class="quick-picker" role="dialog">
+        <Teleport to="body"><div class="quick-picker-overlay" onClick={event => { if (event.target === event.currentTarget) closePicker() }} onKeydown={event => {
+          if (event.key === 'Escape') { event.preventDefault(); closePicker() }
+          if (event.key === 'Tab') {
+            const focusable = Array.from((event.currentTarget as HTMLElement).querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled)'))
+            const first = focusable[0], last = focusable.at(-1)
+            if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus() }
+            else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus() }
+          }
+        }}><section aria-label={t('workbench.addAutomationStep')} aria-modal="true" class="quick-picker" role="dialog">
           <header>
-            <div><strong>{t('workbench.addStep2')}</strong><small>{t('workbench.controlsAndRegisteredCapabilities')}</small></div>
-            <Button aria-label={t('workbench.closeStepPicker')} onClick={() => { open.value = false }} type="button"><X size={16} /></Button>
+            <div><strong>{props.label ?? t('workbench.addStep2')}</strong><small>{t('workbench.controlsAndRegisteredCapabilities')}</small></div>
+            <Button aria-label={t('workbench.closeStepPicker')} onClick={closePicker} type="button"><X size={16} /></Button>
           </header>
           <label class="quick-picker-search">
             <Search aria-hidden="true" size={15} />
@@ -136,6 +166,7 @@ export const AutomationQuickPicker = defineSetupComponent<AutomationQuickPickerP
               value={query.value}
             />
           </label>
+          {failed.value ? <p class="quick-picker-error" role="alert">{t('workbench.structure.insertionFailed')}</p> : null}
           <div class="quick-picker-results" role="listbox">
             {state.status === 'LOADING' ? <p class="quick-picker-state">{t('workbench.loadingInsertCatalog')}</p> : null}
             {state.status === 'ERROR' ? (
@@ -176,7 +207,7 @@ export const AutomationQuickPicker = defineSetupComponent<AutomationQuickPickerP
             ) : null}
           </div>
           <footer>{t('workbench.unavailableProvidersCanStillBeComposedInADraftAndResolvedBeforePublish')}</footer>
-        </section>
+        </section></div></Teleport>
       ) : null}
     </div>
     )

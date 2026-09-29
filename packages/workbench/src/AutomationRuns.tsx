@@ -42,7 +42,7 @@ export const AutomationRuns = defineSetupComponent<AutomationRunsProps>('Automat
   const [index, reload] = useConsoleQuery<WorkbenchRunsQueryInput, WorkbenchRunsIndex>(() => props.consoleClient, workbenchRunsIndexQueryRef, input, 'runs')
   return () => <section class="automation-runs">
     {!props.archived ? <details class="automation-run-launcher">
-      <summary>{t('workbench.runManually')}</summary>
+      <summary>{t('workbench.testRun.title')}</summary>
       <ManualRunForm automationId={props.automationId} {...(props.consoleClient ? { consoleClient: props.consoleClient } : {})}
         {...(props.schemaUI ? { schemaUI: props.schemaUI } : {})} {...(props.navigation ? { navigation: props.navigation } : {})} />
     </details> : null}

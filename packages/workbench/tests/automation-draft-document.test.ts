@@ -1,13 +1,16 @@
 import type { AutomationSource } from '@numenjs/core'
 import { describe, expect, it } from 'vitest'
+import { effectScope, nextTick, ref } from 'vue'
 import type {
   WorkbenchAutomationControlKind,
+  WorkbenchAutomationDetail,
   WorkbenchAutomationDraft,
   WorkbenchAutomationInsertItem,
 } from '../src/contracts.js'
 import { applyAutomationSourceCommand } from '../src/automation-source-editing.js'
 import {
   canPublishAutomationDraft,
+  useAutomationDraftDocument,
   reduceAutomationDraftDocument,
   type AutomationDraftDocumentState,
 } from '../src/useAutomationDraftDocument.js'
@@ -24,7 +27,7 @@ function controlItem(control: WorkbenchAutomationControlKind): WorkbenchAutomati
 const waitItem = controlItem('wait')
 
 function insert(nextSource: AutomationSource, item: WorkbenchAutomationInsertItem = waitItem): AutomationSource {
-  return applyAutomationSourceCommand(nextSource, { type: 'INSERT', item }).source
+  return applyAutomationSourceCommand(nextSource, { type: 'INSERT', item, target: item.kind === 'trigger' ? { kind: 'triggers' } : nextSource.flow.type === 'block' ? { kind: 'block', blockId: nextSource.flow.id } : { kind: 'root' } }).source
 }
 
 function draft(version: number, nextSource: AutomationSource = source): WorkbenchAutomationDraft {
@@ -79,7 +82,7 @@ describe('local Automation Draft document', () => {
 
   it('keeps deletion and sorting in full-document history and preserves edits made during autosave', () => {
     let state = loadedState()
-    for (let i = 0; i < 3; i++) state = reduceAutomationDraftDocument(state, { type: 'EDIT', command: { type: 'INSERT', item: waitItem } })
+    for (let i = 0; i < 3; i++) state = reduceAutomationDraftDocument(state, { type: 'EDIT', command: { type: 'INSERT', item: waitItem, target: { kind: 'block', blockId: 'root' } } })
     state = reduceAutomationDraftDocument(state, { type: 'SAVE_REQUEST' })
     const savedSource = state.document!.source
     state = reduceAutomationDraftDocument(state, { type: 'EDIT', command: { type: 'MOVE_STEP', nodeId: 'wait-3', direction: 'up' } })
@@ -117,7 +120,7 @@ describe('local Automation Draft document', () => {
       kind: 'extension', control: { id: 'test:pause', version: 2 }, title: 'Pause', description: '', inputSchemaSupported: true,
       inputFields: [{ name: 'duration', label: 'Duration', type: 'number', schemaType: 'number', required: true, defaultValue: 10 }],
     }
-    let state = reduceAutomationDraftDocument(loadedState(), { type: 'EDIT', command: { type: 'INSERT', item } })
+    let state = reduceAutomationDraftDocument(loadedState(), { type: 'EDIT', command: { type: 'INSERT', item, target: { kind: 'block', blockId: 'root' } } })
     const inserted = state.document!.source
     expect(inserted.flow).toMatchObject({ steps: [{ type: 'extension', id: 'control-1', control: item.control, input: { duration: { type: 'literal', value: 10 } } }] })
     state = reduceAutomationDraftDocument(state, { type: 'EDIT', command: { type: 'SET_EXTENSION_INPUT', nodeId: 'control-1', fieldName: 'duration', expression: { type: 'ref', path: 'input.duration' } } })
@@ -137,8 +140,8 @@ describe('local Automation Draft document', () => {
         { name: 'timezone', label: 'Timezone', type: 'string', schemaType: 'string', required: false, defaultValue: 'UTC' },
       ],
     }
-    let state = reduceAutomationDraftDocument(loadedState(), { type: 'EDIT', command: { type: 'INSERT', item: triggerItem } })
-    state = reduceAutomationDraftDocument(state, { type: 'EDIT', command: { type: 'INSERT', item: triggerItem } })
+    let state = reduceAutomationDraftDocument(loadedState(), { type: 'EDIT', command: { type: 'INSERT', item: triggerItem, target: { kind: 'triggers' } } })
+    state = reduceAutomationDraftDocument(state, { type: 'EDIT', command: { type: 'INSERT', item: triggerItem, target: { kind: 'triggers' } } })
     expect(state.document!.source.triggers).toMatchObject([
       { id: 'trigger-1', capability: triggerItem.capability, config: { timezone: 'UTC' } },
       { id: 'trigger-2', capability: triggerItem.capability, config: { timezone: 'UTC' } },
@@ -279,9 +282,9 @@ describe('local Automation Draft document', () => {
   })
 
   it('keeps newer local edits when an earlier autosave completes', () => {
-    let state = reduceAutomationDraftDocument(loadedState(), { type: 'EDIT', command: { type: 'INSERT', item: waitItem } })
+    let state = reduceAutomationDraftDocument(loadedState(), { type: 'EDIT', command: { type: 'INSERT', item: waitItem, target: { kind: 'block', blockId: 'root' } } })
     state = reduceAutomationDraftDocument(state, { type: 'SAVE_REQUEST' })
-    state = reduceAutomationDraftDocument(state, { type: 'EDIT', command: { type: 'INSERT', item: waitItem } })
+    state = reduceAutomationDraftDocument(state, { type: 'EDIT', command: { type: 'INSERT', item: waitItem, target: { kind: 'block', blockId: 'root' } } })
     expect(state.selectedNodeId).toBe('wait-2')
     state = reduceAutomationDraftDocument(state, {
       type: 'SAVE_SUCCESS',
@@ -302,7 +305,7 @@ describe('local Automation Draft document', () => {
   })
 
   it('protects a conflicted local document until the user explicitly reloads', () => {
-    let state = reduceAutomationDraftDocument(loadedState(), { type: 'EDIT', command: { type: 'INSERT', item: waitItem } })
+    let state = reduceAutomationDraftDocument(loadedState(), { type: 'EDIT', command: { type: 'INSERT', item: waitItem, target: { kind: 'block', blockId: 'root' } } })
     state = reduceAutomationDraftDocument(state, { type: 'SAVE_REQUEST' })
     state = reduceAutomationDraftDocument(state, {
       type: 'SAVE_FAILURE',
@@ -429,7 +432,7 @@ describe('local Automation Draft document', () => {
 
   it('maintains bounded full-document undo and redo history across saved edits', () => {
     let state = loadedState()
-    state = reduceAutomationDraftDocument(state, { type: 'EDIT', command: { type: 'INSERT', item: waitItem } })
+    state = reduceAutomationDraftDocument(state, { type: 'EDIT', command: { type: 'INSERT', item: waitItem, target: { kind: 'block', blockId: 'root' } } })
     state = reduceAutomationDraftDocument(state, {
       type: 'EDIT',
       command: {
@@ -467,7 +470,7 @@ describe('local Automation Draft document', () => {
   })
 
   it('caps history and preserves an undo made while autosave is in flight', () => {
-    let state = reduceAutomationDraftDocument(loadedState(), { type: 'EDIT', command: { type: 'INSERT', item: waitItem } })
+    let state = reduceAutomationDraftDocument(loadedState(), { type: 'EDIT', command: { type: 'INSERT', item: waitItem, target: { kind: 'block', blockId: 'root' } } })
     for (let durationMs = 1; durationMs <= 55; durationMs += 1) {
       state = reduceAutomationDraftDocument(state, {
         type: 'EDIT',
@@ -497,7 +500,7 @@ describe('local Automation Draft document', () => {
   })
 
   it('preserves history across same-version refresh and resets it for an external version', () => {
-    let state = reduceAutomationDraftDocument(loadedState(), { type: 'EDIT', command: { type: 'INSERT', item: waitItem } })
+    let state = reduceAutomationDraftDocument(loadedState(), { type: 'EDIT', command: { type: 'INSERT', item: waitItem, target: { kind: 'block', blockId: 'root' } } })
     state = reduceAutomationDraftDocument(state, { type: 'SAVE_REQUEST' })
     state = reduceAutomationDraftDocument(state, {
       type: 'SAVE_SUCCESS',
@@ -548,7 +551,7 @@ describe('local Automation Draft document', () => {
   it('queues one Publish request through the save caused by a focused field losing focus', () => {
     let state = reduceAutomationDraftDocument(loadedState(), {
       type: 'EDIT',
-      command: { type: 'INSERT', item: waitItem },
+      command: { type: 'INSERT', item: waitItem, target: { kind: 'block', blockId: 'root' } },
     })
     expect(state.savePhase).toBe('DIRTY')
     expect(canPublishAutomationDraft(state)).toBe(true)
@@ -577,13 +580,13 @@ describe('local Automation Draft document', () => {
   it('publishes the newest snapshot when an edit already landed during autosave', () => {
     let state = reduceAutomationDraftDocument(loadedState(), {
       type: 'EDIT',
-      command: { type: 'INSERT', item: waitItem },
+      command: { type: 'INSERT', item: waitItem, target: { kind: 'block', blockId: 'root' } },
     })
     state = reduceAutomationDraftDocument(state, { type: 'SAVE_REQUEST' })
     const firstSaveSource = state.pendingSave!.source
     state = reduceAutomationDraftDocument(state, {
       type: 'EDIT',
-      command: { type: 'INSERT', item: waitItem },
+      command: { type: 'INSERT', item: waitItem, target: { kind: 'block', blockId: 'root' } },
     })
     state = reduceAutomationDraftDocument(state, { type: 'PUBLISH_REQUEST' })
 
@@ -610,4 +613,129 @@ describe('local Automation Draft document', () => {
       pendingPublish: { expectedVersion: 3 },
     })
   })
+})
+
+
+describe('structural history and presentation', () => {
+  const nested: AutomationSource = {
+    triggers: [], flow: { type: 'block', id: 'root', steps: [{
+      type: 'if', id: 'condition', condition: { type: 'literal', value: true },
+      then: { type: 'block', id: 'then', steps: [{ type: 'wait', id: 'waiting', durationMs: { type: 'literal', value: 1 } }] },
+      else: { type: 'block', id: 'else', steps: [{ type: 'wait', id: 'fallback', durationMs: { type: 'literal', value: 2 } }] },
+    }] },
+  }
+  function prepared() {
+    return reduceAutomationDraftDocument(loadedState(), { type: 'SERVER', automationId: 'automation-1', draft: {
+      ...draft(2, nested), presentation: { collapsedNodes: ['else'], untouched: { value: 'opaque' } },
+    } })
+  }
+
+  it('restores nonempty branch, presentation and selection with one undo while a save completes late', () => {
+    let state = reduceAutomationDraftDocument(prepared(), { type: 'SELECT_NODE', nodeId: 'condition' })
+    const before = state.document!
+    state = reduceAutomationDraftDocument(state, { type: 'EDIT', command: { type: 'REMOVE_ELSE', nodeId: 'condition' } })
+    expect(state.undoStack).toHaveLength(1)
+    expect(state.document!.presentation).toEqual({ collapsedNodes: [], untouched: { value: 'opaque' } })
+    state = reduceAutomationDraftDocument(state, { type: 'SAVE_REQUEST' })
+    const saving = state.document!
+    state = reduceAutomationDraftDocument(state, { type: 'UNDO' })
+    state = reduceAutomationDraftDocument(state, { type: 'SAVE_SUCCESS', result: { draft: { ...draft(3, saving.source), presentation: saving.presentation } } })
+    expect(state.savePhase).toBe('DIRTY')
+    expect(state.document!.source).toEqual(before.source)
+    expect(state.document!.presentation).toEqual(before.presentation)
+    expect(state.selectedNodeId).toBe('condition')
+    state = reduceAutomationDraftDocument(state, { type: 'REDO' })
+    expect(state.document!.source).toEqual(saving.source)
+    expect(state.document!.presentation).toEqual(saving.presentation)
+  })
+
+  it('copies presentation from the clipboard snapshot and leaves a stale insertion out of history', () => {
+    let state = prepared()
+    const copied = state.document!
+    state = reduceAutomationDraftDocument(state, { type: 'EDIT', command: { type: 'DELETE_STEP', nodeId: 'condition' } })
+    state = reduceAutomationDraftDocument(state, { type: 'EDIT', copiedPresentation: copied.presentation,
+      command: { type: 'COPY_TO', nodeId: 'condition', target: { kind: 'block', blockId: 'root' }, source: copied.source },
+    })
+    const flow = state.document!.source.flow
+    if (flow.type !== 'block' || flow.steps[0]?.type !== 'if') throw new Error('fixture copy expected')
+    const copy = flow.steps[0]
+    expect(copy.id).not.toBe('condition')
+    expect(state.document!.presentation.collapsedNodes).toEqual([copy.else!.id])
+    const before = state
+    state = reduceAutomationDraftDocument(state, { type: 'EDIT', command: { type: 'INSERT', item: waitItem, target: { kind: 'block', blockId: 'else' } } })
+    expect(state.document).toBe(before.document)
+    expect(state.undoStack).toBe(before.undoStack)
+    expect(state.editError).toBe('TARGET_INVALID')
+  })
+
+  it('selects a hidden descendant for read-only viewing without changing draft or save history', () => {
+    const before = prepared()
+    const state = reduceAutomationDraftDocument(before, { type: 'SELECT_NODE', nodeId: 'fallback', reveal: false })
+    expect(state.selectedNodeId).toBe('fallback')
+    expect(state.document).toBe(before.document)
+    expect(state.document!.presentation.collapsedNodes).toEqual(['else'])
+    expect(state.undoStack).toBe(before.undoStack)
+    expect(state.redoStack).toBe(before.redoStack)
+    expect(state.editRevision).toBe(before.editRevision)
+    expect(state.savePhase).toBe('CLEAN')
+    expect(state.pendingSave).toBe(before.pendingSave)
+  })
+
+  it('reveals selected descendants without unlocking a conflicted document', () => {
+    let state = prepared()
+    state = reduceAutomationDraftDocument(state, { type: 'COLLAPSE', nodeId: 'condition', collapsed: true })
+    state = reduceAutomationDraftDocument(state, { type: 'SAVE_REQUEST' })
+    state = reduceAutomationDraftDocument(state, { type: 'SAVE_FAILURE', error: { code: 'DRAFT_VERSION_CONFLICT', details: { expectedVersion: 2, actualVersion: 3 } } })
+    const document = state.document
+    state = reduceAutomationDraftDocument(state, { type: 'SELECT_NODE', nodeId: 'fallback' })
+    expect(state.savePhase).toBe('CONFLICT')
+    expect(state.document).toBe(document)
+    expect(state.selectedNodeId).toBe('fallback')
+    let editable = reduceAutomationDraftDocument(prepared(), { type: 'SELECT_NODE', nodeId: 'fallback' })
+    expect(editable.document!.presentation.collapsedNodes).toEqual([])
+    expect(editable.savePhase).toBe('DIRTY')
+    expect(editable.document!.source).toBe(nested)
+  })
+})
+
+
+it('keeps Copy immutable, makes Cut atomic at paste, and clears clipboard on Automation changes', async () => {
+  const initial: AutomationSource = { triggers: [], flow: { type: 'block', id: 'root', steps: [
+    { type: 'wait', id: 'wait', durationMs: { type: 'literal', value: 10 } },
+    { type: 'if', id: 'if', condition: { type: 'literal', value: true }, then: { type: 'block', id: 'then', steps: [] } },
+  ] } }
+  const id = ref('automation-1')
+  const scope = effectScope()
+  const model = scope.run(() => useAutomationDraftDocument({
+    automationId: id,
+    detail: () => ({ automation: { id: 'automation-1' }, draft: draft(1, initial) }) as WorkbenchAutomationDetail,
+    reloadDetail() {}, autosaveDelayMs: 60_000,
+  }))!
+  try {
+    model.copyStep('wait')
+    model.setWaitExpression('wait', 'durationMs', { type: 'literal', value: 99 })
+    model.deleteStep('wait')
+    expect(model.paste({ kind: 'block', blockId: 'then' })).toBe(true)
+    const inserted = model.selectedNodeId!
+    expect(model.document!.source.flow).toMatchObject({ steps: [{ then: { steps: [{ durationMs: { value: 10 } }] } }] })
+    model.cutStep(inserted)
+    const beforePaste = model.document!.source
+    expect(model.paste({ kind: 'block', blockId: 'deleted-target' })).toBe(false)
+    expect(model.document!.source).toBe(beforePaste)
+    expect(model.clipboard?.mode).toBe('cut')
+    expect(model.paste({ kind: 'block', blockId: 'root' })).toBe(true)
+    expect(model.selectedNodeId).toBe(inserted)
+    expect(model.clipboard).toBeUndefined()
+    model.undo()
+    expect(model.document!.source).toEqual(beforePaste)
+    model.cutStep(inserted)
+    model.deleteStep(inserted)
+    expect(model.clipboard).toBeUndefined()
+    model.undo()
+    model.copyStep(inserted)
+    id.value = 'automation-2'
+    await nextTick()
+    expect(model.clipboard).toBeUndefined()
+    expect(model.document).toBeUndefined()
+  } finally { scope.stop() }
 })

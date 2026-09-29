@@ -1,10 +1,11 @@
 import { Button, SelectMenu } from '@numenjs/components'
 import { diagnosticText, t } from './i18n.js'
 import { automationStepEditOptions } from './automation-source-editing.js'
+import type { AutomationInsertTarget, AutomationSourceCommand } from './automation-source-editing.js'
+import { StructuredAutomationFlow, type AutomationClipboardView } from './StructuredAutomationFlow.js'
 import {
-  AlignCenter,
   Copy,
-  Expand,
+  ClipboardPaste,
   ChevronDown,
   PanelRight,
   ArrowUp,
@@ -14,10 +15,8 @@ import {
   Scissors,
   Trash2,
   Undo2,
-  ZoomIn,
-  ZoomOut,
 } from '@lucide/vue'
-import type { SetupContext, VNodeChild } from 'vue'
+import type { VNodeChild } from 'vue'
 import { AutomationQuickPicker } from './AutomationQuickPicker.js'
 import type {
   WorkbenchAutomationDetail,
@@ -29,6 +28,8 @@ import { automations, automationSteps } from './model.js'
 import type { AutomationStep } from './model.js'
 import type { AutomationActivationView } from './useAutomationActivation.js'
 import type { ConsoleQueryState } from './useConsoleQuery.js'
+import { shortcutLabel, useWorkbenchCommands } from './commands.js'
+import { defineSetupComponent } from './vue-component.js'
 
 const tabs = ['Editor', 'Runs', 'Revisions', 'State', 'Settings'] as const
 
@@ -46,15 +47,19 @@ export interface AutomationEditorProps {
     canUndo: boolean
     canRedo: boolean
     publishPending: boolean
+    savePhase?: import('./useAutomationDraftDocument.js').AutomationDraftSavePhase
+    inputBlocked?: boolean
     conflict?: { expectedVersion: number; actualVersion: number }
     saveError?: string
     publishError?: string
+    editError?: string
   }
   inputSettings?: VNodeChild
   manualRunForm?: VNodeChild
   conflictRecovery?: VNodeChild
   activation?: AutomationActivationView
   inspectorOpen?: boolean
+  inspectorFocusNodeId?: string
   onActivateRevision?(revisionId: string): void
   onSetEnabled?(enabled: boolean): void
   onStepChange(id: string): void
@@ -63,7 +68,14 @@ export interface AutomationEditorProps {
   onAutomationChange?(id: string): void
   onDeleteStep?(nodeId: string): void
   onMoveStep?(nodeId: string, direction: 'up' | 'down'): void
-  onInsert?(item: WorkbenchAutomationInsertItem): void
+  onInsert?(item: WorkbenchAutomationInsertItem, target: AutomationInsertTarget): boolean
+  onSourceCommand?(command: AutomationSourceCommand): boolean
+  clipboard?: AutomationClipboardView
+  collapsedNodes?: string[]
+  onCopyStep?(nodeId: string): void
+  onCutStep?(nodeId: string): void
+  onPaste?(target: AutomationInsertTarget): boolean
+  onToggleCollapse?(nodeId: string, collapsed: boolean): void
   onReloadInsertCatalog?(): void
   onUndo?(): void
   onRedo?(): void
@@ -73,13 +85,22 @@ export interface AutomationEditorProps {
   onReload?(): void
 }
 
-function ToolbarButton({ label, disabled = false, onClick }: {
+interface ToolbarButtonProps {
   label: string
   disabled?: boolean
+  description?: string | undefined
+  commandId?: string
   onClick?(): void
-}, context: SetupContext) {
-  return <Button variant="ghost" size="icon" aria-label={label} class="toolbar-button" disabled={disabled} {...(onClick ? { onClick } : {})} title={label} type="button">{context.slots.default?.()}</Button>
 }
+const ToolbarButton = defineSetupComponent<ToolbarButtonProps>('ToolbarButton', ['label', 'disabled', 'description', 'commandId', 'onClick'], (props, context) => {
+  const commands = useWorkbenchCommands()
+  return () => {
+    const { label, disabled = false, onClick, description, commandId } = props
+    const command = commandId ? commands?.find(commandId) : undefined
+    const title = command?.disabledReason ?? description ?? (command?.shortcut ? `${label} (${shortcutLabel(command.shortcut)})` : label)
+    return <Button variant="ghost" size="icon" aria-label={label} class="toolbar-button" disabled={command ? !!command.disabledReason : disabled} {...(commandId && command ? { onClick: () => commands?.execute(commandId) } : onClick ? { onClick } : {})} title={title} type="button">{context.slots.default?.()}</Button>
+  }
+})
 
 export function AutomationEditor({
   automationId,
@@ -92,6 +113,7 @@ export function AutomationEditor({
   authoring,
   activation,
   inspectorOpen,
+  inspectorFocusNodeId,
   conflictRecovery,
   inputSettings,
   manualRunForm,
@@ -102,6 +124,13 @@ export function AutomationEditor({
   onOpenInspector,
   onAutomationChange,
   onInsert,
+  onSourceCommand,
+  clipboard,
+  collapsedNodes,
+  onCopyStep,
+  onCutStep,
+  onPaste,
+  onToggleCollapse,
   onDeleteStep,
   onMoveStep,
   onReloadInsertCatalog,
@@ -112,6 +141,7 @@ export function AutomationEditor({
   onRetrySave,
   onReload,
 }: AutomationEditorProps) {
+  const commands = useWorkbenchCommands()
   const previewAutomation = automations.find(item => item.id === automationId) ?? automations[0]!
   const live = !!detailState && detailState.status !== 'DISABLED'
   const detail = detailState?.status === 'READY'
@@ -126,6 +156,8 @@ export function AutomationEditor({
   const canEdit = !!authoring?.canEdit
   const latestRevision = detail?.revisions[0]
   const activeRevision = detail?.revisions.find(item => item.active)
+  const triggerRuntime = detail?.triggerRuntime?.activationGeneration === detail?.automation.activationGeneration
+    ? detail?.triggerRuntime : undefined
   return (
     <main class="main-workbench">
       <header class="entity-header">
@@ -136,11 +168,15 @@ export function AutomationEditor({
               <span class="automation-badges">
                 {archived ? <em data-tone="archived">{t('workbench.archived')}</em> : null}
                 <em data-tone={detail.automation.enabled ? 'enabled' : 'disabled'}>{detail.automation.enabled ? t('workbench.enabled') : t('workbench.disabled')}</em>
-                <em>{t('workbench.draftV')}{detail.draft.version}</em>
+                <em>{t('workbench.draftV')}{detail.draft.version}{authoring?.savePhase ? ` · ${t(`workbench.save.${authoring.savePhase}`)}` : ''}</em>
                 <em>{latestRevision ? t('workbench.publishedRValue0', { value0: latestRevision.number }) : t('workbench.noRevisions')}</em>
                 <em>{activeRevision ? t('workbench.activeRValue0', { value0: activeRevision.number }) : t('workbench.notActive')}</em>
               </span>
             ) : null}</div>
+            {detail ? <p class="automation-trigger-status" role="status">
+              {t('workbench.document.triggerRuntime')}: {t(`workbench.document.trigger.${triggerRuntime?.status ?? 'UNKNOWN'}`)}
+              {triggerRuntime?.expected ? ` (${triggerRuntime.active}/${triggerRuntime.expected})` : ''}
+            </p> : null}
           </div>
           <div class="entity-title-actions">
             {detail && activation && onSetEnabled ? <button
@@ -156,7 +192,7 @@ export function AutomationEditor({
               <Button variant="primary"
                 class="publish-button"
                 disabled={!authoring.canPublish}
-                onClick={onPublish}
+                onClick={() => commands ? commands.execute('automation.publish') : onPublish()}
                 type="button"
               >{authoring.publishPending ? t('workbench.publishing') : t('workbench.publish')}</Button>
             ) : null}
@@ -191,6 +227,8 @@ export function AutomationEditor({
           ))}
         </nav>
       </header>
+      {authoring?.inputBlocked ? <section class="authoring-notice" data-tone="error" role="alert">{t('workbench.document.applyInputsFirst')}</section> : null}
+      {authoring?.editError ? <section class="authoring-notice" data-tone="error" role="alert"><span>{t(`workbench.structure.errors.${authoring.editError}`) === `workbench.structure.errors.${authoring.editError}` ? authoring.editError : t(`workbench.structure.errors.${authoring.editError}`)}</span></section> : null}
       {activation?.error ? <section class="authoring-notice" data-tone="error" role="alert"><span>{activation.error}</span></section> : null}
       {archived ? <section class="authoring-notice" data-tone="conflict" role="status"><span>{t('workbench.archivedAutomationReadOnly')}</span></section> : null}
       {authoring?.conflict ? (conflictRecovery ??
@@ -229,70 +267,56 @@ export function AutomationEditor({
         <>
           <div class="editor-toolbar" aria-label={t('workbench.editorToolbar')}>
             <div class="toolbar-group">
-              <ToolbarButton disabled={authoring ? !authoring.canUndo : false} label={t('workbench.undo')} {...(onUndo ? { onClick: onUndo } : {})}><Undo2 size={16} /></ToolbarButton>
-              <ToolbarButton disabled={authoring ? !authoring.canRedo : false} label={t('workbench.redo')} {...(onRedo ? { onClick: onRedo } : {})}><Redo2 size={16} /></ToolbarButton>
+              <ToolbarButton disabled={!authoring?.canUndo || !onUndo} commandId="automation.undo" label={t('workbench.undo')} {...(onUndo ? { onClick: onUndo } : {})}><Undo2 size={16} /></ToolbarButton>
+              <ToolbarButton disabled={!authoring?.canRedo || !onRedo} commandId="automation.redo" label={t('workbench.redo')} {...(onRedo ? { onClick: onRedo } : {})}><Redo2 size={16} /></ToolbarButton>
             </div>
             <div class="toolbar-group">
-              <ToolbarButton disabled label={t('workbench.cut')}><Scissors size={16} /></ToolbarButton>
-              <ToolbarButton disabled label={t('workbench.copy')}><Copy size={16} /></ToolbarButton>
-              <ToolbarButton disabled={!canEdit || !editOptions?.canDelete || !onDeleteStep} label={t('workbench.delete')} onClick={() => selectedNodeId && onDeleteStep?.(selectedNodeId)}><Trash2 size={16} /></ToolbarButton>
-              <ToolbarButton disabled={!canEdit || !editOptions?.canMoveUp || !onMoveStep} label={t('workbench.moveUp')} onClick={() => selectedNodeId && onMoveStep?.(selectedNodeId, 'up')}><ArrowUp size={16} /></ToolbarButton>
-              <ToolbarButton disabled={!canEdit || !editOptions?.canMoveDown || !onMoveStep} label={t('workbench.moveDown')} onClick={() => selectedNodeId && onMoveStep?.(selectedNodeId, 'down')}><ArrowDown size={16} /></ToolbarButton>
+              <ToolbarButton disabled={!canEdit || !editOptions?.canMoveTo || !onCutStep} commandId="automation.cut" label={t('workbench.cut')} onClick={() => selectedNodeId && onCutStep?.(selectedNodeId)}><Scissors size={16} /></ToolbarButton>
+              <ToolbarButton disabled={!canEdit || !editOptions?.canCopy || !onCopyStep} commandId="automation.copy" label={t('workbench.copy')} description={!editOptions?.canCopy ? t('workbench.structure.errors.COPY_UNSAFE') : undefined} onClick={() => selectedNodeId && onCopyStep?.(selectedNodeId)}><Copy size={16} /></ToolbarButton>
+              <ToolbarButton commandId="automation.paste" disabled={!clipboard} label={t('workbench.structure.pasteAfter')}><ClipboardPaste size={16} /></ToolbarButton>
+              <ToolbarButton disabled={!canEdit || !editOptions?.canDelete || !onDeleteStep} commandId="automation.delete" label={t('workbench.delete')} onClick={() => selectedNodeId && onDeleteStep?.(selectedNodeId)}><Trash2 size={16} /></ToolbarButton>
+              <ToolbarButton disabled={!canEdit || !editOptions?.canMoveUp || !onMoveStep} commandId="automation.moveUp" label={t('workbench.moveUp')} onClick={() => selectedNodeId && onMoveStep?.(selectedNodeId, 'up')}><ArrowUp size={16} /></ToolbarButton>
+              <ToolbarButton disabled={!canEdit || !editOptions?.canMoveDown || !onMoveStep} commandId="automation.moveDown" label={t('workbench.moveDown')} onClick={() => selectedNodeId && onMoveStep?.(selectedNodeId, 'down')}><ArrowDown size={16} /></ToolbarButton>
             </div>
-            <div class="toolbar-group toolbar-spacer">
-              <ToolbarButton label={t('workbench.alignSteps')}><AlignCenter size={16} /></ToolbarButton>
-            </div>
-            <div class="toolbar-group">
-              <ToolbarButton label={t('workbench.zoomOut')}><ZoomOut size={16} /></ToolbarButton>
-              <ToolbarButton label={t('workbench.zoomIn')}><ZoomIn size={16} /></ToolbarButton>
-              <ToolbarButton label={t('workbench.fitToView')}><Expand size={16} /></ToolbarButton>
-            </div>
-            <button class="layout-control" type="button">{t('workbench.layout')}<span>⌄</span></button>
           </div>
           <section class="automation-canvas" aria-label={t('workbench.value0AutomationFlow', { value0: automationName })}>
             <div class="step-flow">
-              {steps.map((step, index) => {
-                const Icon = step.icon
-                const selected = step.id === activeStepId
-                return (
-                  <div class="step-unit" data-depth={Math.min(step.depth ?? 0, 4)} key={step.id}>
+              {detail ? <StructuredAutomationFlow
+                key={detail.automation.id}
+                source={detail.draft.source}
+                steps={steps}
+                activeStepId={activeStepId}
+                {...(inspectorFocusNodeId ? { inspectorFocusNodeId } : {})}
+                canEdit={canEdit}
+                onStepChange={onStepChange}
+                {...(insertCatalogState ? { insertCatalogState } : {})}
+                {...(clipboard ? { clipboard } : {})}
+                {...(collapsedNodes ? { collapsedNodes } : {})}
+                {...(onInsert ? { onInsert } : {})}
+                {...(onSourceCommand ? { onSourceCommand } : {})}
+                {...(onDeleteStep ? { onDeleteStep } : {})}
+                {...(onMoveStep ? { onMoveStep } : {})}
+                {...(onCopyStep ? { onCopyStep } : {})}
+                {...(onCutStep ? { onCutStep } : {})}
+                {...(onPaste ? { onPaste } : {})}
+                {...(onToggleCollapse ? { onToggleCollapse } : {})}
+                {...(onReloadInsertCatalog ? { onReloadInsertCatalog } : {})}
+              /> : <>
+                {steps.map((step, index) => {
+                  const Icon = step.icon
+                  const selected = step.id === activeStepId
+                  return <div class="step-unit" key={step.id}>
                     <div class="step-index" aria-hidden="true">{index + 1}</div>
-                    <button
-                      aria-pressed={selected}
-                      class="automation-step"
-                      data-selected={selected}
-                      onClick={() => onStepChange(step.id)}
-                      type="button"
-                    >
+                    <button aria-pressed={selected} class="automation-step" data-selected={selected} onClick={() => onStepChange(step.id)} type="button">
                       <span class="step-icon" data-tone={step.tone}><Icon size={19} strokeWidth={1.7} /></span>
-                      <span class="step-copy">
-                        <strong>{step.label}</strong>
-                        <small>{step.summary}</small>
-                      </span>
-                      {step.problemCount ? (
-                        <span aria-label={t('workbench.problemsCount', { count: step.problemCount })} class="step-problem-badge">!</span>
-                      ) : null}
+                      <span class="step-copy"><strong>{step.label}</strong><small>{step.summary}</small></span>
                       <ChevronDown aria-hidden="true" class="step-menu" size={18} />
                     </button>
-                    {selected && detail && step.sourceId ? <div class="step-edit-actions" role="group" aria-label={t('workbench.actionsForValue0', { value0: step.label })}>
-                      <Button disabled={!canEdit || !editOptions?.canMoveUp || !onMoveStep} aria-label={t('workbench.moveValue0Up', { value0: step.label })} onClick={() => onMoveStep?.(step.sourceId!, 'up')} type="button"><ArrowUp size={14} />{t('workbench.moveUp2')}</Button>
-                      <Button disabled={!canEdit || !editOptions?.canMoveDown || !onMoveStep} aria-label={t('workbench.moveValue0Down', { value0: step.label })} onClick={() => onMoveStep?.(step.sourceId!, 'down')} type="button"><ArrowDown size={14} />{t('workbench.moveDown2')}</Button>
-                      <Button disabled={!canEdit || !editOptions?.canDelete || !onDeleteStep} aria-label={t('workbench.deleteValue0', { value0: step.label })} title={t('workbench.deleteThisStepAndItsContentsUndoRestoresIt')} onClick={() => onDeleteStep?.(step.sourceId!)} type="button"><Trash2 size={14} />{t('workbench.delete2')}</Button>
-                      <p>{editOptions?.canDelete ? t('workbench.moveWithinThisSequenceDeleteIncludesNestedStepsReferencesAreKeptAsWritten') : t('workbench.thisContainerOrTriggerCannotBeRemovedAsASequenceStep')}</p>
-                    </div> : null}
-                    {index < steps.length - 1 ? (
-                      <div class="step-connector" aria-hidden="true"><span><Plus size={13} /></span></div>
-                    ) : null}
+                    {index < steps.length - 1 ? <div class="step-connector" aria-hidden="true"><span><Plus size={13} /></span></div> : null}
                   </div>
-                )
-              })}
-              {!steps.length ? <p class="automation-flow-empty">{t('workbench.thisDraftHasNoTriggersOrFlowStepsYet')}</p> : null}
-              <AutomationQuickPicker
-                disabled={authoring ? !authoring.canEdit : false}
-                {...(insertCatalogState ? { state: insertCatalogState } : {})}
-                {...(onInsert ? { onInsert } : {})}
-                {...(onReloadInsertCatalog ? { onReload: onReloadInsertCatalog } : {})}
-              />
+                })}
+                <AutomationQuickPicker disabled />
+              </>}
             </div>
           </section>
         </>

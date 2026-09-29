@@ -7,8 +7,9 @@ import { AlertTriangle, Save } from '@lucide/vue'
 import { ref, watch } from 'vue'
 import type { AutomationDraftSavePhase } from './useAutomationDraftDocument.js'
 import { defineSetupComponent } from './vue-component.js'
+import { useCommandRegistration } from './commands.js'
 
-const panelTabs = ['Problems', 'Preview', 'Logs'] as const
+const panelTabs = ['Problems', 'Logs'] as const
 
 interface AutomationPanelProps extends Pick<LogsViewProps, 'consoleClient' | 'automationId'> {
   problems: CompileDiagnostic[]
@@ -19,6 +20,10 @@ interface AutomationPanelProps extends Pick<LogsViewProps, 'consoleClient' | 'au
 export const AutomationPanel = defineSetupComponent<AutomationPanelProps>('AutomationPanel', ['problems', 'preview', 'onProblemSelect', 'consoleClient', 'automationId'], props => {
   const open = useWorkbenchLayout()?.panelOpen ?? ref(false)
   const activeTab = ref('Problems')
+  const commands = useCommandRegistration(() => panelTabs.map(tab => ({
+    id: `automation.panel.${tab}`, label: t('workbench.commands.showPanel', { panel: t(`workbench.tabs.${tab}`) }),
+    execute: () => { activeTab.value = tab; open.value = true },
+  })))
 
   watch(() => props.problems.length, (length) => {
     if (length) {
@@ -28,7 +33,7 @@ export const AutomationPanel = defineSetupComponent<AutomationPanelProps>('Autom
   })
 
   return () => {
-    const problemCount = props.preview ? 1 : props.problems.length
+    const problemCount = props.problems.length
     return <section class="bottom-panel" data-open={open.value} aria-label={t('workbench.bottomPanel')}>
       <PanelResizeHandle />
       <div class="panel-tablist" role="tablist">
@@ -37,7 +42,7 @@ export const AutomationPanel = defineSetupComponent<AutomationPanelProps>('Autom
             aria-selected={activeTab.value === tab}
             data-active={activeTab.value === tab}
             key={tab}
-            onClick={() => { activeTab.value = tab; open.value = true }}
+            onClick={() => { if (commands) commands.execute(`automation.panel.${tab}`); else { activeTab.value = tab; open.value = true } }}
             role="tab"
             type="button"
           >{t(`workbench.tabs.${tab}`)}{tab === 'Problems' ? <span class="problem-count">{problemCount}</span> : null}</button>
@@ -45,7 +50,7 @@ export const AutomationPanel = defineSetupComponent<AutomationPanelProps>('Autom
         <button
           aria-label={open.value ? t('workbench.collapseBottomPanel') : t('workbench.expandBottomPanel')}
           class="panel-toggle"
-          onClick={() => { open.value = !open.value }}
+          onClick={() => { if (commands?.find('workbench.panel')) commands.execute('workbench.panel'); else open.value = !open.value }}
           type="button"
         >⌃</button>
       </div>
@@ -64,29 +69,30 @@ export const AutomationPanel = defineSetupComponent<AutomationPanelProps>('Autom
                 <code>{[problem.source?.nodeId, problem.source?.fieldPath].filter(Boolean).join(' · ') || t('workbench.automation')}</code>
               </button>
             )) : <p>{t('workbench.noPublishProblemsForTheCurrentLocalDraft')}</p>
-          ) : activeTab.value === 'Logs' ? <LogsView compact {...(props.consoleClient ? { consoleClient: props.consoleClient } : {})} {...(props.automationId ? { automationId: props.automationId } : {})} /> : <p>{t('workbench.panelOutput', { panel: t(`workbench.tabs.${activeTab.value}`) })}</p>}
+          ) : <LogsView compact {...(props.consoleClient ? { consoleClient: props.consoleClient } : {})} {...(props.automationId ? { automationId: props.automationId } : {})} />}
         </div>
       ) : null}
     </section>
   }
 })
 
-export function AutomationStatusBar({ phase, message, problemCount, preview = false }: {
+export function AutomationStatusBar({ phase, message, problemCount, preview = false, pendingInput = false }: {
   phase: AutomationDraftSavePhase
   message: string
   problemCount: number
   preview?: boolean
+  pendingInput?: boolean
 }) {
   const needsAttention = phase === 'CONFLICT' || phase === 'ERROR'
   return (
-    <footer class="status-bar" data-save-phase={phase}>
+    <footer class="status-bar" data-save-phase={phase} data-input-pending={pendingInput}>
       <span class={problemCount || needsAttention ? 'problem-status' : 'ready-status'}>
         <span class="status-check">{problemCount || needsAttention ? '!' : '✓'}</span>
         {problemCount
           ? plural('workbench.publishProblems', problemCount)
-          : needsAttention ? t('workbench.draftNeedsAttention') : t('workbench.ready')}
+          : needsAttention ? t('workbench.draftNeedsAttention') : pendingInput ? t('workbench.document.editingInput') : preview ? t('workbench.commands.preview') : phase === 'UNAVAILABLE' ? t('workbench.commands.noDocument') : t('workbench.commands.noProblems')}
       </span>
-      <span><Save size={14} />{preview ? t('workbench.saved') : t(`workbench.save.${phase}`)}</span>
+      {!preview && phase !== 'UNAVAILABLE' ? <span title={pendingInput ? t('workbench.document.unappliedInput') : undefined}><Save size={14} />{pendingInput ? t('workbench.document.unappliedInputShort') : t(`workbench.save.${phase}`)}</span> : null}
     </footer>
   )
 }

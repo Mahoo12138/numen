@@ -2,7 +2,7 @@ import { AutomationInputs } from './AutomationInputs.js'
 import { localizeCatalogItem, useWorkbenchI18n } from './i18n.js'
 import { AutomationRuns } from './AutomationRuns.js'
 import type { SourceRef } from '@numenjs/core'
-import { computed, h, inject, onScopeDispose, provide, ref, watch, type ComputedRef, type InjectionKey } from 'vue'
+import { computed, h, inject, nextTick, onScopeDispose, provide, ref, watch, type ComputedRef, type InjectionKey } from 'vue'
 import { DraftConflictRecovery } from './DraftConflictRecovery.js'
 import { AutomationEditor, type AutomationEditorProps } from './AutomationEditor.js'
 import { AutomationPanel, AutomationStatusBar } from './AutomationPanel.js'
@@ -34,6 +34,9 @@ import { useAutomationActivation } from './useAutomationActivation.js'
 import { useAutomationDraftDocument } from './useAutomationDraftDocument.js'
 import { useConsoleQuery, type ConsoleQueryState } from './useConsoleQuery.js'
 import { defineSetupComponent } from './vue-component.js'
+import { automationDocumentNeedsProtection, createAutomationInputSession, provideAutomationInputSession } from './automation-input-session.js'
+import { useCommandRegistration } from './commands.js'
+import { automationRelativeInsertTarget, automationStepEditOptions } from './automation-source-editing.js'
 
 const emptyQueryInput: Record<string, never> = {}
 
@@ -47,8 +50,16 @@ export function useAutomationWorkspace(): ComputedRef<AutomationEditorProps> {
 
 export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProps>('AutomationPageChrome', ['page', 'consoleClient', 'schemaUI', 'navigation', 'inspectorOpen', 'onInspectorOpenChange'], props => {
   const { t } = useWorkbenchI18n()
+  const inputs = createAutomationInputSession(() => globalThis.confirm(t('workbench.document.discardInputs')))
+  provideAutomationInputSession(inputs)
+  const inputBlocked = ref(false)
+  const blurCurrentInput = () => {
+    if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) document.activeElement.blur()
+  }
+  const allowInputChange = () => { blurCurrentInput(); return inputs.confirmDiscard() }
   const confirmedAutomationId = ref<string>()
   const requestedAutomationId = ref('morning-brief')
+  const createRequest = ref(0)
   const activeTab = ref('Editor')
   const archiveView = ref(false)
   const lifecyclePending = ref(false)
@@ -87,6 +98,7 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
   ))
   const createAutomation = async (name: string): Promise<boolean> => {
     if (!props.consoleClient || creatingAutomation.value) return false
+    if (!allowDocumentLeave()) return false
     createAutomationController?.abort()
     const controller = new AbortController()
     createAutomationController = controller
@@ -193,7 +205,58 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
     detail,
     reloadDetail,
   })
-  const archiveAutomation = (automationIdTarget: string, expectedActivationGeneration: number) => runLifecycleAction<WorkbenchArchiveAutomationInput, { automationId: string }>(
+  const needsProtection = computed(() => automationDocumentNeedsProtection(authoring.savePhase, inputs.hasUncommitted, authoring.publishPending))
+  function allowDocumentLeave(): boolean {
+    blurCurrentInput()
+    return !needsProtection.value || globalThis.confirm(t('workbench.document.leaveUnsaved'))
+  }
+  const switchAutomation = (id: string): boolean => {
+    if (id === automationId.value) return true
+    if (!allowDocumentLeave()) return false
+    requestedAutomationId.value = id
+    return true
+  }
+  watch(() => props.navigation, (navigation, _previous, cleanup) => {
+    const dispose = navigation?.beforeLeave?.(attempt => {
+      const target = new URLSearchParams(attempt.search)
+      const nextAutomation = target.get('automation')
+      if (attempt.pathname === navigation.route.pathname && (!nextAutomation || nextAutomation === automationId.value)) return allowInputChange()
+      return allowDocumentLeave()
+    })
+    if (dispose) cleanup(dispose)
+  }, { immediate: true })
+  // Router guards already approved an in-place query change. Initial deep links have no local Draft to discard.
+  watch(() => props.navigation?.route.search, search => {
+    const query = new URLSearchParams(search ?? '')
+    const requested = query.get('automation')
+    if (requested) { requestedAutomationId.value = requested; confirmedAutomationId.value = requested }
+    const tab = query.get('tab')
+    if (tab && ['Editor', 'Runs', 'Revisions', 'State', 'Settings'].includes(tab)) activeTab.value = tab
+    if (query.get('create') === '1') createRequest.value += 1
+  }, { immediate: true })
+  watch(needsProtection, (protect, _previous, cleanup) => {
+    if (!protect || typeof window === 'undefined') return
+    const beforeUnload = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = '' }
+    window.addEventListener('beforeunload', beforeUnload)
+    cleanup(() => window.removeEventListener('beforeunload', beforeUnload))
+  }, { immediate: true, flush: 'sync' })
+  watch(() => inputs.hasUncommitted, pending => { if (!pending) inputBlocked.value = false }, { flush: 'sync' })
+  watch(automationId, () => { inputs.clear(); inputBlocked.value = false })
+  const publishDraft = () => {
+    blurCurrentInput()
+    if (inputs.hasUncommitted) { inputBlocked.value = true; return }
+    authoring.publish()
+  }
+  const archiveAutomation = (automationIdTarget: string, expectedActivationGeneration: number) => {
+    // Commit focused valid text before lifecyclePending makes the form read-only.
+    if (automationId.value === automationIdTarget) {
+      blurCurrentInput()
+      if (inputs.hasUncommitted) {
+        lifecycleError.value = t('workbench.document.applyInputsFirst')
+        return Promise.resolve(false)
+      }
+    }
+    return runLifecycleAction<WorkbenchArchiveAutomationInput, { automationId: string }>(
     workbenchArchiveAutomationActionRef, { automationId: automationIdTarget, expectedActivationGeneration }, () => {
       archiveView.value = true
       activeTab.value = 'Runs'
@@ -206,6 +269,7 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
       return saved
     },
   )
+  }
   const effectiveDetail = computed<WorkbenchAutomationDetail | undefined>(() => {
     const queriedDetail = detail.value
     const currentDetail = queriedDetail ? {
@@ -233,7 +297,7 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
     return { status: 'READY', data: effectiveDetail.value }
   })
   const archived = computed(() => !!effectiveDetail.value?.automation.archivedAt)
-  const editable = computed(() => !archived.value && !lifecyclePending.value)
+  const editable = computed(() => !archived.value && !lifecyclePending.value && !creatingAutomation.value)
   const capabilityTitles = computed(() => new Map(
     localizedCatalogState.value.status === 'READY'
       ? localizedCatalogState.value.data.items.flatMap(item => item.kind === 'capability' || item.kind === 'trigger'
@@ -256,12 +320,13 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
     activeStepId: activeStepId.value,
     activeTab: activeTab.value,
     inspectorOpen: props.inspectorOpen,
+    ...(props.inspectorOpen && fieldFocus.value?.fieldPath ? { inspectorFocusNodeId: fieldFocus.value.nodeId } : {}),
     ...(effectiveDetailState.value ? { detailState: effectiveDetailState.value } : {}),
     ...(props.consoleClient ? { insertCatalogState: localizedCatalogState.value } : {}),
     ...(props.consoleClient ? { steps: steps.value } : {}),
     ...(props.consoleClient ? {
       automations: liveItems.value,
-      onAutomationChange: (id: string) => { requestedAutomationId.value = id },
+      onAutomationChange: switchAutomation,
     } : {}),
     ...(props.consoleClient ? {
       authoring: {
@@ -270,19 +335,27 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
         canUndo: editable.value && authoring.canUndo,
         canRedo: editable.value && authoring.canRedo,
         publishPending: authoring.publishPending,
+        savePhase: authoring.savePhase,
+        inputBlocked: inputBlocked.value,
+        ...(authoring.editError ? { editError: authoring.editError } : {}),
         ...(authoring.conflict ? { conflict: authoring.conflict } : {}),
         ...(authoring.saveError ? { saveError: authoring.saveError } : {}),
         ...(authoring.publishError ? { publishError: authoring.publishError } : {}),
       },
-      ...(editable.value ? { onInsert: authoring.insert } : {}),
-      ...(editable.value ? { onDeleteStep: authoring.deleteStep, onMoveStep: authoring.moveStep } : {}),
+      ...(editable.value ? { onInsert: (item, target) => allowInputChange() && authoring.insert(item, target), onSourceCommand: command => allowInputChange() && authoring.edit(command),
+        onCopyStep: authoring.copyStep, onCutStep: authoring.cutStep, onPaste: target => allowInputChange() && authoring.paste(target),
+        onToggleCollapse: authoring.toggleCollapse,
+      } : {}),
+      ...(authoring.clipboard ? { clipboard: authoring.clipboard } : {}),
+      collapsedNodes: authoring.collapsedNodes,
+      ...(editable.value ? { onDeleteStep: nodeId => { if (allowInputChange()) authoring.deleteStep(nodeId) }, onMoveStep: (nodeId, direction) => { if (allowInputChange()) authoring.moveStep(nodeId, direction) } } : {}),
       onReloadInsertCatalog: reloadInsertCatalog,
-      ...(editable.value ? { onUndo: authoring.undo, onRedo: authoring.redo, onPublish: authoring.publish } : {}),
-      onReloadDraft: authoring.reload,
+      ...(editable.value ? { onUndo: () => { if (allowInputChange()) authoring.undo() }, onRedo: () => { if (allowInputChange()) authoring.redo() }, onPublish: publishDraft } : {}),
+      onReloadDraft: () => { if (allowDocumentLeave()) { inputs.discard(); authoring.reload() } },
       ...(editable.value ? { onRetrySave: authoring.retrySave } : {}),
     } : {}),
     ...(props.consoleClient && authoring.document ? {
-      inputSettings: h(AutomationInputs, { inputs: authoring.document.source.inputs, canEdit: editable.value && authoring.canEdit, problems: authoring.problems, onChange: inputs => { if (editable.value) authoring.setAutomationInputs(inputs) }, ...(props.schemaUI ? { schemaUI: props.schemaUI } : {}) }),
+      inputSettings: h(AutomationInputs, { key: authoring.document.automationId, inputs: authoring.document.source.inputs, canEdit: editable.value && authoring.canEdit, problems: authoring.problems, onChange: inputs => { if (editable.value) authoring.setAutomationInputs(inputs) }, ...(props.schemaUI ? { schemaUI: props.schemaUI } : {}) }),
       manualRunForm: h(AutomationRuns, { key: authoring.document.automationId, automationId: authoring.document.automationId, archived: archived.value, consoleClient: props.consoleClient, ...(props.schemaUI ? { schemaUI: props.schemaUI } : {}), ...(props.navigation ? { navigation: props.navigation } : {}) }),
     } : {}),
     ...(props.consoleClient && authoring.document && authoring.conflict ? {
@@ -290,7 +363,7 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
         key: authoring.document.automationId,
         client: props.consoleClient, document: authoring.document, conflict: authoring.conflict,
         name: effectiveDetail.value?.automation.name ?? 'Automation',
-        onReload: authoring.reload,
+        onReload: () => { inputs.discard(); authoring.reload() },
         onOpenCopy: (id: string) => {
           confirmedAutomationId.value = id
           requestedAutomationId.value = id
@@ -310,24 +383,64 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
     } : {}),
     onOpenInspector: () => props.onInspectorOpenChange(!props.inspectorOpen),
     onStepChange: id => {
+      if (id !== activeStepId.value && !allowInputChange()) return
       const step = steps.value.find(item => item.id === id)
-      if (props.consoleClient) authoring.selectNode(step?.sourceId)
+      if (props.consoleClient) authoring.selectNode(step?.sourceId, editable.value && authoring.canEdit)
       else requestedStepId.value = id
       fieldFocus.value = undefined
       props.onInspectorOpenChange(true)
     },
-    onTabChange: tab => { activeTab.value = tab; if (tab !== 'Editor') props.onInspectorOpenChange(false) },
+    onTabChange: tab => { if (tab !== activeTab.value && !allowInputChange()) return; activeTab.value = tab; if (tab !== 'Editor') props.onInspectorOpenChange(false) },
     onReload: reloadDetail,
   }))
   provide(automationWorkspaceKey, workspace)
 
+  useCommandRegistration(() => {
+    if (!props.consoleClient) return []
+    const view = workspace.value
+    const source = authoring.document?.source
+    const selected = steps.value.find(step => step.id === activeStepId.value)?.sourceId
+    const options = source ? automationStepEditOptions(source, selected) : undefined
+    const target = source && selected ? automationRelativeInsertTarget(source, selected, 'after') : undefined
+    const locked = !editable.value || !authoring.canEdit
+    const reason = (allowed: boolean | undefined, fallback = 'workbench.commands.unavailableSelection') => locked ? t('workbench.commands.readOnly') : allowed ? undefined : t(fallback)
+    const edit = (id: string, label: string, allowed: boolean | undefined, execute: () => void | boolean, shortcut?: import('./commands.js').CommandShortcut, fallback?: string) => ({
+      id, label, visible: !!source && activeTab.value === 'Editor', ...(shortcut ? { shortcut } : {}),
+      ...(reason(allowed, fallback) ? { disabledReason: reason(allowed, fallback)! } : {}), execute,
+    })
+    const openRuns = (testRun = false) => {
+      if (!allowInputChange()) return false
+      activeTab.value = 'Runs'; props.onInspectorOpenChange(false)
+      if (testRun) void nextTick(() => {
+        const launcher = document.querySelector<HTMLDetailsElement>('.automation-run-launcher')
+        if (launcher) { launcher.open = true; launcher.querySelector<HTMLElement>('summary')?.focus() }
+      })
+      return true
+    }
+    return [
+      edit('automation.undo', t('workbench.undo'), authoring.canUndo, () => view.onUndo?.(), { mod: true, key: 'z' }, 'workbench.commands.noUndo'),
+      edit('automation.redo', t('workbench.redo'), authoring.canRedo, () => view.onRedo?.(), { mod: true, shift: true, key: 'z' }, 'workbench.commands.noRedo'),
+      edit('automation.copy', t('workbench.copy'), options?.canCopy, () => { if (selected) view.onCopyStep?.(selected) }, { mod: true, key: 'c' }),
+      edit('automation.cut', t('workbench.cut'), options?.canMoveTo, () => { if (selected) view.onCutStep?.(selected) }, { mod: true, key: 'x' }),
+      edit('automation.paste', t('workbench.structure.pasteAfter'), !!authoring.clipboard && !!target, () => target ? view.onPaste?.(target) : false, { mod: true, key: 'v' }, 'workbench.commands.noPasteTarget'),
+      edit('automation.delete', t('workbench.delete'), options?.canDelete, () => { if (selected) view.onDeleteStep?.(selected) }, { key: 'Delete' }),
+      edit('automation.moveUp', t('workbench.moveUp'), options?.canMoveUp, () => { if (selected) view.onMoveStep?.(selected, 'up') }, { alt: true, key: 'ArrowUp' }),
+      edit('automation.moveDown', t('workbench.moveDown'), options?.canMoveDown, () => { if (selected) view.onMoveStep?.(selected, 'down') }, { alt: true, key: 'ArrowDown' }),
+      { id: 'automation.publish', label: t('workbench.publish'), visible: !!source, ...(!view.authoring?.canPublish ? { disabledReason: t('workbench.commands.readOnly') } : {}), execute: publishDraft },
+      { id: 'automation.runs', label: t('workbench.viewRuns'), visible: !!source, execute: () => openRuns() },
+      { id: 'automation.testRun', label: t('workbench.commands.testRun'), visible: !!source,
+        ...(archived.value || !effectiveDetail.value?.revisions.length ? { disabledReason: t(archived.value ? 'workbench.commands.readOnly' : 'workbench.commands.publishFirst') } : {}), execute: () => openRuns(true) },
+    ]
+  })
+
   const selectProblem = (sourceRef: SourceRef) => {
     const nodeId = sourceRef.nodeId
     if (!nodeId) return
+    if (!allowInputChange()) return
     if (nodeId === '__inputs') { activeTab.value = 'Settings'; props.onInspectorOpenChange(false); return }
     const step = steps.value.find(item => item.sourceId === nodeId)
     if (!step) return
-    authoring.selectNode(nodeId)
+    authoring.selectNode(nodeId, editable.value && authoring.canEdit)
     fieldFocus.value = {
       nodeId,
       ...(sourceRef.fieldPath ? { fieldPath: sourceRef.fieldPath } : {}),
@@ -340,10 +453,11 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
     const PageComponent = props.page.component
     return <>
       <AutomationSidebar
+        createRequest={createRequest.value}
         {...(automationId.value ? { activeId: automationId.value } : {})}
-        onChange={id => { requestedAutomationId.value = id }}
+        onChange={switchAutomation}
         onOpen={(id, tab) => {
-          requestedAutomationId.value = id
+          if (id !== automationId.value ? !switchAutomation(id) : tab !== activeTab.value && !allowInputChange()) return
           activeTab.value = tab
           if (tab !== 'Editor') props.onInspectorOpenChange(false)
         }}
@@ -353,7 +467,7 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
         {...(createAutomationError.value ? { createError: createAutomationError.value } : {})}
         creating={creatingAutomation.value}
         state={indexState}
-        onArchiveViewChange={archived => { archiveView.value = archived; lifecycleError.value = undefined }}
+        onArchiveViewChange={archived => { if (!allowDocumentLeave()) return; archiveView.value = archived; lifecycleError.value = undefined }}
         onArchive={archiveAutomation}
         onRestore={restoreAutomation}
         onRemoveArchived={removeArchivedAutomation}
@@ -366,6 +480,7 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
         ...(props.navigation ? { navigation: props.navigation } : {}),
       })}
       <Inspector
+        key={automationId.value}
         activeStepId={activeStepId.value}
         canEdit={editable.value && authoring.canEdit}
         {...(localizedCatalogState.value.status === 'READY' ? { catalog: localizedCatalogState.value.data } : {})}
@@ -378,6 +493,7 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
         onClose={() => props.onInspectorOpenChange(false)}
         onCapabilityConnectionChange={(nodeId, slotName, connectionId) => { if (editable.value) authoring.setCapabilityConnection(nodeId, slotName, connectionId) }}
         onCapabilityInputChange={(nodeId, fieldName, expression) => { if (editable.value) authoring.setCapabilityInput(nodeId, fieldName, expression) }}
+        onInvocationPolicyChange={(nodeId, policy) => { if (editable.value) authoring.edit({ type: 'SET_INVOCATION_POLICY', nodeId, ...(policy ? { policy } : {}) }) }}
         onTriggerConfigChange={(nodeId, fieldName, value) => { if (editable.value) authoring.setTriggerConfig(nodeId, fieldName, value) }}
         onExtensionInputChange={(nodeId, fieldName, expression) => { if (editable.value) authoring.setExtensionInput(nodeId, fieldName, expression) }}
         onControlExpressionChange={(nodeId, field, expression) => { if (editable.value) authoring.setControlExpression(nodeId, field, expression) }}
@@ -396,6 +512,7 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
         phase={authoring.savePhase}
         problemCount={authoring.problems.length}
         preview={!props.consoleClient}
+        pendingInput={inputs.hasUncommitted}
       />
     </>
   }

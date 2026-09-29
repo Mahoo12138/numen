@@ -3,6 +3,8 @@ import { renderToMarkup } from './render.js'
 import { AutomationEditor } from '../src/AutomationEditor.js'
 import { AutomationPanel, AutomationStatusBar } from '../src/AutomationPanel.js'
 import { Inspector } from '../src/Inspector.js'
+import { ExecutionPolicyFields } from '../src/ExecutionPolicyFields.js'
+import { CapabilityInputFields } from '../src/CapabilityInspector.js'
 import { AutomationSidebar } from '../src/AutomationSidebar.js'
 import { projectAutomationSteps } from '../src/automation-projection.js'
 import { coreSchemaLiteralRenderers } from '../src/SchemaRenderers.js'
@@ -71,6 +73,49 @@ const schemaUI: SchemaUIResolver = {
 }
 
 describe('live Automation workspace projections', () => {
+  it('limits policy editing to declared retry safety while preserving an unsafe saved policy', async () => {
+    const unsafe = await renderToMarkup(<ExecutionPolicyFields nodeId="send" canEdit problems={[]}
+      semantics={{ retrySafe: false }} policy={{ timeoutMs: 5000, retry: { maxAttempts: 3 } }} onChange={vi.fn()} />)
+    expect(unsafe).toContain('not declared safe for automatic retry')
+    expect(unsafe).toContain('existing 3-attempt policy is preserved')
+    expect(unsafe).toContain('Remove retry policy')
+    expect(unsafe).not.toContain('Maximum attempts</label>')
+    expect(unsafe).toContain('Timeout (ms)')
+    const safe = await renderToMarkup(<ExecutionPolicyFields nodeId="fetch" canEdit problems={[]}
+      semantics={{ retrySafe: true, defaultTimeoutMs: 4000 }} policy={{ retry: { maxAttempts: 2, backoffMs: 500 } }} onChange={vi.fn()} />)
+    expect(safe).toContain('Maximum attempts')
+    expect(safe).toContain('Retry base delay (ms)')
+    expect(safe).toContain('provider default is 4000 ms')
+    expect(safe).not.toContain('On failure')
+  })
+
+  it.each([
+    ['input.message', true],
+    ['input.message.parts.0', true],
+    ['input.message.entries.nested', true],
+    ['input.message_suffix', false],
+  ])('routes diagnostic focus %s to the owning expression field', async (focusFieldPath, shouldFocus) => {
+    const markup = await renderToMarkup(<CapabilityInputFields
+      nodeId="focused"
+      definition={{ inputSchemaSupported: true, inputFields: [
+        { name: 'message', label: 'Message', type: 'string', schemaType: 'string', required: true },
+        { name: 'other', label: 'Other', type: 'string', schemaType: 'string', required: false },
+      ] }}
+      control={{ input: {
+        message: { type: 'template', parts: [{ ref: 'loop.item' }] },
+        other: { type: 'template', parts: ['Unaffected'] },
+      } }}
+      canEdit
+      problems={[]}
+      focusFieldPath={focusFieldPath}
+      focusRequest={1}
+    />)
+    const textareas = markup.match(/<textarea\b[^>]*>/g) ?? []
+    const message = textareas.find(tag => tag.includes('id="focused-input-message"'))!
+    expect(message.includes('autofocus')).toBe(shouldFocus)
+    expect(textareas.find(tag => tag.includes('id="focused-input-other"'))).not.toContain('autofocus')
+  })
+
   it('renders the live Sidebar summary without static preview records', async () => {
     const markup = await renderToMarkup(<AutomationSidebar
       activeId={detail.automation.id}
@@ -205,7 +250,7 @@ describe('live Automation workspace projections', () => {
     expect(statusMarkup).toContain('Draft conflict')
   })
 
-  it('projects editable Wait fields and source diagnostics into the Inspector', async () => {
+  it.each(['durationMs', 'durationMs.arguments.0'])('projects editable Wait fields and focuses %s in the Inspector', async fieldPath => {
     const steps = projectAutomationSteps(detail.draft.source, [{
       severity: 'error',
       code: 'WAIT_SOURCE_INVALID',
@@ -215,7 +260,7 @@ describe('live Automation workspace projections', () => {
     const inspectorMarkup = await renderToMarkup(<Inspector
       activeStepId={steps[0]!.id}
       canEdit
-      fieldFocus={{ nodeId: 'pause', fieldPath: 'durationMs', request: 1 }}
+      fieldFocus={{ nodeId: 'pause', fieldPath, request: 1 }}
       onClose={vi.fn()}
       onWaitExpressionChange={vi.fn()}
       open
@@ -233,6 +278,7 @@ describe('live Automation workspace projections', () => {
     expect(steps[0]).toMatchObject({ problemCount: 1 })
     expect(inspectorMarkup).toContain('aria-label="Wait duration in seconds"')
     expect(inspectorMarkup).toContain('value="5"')
+    expect(inspectorMarkup).toContain('autofocus')
     expect(inspectorMarkup).toContain('aria-invalid="true"')
     expect(inspectorMarkup).toContain('Wait duration is invalid.')
   })
