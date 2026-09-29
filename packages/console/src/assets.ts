@@ -17,15 +17,17 @@ export interface ConsoleAssetConfig {
 
 export interface ConsoleEntryManifestItem {
   id: string
+  incarnation: number
   url: string
   scopeId?: string
   generation?: number
 }
 
 export interface ConsoleEntryManifest {
+  epoch: string
   revision: number
   entries: ConsoleEntryManifestItem[]
-  unavailable: Array<{ id: string; code: 'SOURCE_UNRESOLVABLE' }>
+  unavailable: Array<{ id: string; incarnation: number; code: 'SOURCE_UNRESOLVABLE' }>
 }
 
 interface ResolvedSource {
@@ -163,7 +165,7 @@ export function consoleAssetPlugin(ctx: Context, config: ConsoleAssetConfig = {}
       response.status = 304
       return
     }
-    const document: ConsoleEntryManifest = { revision, entries: [], unavailable: [] }
+    const document: ConsoleEntryManifest = { epoch: ctx.consoleEntries.getSnapshot().epoch, revision, entries: [], unavailable: [] }
     for (const entry of ctx.consoleEntries.list()) {
       const source = ctx.consoleEntries.resolveSource(entry.id, mode)
       if (!source) continue
@@ -171,12 +173,13 @@ export function consoleAssetPlugin(ctx: Context, config: ConsoleAssetConfig = {}
         const resolved = resolveSource(source.source, source.baseUrl)
         document.entries.push({
           id: entry.id,
-          url: manifestUrl(assetPath, assetGeneration, entry.id, revision, resolved.entryPath),
+          incarnation: source.incarnation,
+          url: manifestUrl(assetPath, assetGeneration, entry.id, source.revision, resolved.entryPath),
           ...(entry.scopeId ? { scopeId: entry.scopeId } : {}),
           ...(entry.generation === undefined ? {} : { generation: entry.generation }),
         })
       } catch {
-        document.unavailable.push({ id: entry.id, code: 'SOURCE_UNRESOLVABLE' })
+        document.unavailable.push({ id: entry.id, incarnation: source.incarnation, code: 'SOURCE_UNRESOLVABLE' })
       }
     }
     response.json(document)
@@ -196,12 +199,12 @@ export function consoleAssetPlugin(ctx: Context, config: ConsoleAssetConfig = {}
       response.status = 404
       return
     }
-    if (revision !== ctx.consoleEntries.getRevision()) {
+    const source = ctx.consoleEntries.resolveSource(entryId, mode)
+    if (source && revision !== source.revision) {
       response.status = 410
       response.json({ error: { code: 'ENTRY_GENERATION_STALE', message: 'Console entry generation is stale' } })
       return
     }
-    const source = ctx.consoleEntries.resolveSource(entryId, mode)
     if (!source) {
       response.status = 404
       return

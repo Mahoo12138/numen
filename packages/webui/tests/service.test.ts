@@ -118,6 +118,7 @@ describe('BrowserConsoleClient', () => {
 
   it('fetches the authenticated frontend Entry manifest', async () => {
     const manifest = {
+      epoch: 'registry-fixture',
       revision: 4,
       entries: [{ id: 'plugin:workbench', url: '/api/console/assets/plugin/4/index.js' }],
       unavailable: [],

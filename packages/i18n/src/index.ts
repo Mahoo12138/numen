@@ -105,7 +105,7 @@ export class I18nService extends Service {
   private readonly defaults: string[]
   private readonly definitions = new Map<symbol, Definition>()
   private readonly listeners = new Set<() => void>()
-  private active: { revision: number; stage: I18nStage } | undefined
+  private active: { revision: number; stages: I18nStage[] } | undefined
   private revision = 0
 
   constructor(ctx: Context, config: I18nConfig = {}) {
@@ -170,8 +170,12 @@ export class I18nService extends Service {
   }
 
   activateSnapshot(revision: number, stage: I18nStage): void {
+    this.activateSnapshots(revision, [stage])
+  }
+
+  activateSnapshots(revision: number, stages: I18nStage[]): void {
     this.validateSnapshot(revision)
-    this.active = { revision, stage }
+    this.active = { revision, stages: [...stages] }
     this.changed()
   }
 
@@ -181,7 +185,7 @@ export class I18nService extends Service {
     this.changed()
   }
 
-  stageChanged(stage: I18nStage): void { if (this.active?.stage === stage) this.changed() }
+  stageChanged(stage: I18nStage): void { if (this.active?.stages.includes(stage)) this.changed() }
   getSnapshot(): number { return this.revision }
   subscribe(listener: () => void): () => void {
     this.listeners.add(listener)
@@ -190,7 +194,7 @@ export class I18nService extends Service {
 
   private layers(): Definition[] {
     // Direct host overrides take precedence over Entry-owned defaults.
-    return [...this.active?.stage.definitions.values() ?? [], ...this.definitions.values()]
+    return [...this.active?.stages.flatMap(stage => [...stage.definitions.values()]) ?? [], ...this.definitions.values()]
   }
 
   private changed(): void {

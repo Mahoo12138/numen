@@ -12,32 +12,42 @@ class FakeRouterEnvironment implements BrowserRouterEnvironment {
   location: { href: string }
   history: BrowserRouterEnvironment['history']
   private readonly popStateListeners = new Set<() => void>()
+  private entries: Array<{ href: string; state: unknown }>
+  private index = 0
 
   constructor(href: string) {
     this.location = { href }
+    this.entries = [{ href, state: null }]
     this.history = {
       state: null,
       pushState: (data, _unused, url) => {
-        this.history.state = data
-        if (url !== undefined && url !== null) this.location.href = new URL(String(url), this.location.href).href
+        this.entries.splice(++this.index)
+        this.entries.push({ state: data, href: new URL(String(url ?? this.location.href), this.location.href).href })
+        this.restore()
       },
       replaceState: (data, _unused, url) => {
-        this.history.state = data
-        if (url !== undefined && url !== null) this.location.href = new URL(String(url), this.location.href).href
+        this.entries[this.index] = { state: data, href: new URL(String(url ?? this.location.href), this.location.href).href }
+        this.restore()
+      },
+      go: delta => {
+        const next = this.index + (delta ?? 0)
+        if (next < 0 || next >= this.entries.length) return
+        this.index = next
+        this.restore()
+        for (const listener of this.popStateListeners) listener()
       },
     }
   }
 
-  addEventListener(_type: 'popstate', listener: () => void): void {
-    this.popStateListeners.add(listener)
+  private restore() {
+    const entry = this.entries[this.index]!
+    this.location.href = entry.href
+    this.history.state = entry.state
   }
-
-  removeEventListener(_type: 'popstate', listener: () => void): void {
-    this.popStateListeners.delete(listener)
-  }
-
+  addEventListener(_type: 'popstate', listener: () => void): void { this.popStateListeners.add(listener) }
+  removeEventListener(_type: 'popstate', listener: () => void): void { this.popStateListeners.delete(listener) }
   pop(href: string): void {
-    this.location.href = new URL(href, this.location.href).href
+    this.history.replaceState(null, '', href)
     for (const listener of this.popStateListeners) listener()
   }
 }
@@ -47,6 +57,62 @@ function page(id: string, path: string) {
 }
 
 describe('BrowserRouterService', () => {
+  it('protects push, replace, back and forward without discarding history entries', async () => {
+    const root = new Context()
+    try {
+      await root.plugin(BrowserExtensionRegistry)
+      root.webuiExtensions.page(root, page('home', '/'))
+      root.webuiExtensions.page(root, page('editor', '/editor'))
+      root.webuiExtensions.page(root, page('runs', '/runs'))
+      const environment = new FakeRouterEnvironment('http://numen.local/')
+      await root.plugin(BrowserRouterService, { environment })
+      root.webuiRouter.navigate({ id: 'editor', version: 1 })
+      let allow = false
+      const attempts: string[] = []
+      const dispose = root.webuiRouter.beforeLeave(attempt => { attempts.push(attempt.reason); return allow })
+      const snapshot = root.webuiRouter.getSnapshot()
+      root.webuiRouter.navigate({ id: 'runs', version: 1 })
+      root.webuiRouter.navigate({ id: 'runs', version: 1 }, { replace: true })
+      environment.history.go(-1)
+      expect(root.webuiRouter.getSnapshot()).toBe(snapshot)
+      expect(environment.location.href).toBe('http://numen.local/editor')
+      expect(attempts).toEqual(['navigate', 'navigate', 'popstate'])
+      allow = true
+      environment.history.go(-1)
+      expect(root.webuiRouter.getState().pathname).toBe('/')
+      allow = false
+      environment.history.go(1)
+      expect(root.webuiRouter.getState().pathname).toBe('/')
+      expect(environment.location.href).toBe('http://numen.local/')
+      dispose()
+      environment.history.go(1)
+      expect(root.webuiRouter.getState().pathname).toBe('/editor')
+      root.webuiRouter.navigate({ id: 'runs', version: 1 })
+      environment.history.go(-2)
+      expect(root.webuiRouter.getState().pathname).toBe('/')
+      environment.history.go(2)
+      expect(root.webuiRouter.getState().pathname).toBe('/runs')
+    } finally { await root.fiber.dispose() }
+  })
+
+  it('keeps guards off registry reconciliation and restores an unknown rejected history entry', async () => {
+    const root = new Context()
+    try {
+      await root.plugin(BrowserExtensionRegistry)
+      root.webuiExtensions.page(root, page('editor', '/editor'))
+      const environment = new FakeRouterEnvironment('http://numen.local/editor?panel=source')
+      await root.plugin(BrowserRouterService, { environment })
+      const guard = vi.fn(() => false)
+      root.webuiRouter.beforeLeave(guard)
+      root.webuiRouter.reconcile(true)
+      expect(guard).not.toHaveBeenCalled()
+      environment.pop('/external')
+      expect(guard).toHaveBeenCalledOnce()
+      expect(environment.location.href).toBe('http://numen.local/editor?panel=source')
+      expect(root.webuiRouter.getState()).toMatchObject({ pathname: '/editor', search: '?panel=source' })
+    } finally { await root.fiber.dispose() }
+  })
+
   it('matches the current URL and decodes dynamic Page parameters', async () => {
     const root = new Context()
     await root.plugin(BrowserExtensionRegistry)

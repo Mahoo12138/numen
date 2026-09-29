@@ -190,6 +190,31 @@ function cloneState(state: ExtensionState): ExtensionState {
 export class FrontendExtensionStage {
   private readonly state = createState()
 
+  static combine(stages: Iterable<FrontendExtensionStage>): FrontendExtensionStage {
+    const combined = new FrontendExtensionStage()
+    const merge = <T>(target: Map<string, T>, source: Map<string, T>, kind: string) => {
+      for (const [key, value] of source) {
+        if (target.has(key)) throw new Error(`duplicate staged frontend ${kind}: ${key}`)
+        target.set(key, value)
+      }
+    }
+    for (const stage of stages) {
+      const source = stage.state
+      const target = combined.state
+      merge(target.pages, source.pages, 'page')
+      merge(target.pagePaths, source.pagePaths, 'page path')
+      merge(target.slots, source.slots, 'slot')
+      merge(target.schemaRenderers, source.schemaRenderers, 'renderer')
+      merge(target.schemaRendererTargets, source.schemaRendererTargets, 'renderer target')
+      for (const [key, contributions] of source.contributions) {
+        let entries = target.contributions.get(key)
+        if (!entries) target.contributions.set(key, entries = new Map())
+        merge(entries, contributions, 'contribution')
+      }
+    }
+    return combined
+  }
+
   page<Component>(owner: Context, page: FrontendPage<Component>): () => void {
     validatePage(page)
     const key = extensionKey(page)
@@ -400,7 +425,7 @@ export class BrowserExtensionRegistry extends Service {
     return this.active?.revision
   }
 
-  activateSnapshot(revision: number, stage: FrontendExtensionStage, beforeNotify?: () => void): void {
+  activateSnapshot(revision: number, stage: FrontendExtensionStage, beforeNotify?: () => void, allowMissingSlots = false): void {
     if (!Number.isSafeInteger(revision) || revision < 0) {
       throw new TypeError(`invalid frontend snapshot revision: ${revision}`)
     }
@@ -408,7 +433,7 @@ export class BrowserExtensionRegistry extends Service {
       throw new Error(`frontend snapshot revision is stale: ${revision} <= ${this.active.revision}`)
     }
     const next = stage.materialize()
-    this.validateSnapshot(next)
+    this.validateSnapshot(next, allowMissingSlots)
     const previous = this.active?.state
     const previousSnapshot = this.active
     this.active = { revision, state: next }
@@ -434,7 +459,7 @@ export class BrowserExtensionRegistry extends Service {
     ]
   }
 
-  private validateSnapshot(next: ExtensionState): void {
+  private validateSnapshot(next: ExtensionState, allowMissingSlots: boolean): void {
     for (const [key, page] of next.pages) {
       if (this.direct.pages.has(key)) throw new Error(`frontend page already registered: ${key}`)
       const existingPath = this.direct.pagePaths.get(pagePattern(page.path))
@@ -455,6 +480,7 @@ export class BrowserExtensionRegistry extends Service {
     ])
     for (const slotKey of slotKeys) {
       if (!this.direct.slots.has(slotKey) && !next.slots.has(slotKey)) {
+        if (allowMissingSlots) continue
         throw new Error(`frontend slot not found: ${slotKey}`)
       }
       const direct = [...(this.direct.contributions.get(slotKey)?.values() ?? [])]
@@ -472,9 +498,11 @@ export class BrowserExtensionRegistry extends Service {
 
   private emitSnapshotChanges(previous?: ExtensionState, next?: ExtensionState): void {
     for (const key of new Set([...previous?.pages.keys() ?? [], ...next?.pages.keys() ?? []])) {
+      if (previous?.pages.get(key) === next?.pages.get(key)) continue
       this.ctx.emit('numen/webui-extension-change', 'page', key)
     }
     for (const key of new Set([...previous?.slots.keys() ?? [], ...next?.slots.keys() ?? []])) {
+      if (previous?.slots.get(key) === next?.slots.get(key)) continue
       this.ctx.emit('numen/webui-extension-change', 'slot', key)
     }
     const contributionKeys = (state?: ExtensionState) => [...state?.contributions ?? []]
@@ -486,6 +514,7 @@ export class BrowserExtensionRegistry extends Service {
       ...previous?.schemaRenderers.keys() ?? [],
       ...next?.schemaRenderers.keys() ?? [],
     ])) {
+      if (previous?.schemaRenderers.get(key) === next?.schemaRenderers.get(key)) continue
       this.ctx.emit('numen/webui-extension-change', 'renderer', key)
     }
   }

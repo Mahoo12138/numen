@@ -7,7 +7,7 @@ import './extensions.js'
 
 export interface BrowserRouterEnvironment {
   location: Pick<Location, 'href'>
-  history: Pick<History, 'state' | 'pushState' | 'replaceState'>
+  history: Pick<History, 'state' | 'pushState' | 'replaceState' | 'go'>
   addEventListener(type: 'popstate', listener: () => void): void
   removeEventListener(type: 'popstate', listener: () => void): void
 }
@@ -24,6 +24,23 @@ export interface BrowserRouteTarget {
 
 export interface BrowserNavigateOptions extends BrowserRouteTarget {
   replace?: boolean
+}
+
+export interface BrowserNavigationAttempt {
+  pathname: string
+  search: string
+  reason: 'navigate' | 'popstate'
+}
+
+export type BrowserNavigationGuard = (attempt: BrowserNavigationAttempt) => boolean
+
+interface HistoryPosition { key: string; index: number }
+
+function historyPosition(state: unknown): HistoryPosition | undefined {
+  const value = (state as { numenPosition?: unknown } | null)?.numenPosition
+  if (!value || typeof value !== 'object') return
+  const position = value as HistoryPosition
+  if (typeof position.key === 'string' && Number.isSafeInteger(position.index)) return position
 }
 
 export interface BrowserRouteState {
@@ -131,6 +148,11 @@ export class BrowserRouterService extends Service {
   private readonly environment: BrowserRouterEnvironment
   private readonly basePath: string
   private readonly listeners = new Set<() => void>()
+  private readonly guards = new Set<BrowserNavigationGuard>()
+  private position!: HistoryPosition
+  private acceptedHref = ''
+  private acceptedHistory: unknown
+  private restoringHistory = false
   private state!: BrowserRouteState
 
   constructor(ctx: Context, config: BrowserRouterConfig = {}) {
@@ -140,7 +162,34 @@ export class BrowserRouterService extends Service {
   }
 
   *[Service.init]() {
-    const onPopState = () => this.reconcile()
+    this.position = historyPosition(this.environment.history.state) ?? { key: globalThis.crypto.randomUUID(), index: 0 }
+    this.environment.history.replaceState({ ...this.currentHistory(), numenPosition: this.position }, '', this.environment.location.href)
+    this.acceptLocation()
+    const onPopState = () => {
+      const nextPosition = historyPosition(this.environment.history.state)
+      if (this.restoringHistory) {
+        if (nextPosition?.key === this.position.key && nextPosition.index === this.position.index) this.restoringHistory = false
+        return
+      }
+      if (!this.allowNavigation(this.environment.location.href, 'popstate')) {
+        if (nextPosition?.key === this.position.key && nextPosition.index !== this.position.index) {
+          this.restoringHistory = true
+          this.environment.history.go(this.position.index - nextPosition.index)
+        } else {
+          // Entries outside this router do not carry a trustworthy direction.
+          // Keep the current document and URL rather than guessing a traversal.
+          this.environment.history.replaceState(this.acceptedHistory, '', this.acceptedHref)
+        }
+        return
+      }
+      if (nextPosition?.key === this.position.key) this.position = nextPosition
+      else {
+        this.position = { key: globalThis.crypto.randomUUID(), index: 0 }
+        this.environment.history.replaceState({ ...this.currentHistory(), numenPosition: this.position }, '', this.environment.location.href)
+      }
+      this.acceptLocation()
+      this.reconcile()
+    }
     this.environment.addEventListener('popstate', onPopState)
     const disposePageListener = this.ctx.on('numen/webui-extension-change', (kind) => {
       if (kind === 'page') this.reconcile(true)
@@ -150,6 +199,7 @@ export class BrowserRouterService extends Service {
       disposePageListener()
       this.environment.removeEventListener('popstate', onPopState)
       this.listeners.clear()
+      this.guards.clear()
     }
   }
 
@@ -170,6 +220,29 @@ export class BrowserRouterService extends Service {
     return () => this.listeners.delete(listener)
   }
 
+  beforeLeave(guard: BrowserNavigationGuard): () => void {
+    this.guards.add(guard)
+    return () => this.guards.delete(guard)
+  }
+
+  private currentHistory(): Record<string, unknown> {
+    const state = this.environment.history.state
+    return state && typeof state === 'object' ? state as Record<string, unknown> : {}
+  }
+
+  private acceptLocation(): void {
+    this.acceptedHref = this.environment.location.href
+    this.acceptedHistory = this.environment.history.state
+  }
+
+  private allowNavigation(href: string, reason: BrowserNavigationAttempt['reason']): boolean {
+    const target = new URL(href, this.environment.location.href)
+    const current = new URL(this.acceptedHref)
+    if (target.pathname === current.pathname && target.search === current.search) return true
+    const attempt = { pathname: stripBasePath(normalizePathname(target.pathname), this.basePath), search: target.search, reason }
+    return [...this.guards].every(guard => guard(attempt))
+  }
+
   href(ref: FrontendExtensionRef, target: BrowserRouteTarget = {}): string {
     const page = this.ctx.webuiExtensions.getPage(ref)
     if (!page) throw new Error(`frontend route not found: ${ref.id}@${ref.version}`)
@@ -178,14 +251,18 @@ export class BrowserRouterService extends Service {
 
   navigate(ref: FrontendExtensionRef, options: BrowserNavigateOptions = {}): BrowserRouteState {
     const href = this.href(ref, options)
+    if (this.restoringHistory || !this.allowNavigation(href, 'navigate')) return this.getState()
+    if (!options.replace) this.position = { ...this.position, index: this.position.index + 1 }
     const historyState = {
       ...(this.environment.history.state && typeof this.environment.history.state === 'object'
         ? this.environment.history.state as Record<string, unknown>
         : {}),
       numenRoute: { id: ref.id, version: ref.version },
+      numenPosition: this.position,
     }
     if (options.replace) this.environment.history.replaceState(historyState, '', href)
     else this.environment.history.pushState(historyState, '', href)
+    this.acceptLocation()
     this.reconcile()
     return this.getState()
   }

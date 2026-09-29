@@ -27,6 +27,7 @@ async function setup(): Promise<{
   pluginDirectory: string
   outsideFile: string
   disposeAssets(): Promise<void>
+  disposeEntry(): void
 }> {
   const directory = await mkdtemp(join(tmpdir(), 'numen-console-assets-'))
   directories.push(directory)
@@ -46,7 +47,7 @@ async function setup(): Promise<{
   await root.plugin(ConsoleEntryRegistry)
   await root.plugin(SingleUserConsoleAuthService, { token: 'asset-token' })
   const owner = root.extend({ baseUrl: pathToFileURL(pluginDirectory + sep).href })
-  root.consoleEntries.addEntry(owner, {
+  const disposeEntry = root.consoleEntries.addEntry(owner, {
     id: '@example/foo:webui',
     prod: './dist/main.mjs',
   })
@@ -57,6 +58,7 @@ async function setup(): Promise<{
     pluginDirectory,
     outsideFile,
     disposeAssets: () => assets.dispose(),
+    disposeEntry,
   }
 }
 
@@ -122,6 +124,12 @@ describe('Console Entry asset delivery', () => {
       id: '@example/foo:second',
       prod: './dist/chunk.mjs',
     })
+    expect((await fetch(mainUrl, { headers: authorized() })).status).toBe(200)
+    const current = await fetch(`${fixture.baseUrl}/api/console/entries`, { headers: authorized() }).then(response => response.json()) as ConsoleEntryManifest
+    expect(current.entries.find(entry => entry.id === '@example/foo:webui')?.url).toBe(manifest.entries[0]!.url)
+    fixture.disposeEntry()
+    expect((await fetch(mainUrl, { headers: authorized() })).status).toBe(404)
+    fixture.root.consoleEntries.addEntry(owner, { id: '@example/foo:webui', prod: './dist/main.mjs' })
     const stale = await fetch(mainUrl, { headers: authorized() })
     expect(stale.status).toBe(410)
     expect(await stale.json()).toMatchObject({ error: { code: 'ENTRY_GENERATION_STALE' } })

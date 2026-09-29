@@ -1,4 +1,17 @@
 import { Service, type Context } from 'cordis'
+import { randomUUID } from 'node:crypto'
+
+export interface ConsoleEntryIdentity {
+  id: string
+  /** Changes after withdrawal, but survives an atomic generation replacement. */
+  incarnation: number
+}
+
+export interface ConsoleEntryInvalidation {
+  epoch: string
+  revision: number
+  entries: ConsoleEntryIdentity[]
+}
 
 export interface ConsoleFrontendEntry {
   id: string
@@ -28,6 +41,7 @@ export interface ConsoleEntrySource {
   source: string
   baseUrl?: string
   revision: number
+  incarnation: number
 }
 
 declare module 'cordis' {
@@ -56,6 +70,8 @@ export class ConsoleEntryRegistry extends Service {
   private readonly direct = new Map<string, ConsoleFrontendEntry>()
   private readonly directBaseUrls = new Map<string, string>()
   private readonly generations = new Map<string, ActiveGeneration>()
+  private readonly sources = new Map<string, { revision: number; incarnation: number }>()
+  private readonly epoch = randomUUID()
   private revision = 0
 
   constructor(ctx: Context) {
@@ -67,10 +83,13 @@ export class ConsoleEntryRegistry extends Service {
     this.assertIdAvailable(entry.id)
     return owner.effect(() => {
       this.direct.set(entry.id, entry)
+      this.sources.set(entry.id, { revision: this.revision + 1, incarnation: this.revision + 1 })
       if (owner.baseUrl) this.directBaseUrls.set(entry.id, owner.baseUrl)
       this.bumpRevision()
       return () => {
-        if (this.direct.get(entry.id) === entry) this.direct.delete(entry.id)
+        if (this.direct.get(entry.id) !== entry) return
+        this.direct.delete(entry.id)
+        this.sources.delete(entry.id)
         this.directBaseUrls.delete(entry.id)
         this.bumpRevision()
       }
@@ -107,11 +126,21 @@ export class ConsoleEntryRegistry extends Service {
       ...(owner.baseUrl ? { baseUrl: owner.baseUrl } : {}),
     }
     const dispose = owner.effect(() => {
+      for (const entry of previous?.entries ?? []) {
+        if (!stagedIds.has(entry.id)) this.sources.delete(entry.id)
+      }
+      for (const entry of entries) {
+        this.sources.set(entry.id, {
+          revision: this.revision + 1,
+          incarnation: this.sources.get(entry.id)?.incarnation ?? this.revision + 1,
+        })
+      }
       this.generations.set(generation.scopeId, active)
       this.bumpRevision()
       return () => {
         if (this.generations.get(generation.scopeId) === active) {
           this.generations.delete(generation.scopeId)
+          for (const entry of entries) this.sources.delete(entry.id)
           this.bumpRevision()
         }
       }
@@ -148,6 +177,14 @@ export class ConsoleEntryRegistry extends Service {
     return this.revision
   }
 
+  getSnapshot(): ConsoleEntryInvalidation {
+    return {
+      epoch: this.epoch,
+      revision: this.revision,
+      entries: this.list().map(entry => ({ id: entry.id, incarnation: this.sources.get(entry.id)!.incarnation })),
+    }
+  }
+
   resolveSource(entryId: string, mode: 'dev' | 'prod'): ConsoleEntrySource | undefined {
     const direct = this.direct.get(entryId)
     if (direct) {
@@ -157,7 +194,7 @@ export class ConsoleEntryRegistry extends Service {
         entry: direct,
         source,
         ...(this.directBaseUrls.get(entryId) ? { baseUrl: this.directBaseUrls.get(entryId)! } : {}),
-        revision: this.revision,
+        ...this.sources.get(entryId)!,
       }
     }
     for (const generation of this.generations.values()) {
@@ -173,7 +210,7 @@ export class ConsoleEntryRegistry extends Service {
         },
         source,
         ...(generation.baseUrl ? { baseUrl: generation.baseUrl } : {}),
-        revision: this.revision,
+        ...this.sources.get(entryId)!,
       }
     }
   }

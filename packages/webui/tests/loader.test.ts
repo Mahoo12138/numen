@@ -43,8 +43,8 @@ function pagePlugin(
 
 describe('BrowserEntryLoader', () => {
   it('commits locale and Page generations together and preserves translations on failed replacement', async () => {
-    const manifest: ConsoleEntryManifest = { revision: 1,
-      entries: [{ id: 'plugin:page', url: '/assets/page.js' }], unavailable: [] }
+    const manifest: ConsoleEntryManifest = { epoch: 'registry-1', revision: 1,
+      entries: [{ incarnation: 1, id: 'plugin:page', url: '/assets/page.js' }], unavailable: [] }
     const root = new Context()
     await root.plugin(I18nService)
     await root.plugin(BrowserExtensionRegistry)
@@ -63,24 +63,26 @@ describe('BrowserEntryLoader', () => {
       plugin.inject = ['webuiExtensions', 'i18n']
       return { default: plugin }
     }
-    await root.plugin(BrowserEntryLoader, { moduleImporter: importer })
+    await root.plugin(BrowserEntryLoader, { moduleImporter: importer, watch: false })
     expect(observed).toEqual(['第 1 代'])
     manifest.revision = 2; fail = true
+    manifest.entries[0]!.url = '/assets/page-2.js'
     expect(await root.webuiLoader.reconcile()).toBe(false)
     expect(root.i18n.text(['zh-CN'], 'plugin.title')).toBe('第 1 代')
     expect(observed).toEqual(['第 1 代'])
     manifest.revision = 3; fail = false
+    manifest.entries[0]!.url = '/assets/page-3.js'
     expect(await root.webuiLoader.reconcile()).toBe(true)
     expect(root.i18n.text(['zh-CN'], 'plugin.title')).toBe('第 3 代')
     expect(observed.at(-1)).toBe('第 3 代')
     await root.fiber.dispose()
   })
   it('keeps modules staged until the complete manifest activates atomically', async () => {
-    const manifest: ConsoleEntryManifest = {
+    const manifest: ConsoleEntryManifest = { epoch: 'registry-1',
       revision: 1,
       entries: [
-        { id: 'plugin:page', url: '/assets/1/page.js' },
-        { id: 'plugin:slot', url: '/assets/1/slot.js' },
+        { incarnation: 1, id: 'plugin:page', url: '/assets/1/page.js' },
+        { incarnation: 1, id: 'plugin:slot', url: '/assets/1/slot.js' },
       ],
       unavailable: [],
     }
@@ -104,7 +106,7 @@ describe('BrowserEntryLoader', () => {
       return { default: plugin }
     })
 
-    await root.plugin(BrowserEntryLoader, { moduleImporter: importer })
+    await root.plugin(BrowserEntryLoader, { moduleImporter: importer, watch: false })
 
     expect(root.webuiExtensions.getSnapshotRevision()).toBe(1)
     expect(root.webuiExtensions.listPages().map(page => page.path)).toEqual(['/plugin'])
@@ -116,11 +118,11 @@ describe('BrowserEntryLoader', () => {
   })
 
   it('stages Schema renderers with the same atomic Entry generation', async () => {
-    const manifest: ConsoleEntryManifest = {
+    const manifest: ConsoleEntryManifest = { epoch: 'registry-1',
       revision: 1,
       entries: [
-        { id: 'plugin:renderer', url: '/assets/1/renderer.js' },
-        { id: 'plugin:observer', url: '/assets/1/observer.js' },
+        { incarnation: 1, id: 'plugin:renderer', url: '/assets/1/renderer.js' },
+        { incarnation: 1, id: 'plugin:observer', url: '/assets/1/observer.js' },
       ],
       unavailable: [],
     }
@@ -146,7 +148,7 @@ describe('BrowserEntryLoader', () => {
       return { default: pagePlugin('plugin:observer', '/observer') }
     })
 
-    await root.plugin(BrowserEntryLoader, { moduleImporter: importer })
+    await root.plugin(BrowserEntryLoader, { moduleImporter: importer, watch: false })
 
     expect(root.schemaUI.resolveRenderer({ role: '@github/repository', type: 'string' }, 'editor')).toBe(renderer)
     expect(root.schemaUI.getSnapshot()).toBe(1)
@@ -154,9 +156,9 @@ describe('BrowserEntryLoader', () => {
   })
 
   it('retires the old fibers only after a successful replacement', async () => {
-    let manifest: ConsoleEntryManifest = {
+    let manifest: ConsoleEntryManifest = { epoch: 'registry-1',
       revision: 1,
-      entries: [{ id: 'plugin:entry', url: '/assets/1/entry.js' }],
+      entries: [{ incarnation: 1, id: 'plugin:entry', url: '/assets/1/entry.js' }],
       unavailable: [],
     }
     const retired: string[] = []
@@ -169,11 +171,11 @@ describe('BrowserEntryLoader', () => {
     await root.plugin(BrowserExtensionRegistry)
     await root.plugin(SchemaUIRegistry)
     await root.plugin(BrowserConsoleClient, { environment: browserEnvironment(() => manifest) })
-    await root.plugin(BrowserEntryLoader, { moduleImporter: importer })
+    await root.plugin(BrowserEntryLoader, { moduleImporter: importer, watch: false })
 
-    manifest = {
+    manifest = { epoch: 'registry-1',
       revision: 2,
-      entries: [{ id: 'plugin:entry', url: '/assets/2/entry.js' }],
+      entries: [{ incarnation: 1, id: 'plugin:entry', url: '/assets/2/entry.js' }],
       unavailable: [],
     }
     await root.parallel('numen/console-reconcile')
@@ -186,10 +188,10 @@ describe('BrowserEntryLoader', () => {
     expect(retired).toEqual(['v1', 'v2'])
   })
 
-  it('disposes a failed generation and retains the active snapshot', async () => {
-    let manifest: ConsoleEntryManifest = {
+  it('disposes a failed generation without restoring an explicitly withdrawn Entry', async () => {
+    let manifest: ConsoleEntryManifest = { epoch: 'registry-1',
       revision: 1,
-      entries: [{ id: 'plugin:stable', url: '/assets/1/stable.js' }],
+      entries: [{ incarnation: 1, id: 'plugin:stable', url: '/assets/1/stable.js' }],
       unavailable: [],
     }
     let stagedDisposals = 0
@@ -204,33 +206,33 @@ describe('BrowserEntryLoader', () => {
     await root.plugin(BrowserExtensionRegistry)
     await root.plugin(SchemaUIRegistry)
     await root.plugin(BrowserConsoleClient, { environment: browserEnvironment(() => manifest) })
-    await root.plugin(BrowserEntryLoader, { moduleImporter: importer })
+    await root.plugin(BrowserEntryLoader, { moduleImporter: importer, watch: false })
 
-    manifest = {
+    manifest = { epoch: 'registry-1',
       revision: 2,
       entries: [
-        { id: 'plugin:a-stage', url: '/assets/2/a-stage.js' },
-        { id: 'plugin:z-bad', url: '/assets/2/z-bad.js' },
+        { incarnation: 1, id: 'plugin:a-stage', url: '/assets/2/a-stage.js' },
+        { incarnation: 1, id: 'plugin:z-bad', url: '/assets/2/z-bad.js' },
       ],
       unavailable: [],
     }
     await expect(root.webuiLoader.reconcile()).resolves.toBe(false)
     expect(stagedDisposals).toBe(1)
-    expect(root.webuiExtensions.getSnapshotRevision()).toBe(1)
-    expect(root.webuiExtensions.listPages().map(page => page.path)).toEqual(['/stable'])
+    expect(root.webuiExtensions.getSnapshotRevision()).toBe(2)
+    expect(root.webuiExtensions.listPages()).toEqual([])
     expect(root.webuiLoader.getState()).toMatchObject({
       status: 'ERROR',
-      revision: 1,
-      entries: ['plugin:stable'],
+      revision: 2,
+      entries: [],
       error: { code: 'ENTRY_MODULE_INVALID' },
     })
     await root.fiber.dispose()
   })
 
   it('rolls back staged fibers when atomic registry activation rejects a collision', async () => {
-    let manifest: ConsoleEntryManifest = {
+    let manifest: ConsoleEntryManifest = { epoch: 'registry-1',
       revision: 1,
-      entries: [{ id: 'plugin:stable', url: '/assets/1/stable.js' }],
+      entries: [{ incarnation: 1, id: 'plugin:stable', url: '/assets/1/stable.js' }],
       unavailable: [],
     }
     let stagedDisposals = 0
@@ -246,11 +248,14 @@ describe('BrowserEntryLoader', () => {
       id: 'core:home', version: 1, path: '/core', title: 'Core', component: null,
     })
     await root.plugin(BrowserConsoleClient, { environment: browserEnvironment(() => manifest) })
-    await root.plugin(BrowserEntryLoader, { moduleImporter: importer })
+    await root.plugin(BrowserEntryLoader, { moduleImporter: importer, watch: false })
 
-    manifest = {
+    manifest = { epoch: 'registry-1',
       revision: 2,
-      entries: [{ id: 'plugin:collision', url: '/assets/2/collision.js' }],
+      entries: [
+        { incarnation: 1, id: 'plugin:stable', url: '/assets/1/stable.js' },
+        { incarnation: 1, id: 'plugin:collision', url: '/assets/2/collision.js' },
+      ],
       unavailable: [],
     }
     await expect(root.webuiLoader.reconcile()).resolves.toBe(false)
@@ -264,17 +269,17 @@ describe('BrowserEntryLoader', () => {
   })
 
   it('rejects an unavailable initial snapshot', async () => {
-    const manifest: ConsoleEntryManifest = {
+    const manifest: ConsoleEntryManifest = { epoch: 'registry-1',
       revision: 1,
       entries: [],
-      unavailable: [{ id: 'plugin:missing', code: 'SOURCE_UNRESOLVABLE' }],
+      unavailable: [{ incarnation: 1, id: 'plugin:missing', code: 'SOURCE_UNRESOLVABLE' }],
     }
     const root = new Context()
     await root.plugin(BrowserExtensionRegistry)
     await root.plugin(SchemaUIRegistry)
     await root.plugin(BrowserConsoleClient, { environment: browserEnvironment(() => manifest) })
 
-    await expect(root.plugin(BrowserEntryLoader)).rejects.toMatchObject<Partial<BrowserEntryLoaderError>>({
+    await expect(root.plugin(BrowserEntryLoader, { watch: false })).rejects.toMatchObject<Partial<BrowserEntryLoaderError>>({
       code: 'ENTRY_SOURCE_UNAVAILABLE',
     })
     expect(root.webuiExtensions.getSnapshotRevision()).toBeUndefined()
@@ -282,9 +287,9 @@ describe('BrowserEntryLoader', () => {
   })
 
   it('rejects cross-origin Entry module URLs before importing code', async () => {
-    const manifest: ConsoleEntryManifest = {
+    const manifest: ConsoleEntryManifest = { epoch: 'registry-1',
       revision: 1,
-      entries: [{ id: 'plugin:remote', url: 'https://untrusted.example/entry.js' }],
+      entries: [{ incarnation: 1, id: 'plugin:remote', url: 'https://untrusted.example/entry.js' }],
       unavailable: [],
     }
     const importer = vi.fn<BrowserEntryModuleImporter>()
@@ -293,7 +298,7 @@ describe('BrowserEntryLoader', () => {
     await root.plugin(SchemaUIRegistry)
     await root.plugin(BrowserConsoleClient, { environment: browserEnvironment(() => manifest) })
 
-    await expect(root.plugin(BrowserEntryLoader, { moduleImporter: importer }))
+    await expect(root.plugin(BrowserEntryLoader, { moduleImporter: importer, watch: false }))
       .rejects.toMatchObject<Partial<BrowserEntryLoaderError>>({ code: 'ENTRY_URL_CROSS_ORIGIN' })
     expect(importer).not.toHaveBeenCalled()
     await root.fiber.dispose()

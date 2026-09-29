@@ -83,6 +83,9 @@ export class BrowserConsoleSubscriptions {
       resolveReady = resolve
       rejectReady = reject
     })
+    // Connection setup may fail before subscribe() reaches its await of ready.
+    // Keep that cancellation observed; the caller still receives the setup error.
+    void ready.catch(() => undefined)
     const subscription: DesiredSubscription = {
       id,
       procedure: `${ref.id}@${ref.version}`,
@@ -140,13 +143,16 @@ export class BrowserConsoleSubscriptions {
           socket.close(1011, 'console reconciliation failed')
         })
       }, { once: true })
-      socket.addEventListener('message', event => this.handleMessage(event), false)
+      socket.addEventListener('message', event => {
+        if (this.socket === socket && !this.disposed) this.handleMessage(event)
+      }, false)
       socket.addEventListener('error', () => {
         if (!opened) reject(new Error('console WebSocket connection failed'))
       })
       socket.addEventListener('close', () => {
-        if (this.socket === socket) this.socket = undefined
         if (!opened) reject(new Error('console WebSocket closed before opening'))
+        if (this.socket !== socket) return
+        this.socket = undefined
         this.connection = undefined
         if (this.disposed || !this.desired.size) {
           this.setState('DISCONNECTED')
@@ -167,6 +173,7 @@ export class BrowserConsoleSubscriptions {
   private async handleOpen(socket: WebSocket, reconnecting: boolean): Promise<void> {
     if (this.socket !== socket || this.disposed) return
     if (reconnecting) await this.ctx.parallel('numen/console-reconcile')
+    if (this.socket !== socket || this.disposed) return
     this.hasConnected = true
     for (const subscription of this.desired.values()) this.sendSubscribe(subscription)
     this.setState('READY')
