@@ -2,6 +2,18 @@
 
 Numen is a Cordis-native, plugin-first personal automation runtime. The current implementation includes host/configuration loading, durable SQLite storage, authenticated encrypted Credentials, fixed-version Connection secret snapshots, content-addressed local Resources with Owner/Lease GC and transactional Scheduler ownership, stable Capability, Connection Type, Adapter, and READY Runtime injection contracts, a shared proxy-aware outbound HTTP substrate, bounded HTTP Request, network-free Echo, and cron Schedule integrations, typed Console procedures with authenticated transports, atomic frontend Entry generations, revision-fenced asset delivery, and Effect-owned Page/Slot registries, generation-fenced Connection runtimes, Automation Draft authoring, deterministic Core IR compilation, immutable Revision publishing, Active Revision trigger subscriptions, durable event acceptance, and a single-node Scheduler with durable Parallel, first-success Race, and bounded ForEach scopes, Run/Execution/Attempt journaling, retry, timeout, cancellation, and restart recovery.
 
+
+The current development track is Console and editor completion, not publication. Default v2
+configuration uses independent `console: {}` and `workbench: {}` product entries. Native user
+groups organize other instances without exposing product internals. Version 1 configuration
+keeps its legacy loading semantics; use `pnpm numen config migrate --config <path>` to review
+an explicit migration plan. See [configuration and lifecycle](docs/01-runtime-loader-hmr.md)
+and [the current verification record](docs/verification/console-editor-2026-09-28.md).
+
+The editor now includes structured authoring, protected local field input, explicit version and
+Trigger status, published-Revision trial runs, and bounded classified Execution inspection.
+See [M3 verification and remaining Draft snapshot scope](docs/verification/editor-debugging-2026-09-28.md).
+
 ## Prerequisites
 
 - Node.js 22+

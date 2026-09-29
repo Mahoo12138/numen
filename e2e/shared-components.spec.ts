@@ -27,7 +27,7 @@ test.beforeAll(async () => {
   const port = await availablePort()
   const configPath = join(directory, 'numen.config.yml')
   await writeConfig(configPath, {
-    version: 1,
+    version: 2,
     dataDir: 'data',
     logger: { console: false, capacity: 250, levels: { base: 2, e2e: 3 } },
     plugins: {
@@ -44,24 +44,8 @@ test.beforeAll(async () => {
       scheduler: { autoDispatch: false },
       triggers: {},
       console: {},
-      consoleEntries: {},
-      consoleAuth: {},
       server: { host: '127.0.0.1', port },
       workbench: {},
-      workbenchAutomationAuthoring: {},
-      workbenchAutomationActivation: {},
-      workbenchAutomationCatalog: {},
-      workbenchAutomations: {},
-      workbenchConnections: {},
-      workbenchCredentials: {},
-      workbenchHome: {},
-      workbenchLogs: {},
-      workbenchInvalidation: {},
-      workbenchRuns: {},
-      consoleSession: {},
-      consoleAssets: { mode: 'prod' },
-      consoleHttp: {},
-      consoleWs: {},
       health: {},
       readiness: {},
     },

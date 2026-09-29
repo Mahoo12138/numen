@@ -1,0 +1,10 @@
+{
+  "cleanCompile": true,
+  "indexImportsPagesJs": true,
+  "pagesJsEmitted": false,
+  "pagesJsxEmitted": true,
+  "indexImportsShellJs": true,
+  "shellJsEmitted": false,
+  "shellJsxEmitted": true,
+  "serverPluginJsEmitted": true
+}

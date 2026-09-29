@@ -1,0 +1,149 @@
+import { expect, test, type Page } from '@playwright/test'
+import { writeConfig } from '../packages/config/dist/index.js'
+import { startRuntime, type NumenApplication } from '../packages/runtime/dist/index.js'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
+let application: NumenApplication, directory: string, configPath: string, automationId: string, runId: string
+test.beforeAll(async () => {
+  directory = await mkdtemp(join(tmpdir(), 'numen-management-e2e-')); configPath = join(directory, 'numen.config.yml')
+  await writeConfig(configPath, { version: 2, dataDir: 'data', logger: { console: false }, plugins: {
+    database: { path: 'data/numen.db' }, capabilities: {}, controls: {}, coreControls: {}, credentials: {}, resources: { path: 'data/resources' }, connections: {},
+    demo: {}, automations: {}, scheduler: { autoDispatch: false }, triggers: {}, console: {}, server: { host: '127.0.0.1', port: 0 }, workbench: {},
+  } })
+  application = await startRuntime({ configPath })
+  const created = application.context.automations.create({ name: 'Management linked Automation', source: { triggers: [], flow: { type: 'block', id: 'root', steps: [] } } })
+  automationId = created.automation.id
+  const revision = application.context.automations.publishDraft(automationId, 1)
+  application.context.automations.activateRevision(automationId, revision.id)
+  for (let index = 0; index < 25; index++) {
+    runId = application.context.scheduler.startManual(automationId).id
+    await application.context.scheduler.dispatchUntilIdle()
+  }
+  runId = application.context.scheduler.listRuns(1)[0]!.id
+})
+test.afterAll(async () => { await application?.stop(); if (directory) await rm(directory, { recursive: true, force: true }) })
+
+async function plugins(page: Page) {
+  await page.getByRole('button', { name: 'Plugins', exact: true }).click()
+  await expect(page.locator('.plugin-row').first()).toBeVisible()
+}
+async function apply(page: Page) {
+  await page.getByRole('button', { name: 'Save and apply this change', exact: true }).click()
+  await expect(page.getByText('Configuration saved; runtime application completed.', { exact: true })).toBeVisible()
+}
+test('edits group state with preview, protects management, and reconciles one lost response', async ({ page }, testInfo) => {
+  test.setTimeout(90_000)
+  const errors: string[] = []; page.on('pageerror', error => errors.push(error.message))
+  page.on('console', event => { if (event.type() === 'error' && !(event.location().url.endsWith('/api/console/call') && /Failed to load resource: (the server responded with a status of 409|net::ERR_FAILED)/.test(event.text()))) errors.push(event.text()) })
+  await page.goto(application.workbenchUrl!)
+  await plugins(page)
+  const workbench = page.locator('[data-entry-id="workbench"]')
+  await expect(workbench.getByRole('button', { name: 'Disable', exact: true })).toBeDisabled()
+  await page.getByRole('button', { name: 'Create group', exact: true }).click()
+  const editor = page.locator('.plugin-editor')
+  await editor.getByLabel('Stable group identifier', { exact: true }).fill('acceptance')
+  await editor.getByLabel('Display label', { exact: true }).fill('Acceptance group')
+  await editor.getByRole('button', { name: 'Preview change', exact: true }).click()
+  await expect(page.locator('.plugin-preview')).toContainText('Impact is not fully known')
+  await apply(page)
+  const group = page.locator('[data-entry-id="group-acceptance"]')
+  await expect(group).toBeVisible()
+
+  const demo = page.locator('[data-entry-id="demo"]')
+  await demo.getByRole('button', { name: 'Edit instance', exact: true }).click()
+  await editor.getByLabel('Operation', { exact: true }).selectOption('move')
+  await editor.getByLabel('Parent group', { exact: true }).selectOption('group-acceptance')
+  await editor.getByRole('button', { name: 'Preview change', exact: true }).click()
+  await apply(page)
+  await expect(demo).toContainText('group-acceptance / demo')
+  await expect(group.getByRole('button', { name: 'Remove empty group', exact: true })).toBeDisabled()
+  await group.getByRole('button', { name: 'Disable', exact: true }).click(); await apply(page)
+  await expect(demo).toContainText('Disabled by parent group')
+  await group.getByRole('button', { name: 'Enable', exact: true }).click(); await apply(page)
+
+  await group.getByRole('button', { name: 'Edit instance', exact: true }).click()
+  await editor.getByLabel('Display label', { exact: true }).fill('Recovered response group')
+  await editor.getByRole('button', { name: 'Preview change', exact: true }).click()
+  const state = await application.context.hostConfig.read()
+  await application.context.hostConfig.apply({ fingerprint: state.fingerprint, operation: { kind: 'setLabel', id: 'group-acceptance', label: 'Changed in another session' } })
+  await page.getByRole('button', { name: 'Save and apply this change', exact: true }).click()
+  await expect(page.getByText(/Configuration changed. Refresh the current state/)).toBeVisible()
+  await expect(editor.getByLabel('Display label', { exact: true })).toHaveValue('Recovered response group')
+  await expect(group).toContainText('Changed in another session')
+  await editor.getByRole('button', { name: 'Preview change', exact: true }).click()
+  let writes = 0
+  await page.route('**/api/console/call', async route => {
+    if (route.request().postDataJSON()?.procedure !== 'numen:plugin-apply@1') return route.continue()
+    writes++; await route.fetch(); await route.abort('failed')
+  })
+  await page.getByRole('button', { name: 'Save and apply this change', exact: true }).click()
+  await expect(page.getByText(/The response did not confirm the outcome/)).toBeVisible()
+  await expect(group).toContainText('Recovered response group')
+  expect(writes).toBe(1)
+  expect(await readFile(configPath, 'utf8')).toContain('Recovered response group')
+  await page.unroute('**/api/console/call')
+  await editor.getByRole('button', { name: 'Cancel', exact: true }).click()
+  await page.locator('.plugins-page').evaluate(element => { element.scrollTop = 0 })
+  await page.screenshot({ path: testInfo.outputPath('plugins-desktop.png'), fullPage: true })
+  await page.setViewportSize({ width: 900, height: 800 })
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await page.screenshot({ path: testInfo.outputPath('narrow-desktop.png'), fullPage: true })
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.getByRole('button', { name: 'Language', exact: true }).click()
+  await page.getByRole('option', { name: '简体中文', exact: true }).click()
+  await expect(page.getByRole('heading', { name: '插件', exact: true })).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await page.screenshot({ path: testInfo.outputPath('plugins-mobile-zh.png'), fullPage: true })
+  expect(errors).toEqual([])
+})
+
+test('links Home objects and preserves Run filters across details, logs, reload and browser history', async ({ page }, testInfo) => {
+  const errors: string[] = []; page.on('pageerror', error => errors.push(error.message))
+  page.on('console', event => { if (event.type() === 'error') errors.push(event.text()) })
+  await page.goto(application.workbenchUrl!)
+  await page.locator('.home-section').first().getByRole('button', { name: 'Management linked Automation', exact: true }).click()
+  await expect(page).toHaveURL(new RegExp(`automation=${automationId}`))
+  await expect(page.getByRole('heading', { name: 'Management linked Automation', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Runs', exact: true }).click()
+  await page.getByLabel('Status', { exact: true }).selectOption('COMPLETED')
+  await expect(page).toHaveURL(/status=COMPLETED/)
+  await page.getByRole('button', { name: 'Next', exact: true }).click()
+  await expect(page).toHaveURL(/cursor=/)
+  const pageTwoUrl = page.url()
+  await page.getByRole('button', { name: /^Open Run / }).first().click()
+  await page.reload()
+  await page.getByRole('button', { name: 'Back to Runs', exact: true }).click()
+  await expect(page).toHaveURL(pageTwoUrl)
+  await page.getByRole('button', { name: 'Previous', exact: true }).click()
+  await expect(page).not.toHaveURL(/cursor=/)
+  await page.getByRole('button', { name: `Open Run ${runId}`, exact: true }).click()
+  await page.getByRole('button', { name: 'Timeline', exact: true }).click()
+  await page.reload()
+  await page.getByRole('button', { name: 'Back to Runs', exact: true }).click()
+  await expect(page.getByLabel('Status', { exact: true })).toHaveValue('COMPLETED')
+  await page.getByRole('button', { name: `Open Run ${runId}`, exact: true }).click()
+  await page.getByRole('button', { name: 'View runtime logs', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'System', exact: true })).toBeVisible()
+  await expect(page.locator('.system-check')).toHaveCount(5)
+  await expect(page.locator('.system-check').first()).toContainText('Migration version')
+  await page.getByRole('button', { name: 'Back to Run', exact: true }).click()
+  await expect(page).toHaveURL(new RegExp(`/runs/${runId}/flow`))
+  await page.getByRole('button', { name: 'System', exact: true }).click()
+  await page.goBack()
+  await expect(page).toHaveURL(new RegExp(`/runs/${runId}/flow`))
+  await page.goForward()
+  await expect(page.locator('.system-check')).toHaveCount(5)
+  await page.screenshot({ path: testInfo.outputPath('system-desktop.png'), fullPage: true })
+  await page.setViewportSize({ width: 900, height: 800 })
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await page.screenshot({ path: testInfo.outputPath('narrow-desktop.png'), fullPage: true })
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.getByRole('button', { name: 'Language', exact: true }).click()
+  await page.getByRole('option', { name: '简体中文', exact: true }).click()
+  await expect(page.getByRole('heading', { name: '系统', exact: true })).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await page.screenshot({ path: testInfo.outputPath('system-mobile-zh.png'), fullPage: true })
+  expect(errors).toEqual([])
+})

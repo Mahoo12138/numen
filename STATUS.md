@@ -1,6 +1,6 @@
 # Numen Development Status
 
-> Last updated: 2026-09-24
+> Last updated: 2026-09-29
 >
 > Architecture baseline: V1 Draft in [`docs/`](docs/README.md)
 
@@ -253,7 +253,49 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 
 ## Next
 
-1. Registry publication remains a separate operation: confirm registry/visibility/platforms, complete cold backup/restore acceptance, and upload/pull-test the image digest. See [the release checklist](docs/17-mvp-release.md).
+The current development track is Console/Workbench product completion, following the 2026-09-28 r2 plan. Publication is deferred; historical release preparation below is retained as history.
+
+M0/M1 foundation implemented and verified: independent Console/Workbench composition,
+v2 native groups and explicit migration, v1 compatibility, two sets of ten lifecycle cycles,
+80 test files / 395 tests, seven browser cases, production assets, and six public-package
+consumer checks. Scope and remaining distribution boundaries are recorded in
+[Console/editor verification](docs/verification/console-editor-2026-09-28.md).
+
+M2 structure editing implemented and verified: explicit insertion targets, nested container/branch
+editing, safe copy/cut/move commands, Source/Presentation undo and autosave, collapse/Outline,
+and field-focus/readonly navigation fixes. Current verification: 81 test files / 424 tests,
+nine production-browser cases, typecheck, and build. Desktop and bilingual mobile evidence is in
+[Structure editor verification](docs/verification/editor-structure-2026-09-28.md).
+Internal development APIs are updated directly; this is not a release or a new compatibility track.
+
+M3-01–04 implemented and verified: metadata-driven Inspector fields and supported execution
+policies, local-input/document leave protection, distinct saved/published/active/enabled and
+Trigger-runtime states, fixed published-Revision trial runs, durable request recovery, and
+bounded classified Execution data with Source navigation. Verification: 90 test files / 458 tests,
+17 production-browser cases, typecheck, production build and independently bundled example.
+See [Configuration and debugging verification](docs/verification/editor-debugging-2026-09-28.md).
+
+1. M3-05: [Draft snapshot persistence design](docs/23-draft-test-snapshot-design.md) is ready for review; saved-Draft capture and Run-lifetime retention await a data-model decision. Draft snapshot execution is not implemented.
+2. M5 follow-up: implement reliable business-object-to-plugin ownership diagnostics and direct navigation (scenario E). Combined failure/recovery, editor protection, subscriptions, configuration reconciliation, and restart acceptance now pass; the full milestone remains open for that navigation gap.
+
+M4 implemented and verified: shared Command Center/toolbar/keyboard actions, host-owned
+configuration CAS and separate saved/applied results, plugin/group management and management-channel
+protection, Console-owned live Entry invalidation with surviving Draft preservation, real System
+health, Connection usage, and stable cross-page Run filters/pagination. Verification: 98 test files /
+490 tests, 23 production-browser cases, typecheck, production build and independently bundled example.
+See [Console management verification](docs/verification/console-management-2026-09-28.md) and
+[Host configuration verification](docs/verification/host-config-management-2026-09-28.md).
+
+M5 acceptance on 2026-09-29: 98 unit-test files / 490 tests, 24 production-browser cases,
+typecheck, production and example builds, CLI checks, and six public-package local consumer
+checks pass. A combined browser case covers grouped dependency failure/recovery, a lost
+configuration response, WebSocket reconnection, Entry reload, in-flight Draft conflict,
+pending-input preservation, stable-ID movement and Host restart. See the
+[acceptance matrix and remaining gap](docs/verification/product-acceptance-2026-09-29.md).
+
+Draft snapshot execution remains unimplemented. M5 is not marked complete because exact
+Connection/Capability-to-plugin-instance diagnostics are still missing. Plugin dependency
+impact and unavailable package versions remain explicitly unknown; no release work was performed.
 
 ### Local 0.1.0 baseline
 
@@ -364,7 +406,7 @@ pnpm dev
 - The current Scheduler executes the Core IR subset emitted by the compiler, including retry, timeout, cancellation, recovery, and structured concurrency.
 - Parallel, first-success Race, and bounded ForEach use durable Execution scopes with interruptible concurrent dispatch; Try/Finally control flow remains planned work.
 - Typed Console transports, browser sessions, Browser Cordis clients, frontend extension registries, atomic Entry generations, authenticated revision-fenced asset delivery, and Browser Entry reconciliation/rollback are operational. Generated bootstrap tokens and sessions rotate on restart; the CLI prints a fragment-only Workbench launch URL only with explicit `--print-launch-url` authorization.
-- The responsive Workbench shell, ten registered core Page routes, stable browser Route/Page reconciliation, a secret-free production bootstrap, and authenticated core Entry loading are operational through the default Runtime. Home, Automations, the keyset-paginated Runs index, bounded Run Flow/Timeline/Context detail with cancellation controls, and the desired/runtime-separated Connections index display live data and refresh through coalesced typed invalidations without replacing server truth in the browser. Automation authoring now supports registry-driven Capability/control insertion, plugin-owned Schema Literal renderers, unified Literal/Reference/Template/structured Call inputs, scope-aware typed Magic Variables, named Connection bindings, expression-backed Wait duration/until editing, same-sequence step movement and subtree deletion, bounded undo/redo, debounced full-document autosave, explicit conflict recovery, immutable Revision publish, explicit Revision activation and enable/disable controls, and source-linked diagnostics. Automation `input.*` has optional typed declarations with defaults and a Settings editor; the Runs tab has a Revision-bound manual parameter form and Automation-scoped history with status filters, keyset pagination, and live updates. `vars.*` remains manually addressable without a declaration schema; conflict comparison and save-copy recovery are operational; force overwrite and automatic merging remain outside V1. Plugin-owned Control definitions now drive the live insert catalog and extension input fields.
+- The responsive Workbench shell, ten registered core Page routes, stable browser Route/Page reconciliation, a secret-free production bootstrap, and authenticated core Entry loading are operational through the default Runtime. Home, Automations, the keyset-paginated Runs index, bounded Run Flow/Timeline/Context detail with cancellation controls, and the desired/runtime-separated Connections index display live data and refresh through coalesced typed invalidations without replacing server truth in the browser. Automation authoring now supports registry-driven Capability/control insertion, plugin-owned Schema Literal renderers, unified Literal/Reference/Template/structured Call inputs, scope-aware typed Magic Variables, named Connection bindings, expression-backed Wait duration/until editing, targeted nested insertion, container/branch editing, safe subtree copy/cut/move, persistent collapse and Outline navigation, bounded undo/redo, debounced full-document autosave, explicit conflict recovery, immutable Revision publish, explicit Revision activation and enable/disable controls, and source-linked diagnostics. Automation `input.*` has optional typed declarations with defaults and a Settings editor; the Runs tab has a Revision-bound manual parameter form and Automation-scoped history with status filters, keyset pagination, and live updates. `vars.*` remains manually addressable without a declaration schema; conflict comparison and save-copy recovery are operational; force overwrite and automatic merging remain outside V1. Plugin-owned Control definitions now drive the live insert catalog and extension input fields.
 - Manual Runs accept declared parameters from the active Revision (even with Trigger subscriptions disabled), durably deduplicate browser submissions, recover uncertain responses, and event Trigger subscriptions are supported. The built-in `schedule:cron` Trigger supports five-field schedules and IANA timezones; missed-run catch-up is not synthesized. Declarations support five top-level value types; nested schema constraints and enums remain outside this module. Omitted declarations preserve legacy open input objects. State Trigger transition detection, filtering, debounce, and throttle remain planned work.
 - Connection desired state, explicit Type/Adapter contracts, READY Runtime injection, generation-fenced create/update/delete/enable Actions, Adapter Schema configuration UI, generation-fenced Runtime recreation, and metadata-only Credential selection are operational. Credential metadata, creation/rotation/deletion Actions and UI are operational; automatic reconnect policy remains planned work. The shared outbound HTTP substrate supports scoped clients, timeout, cancellation, status errors, explicit proxy configuration, `NUMEN_HTTP_PROXY`, HTTP(S)/SOCKS proxy protocols, and host-owned `NO_PROXY` rules with per-redirect routing; CIDR, DNS-resolved address matching, and PAC remain outside this module. The built-in bounded `http:request` Action supports text/JSON requests and responses but not multipart, binary Resource output, cookie jars, or per-step proxy selection. The Echo demo has no Connection or Credential and therefore does not validate a Credential-backed external Integration. Credential writes require an available type plugin and a configured runtime master key. Non-object secret contracts require a plugin-provided editor.
 - Credential payloads use authenticated encryption with environment-provided keys; key-ring migration and external vault providers remain planned work.

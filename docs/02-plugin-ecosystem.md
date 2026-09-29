@@ -1,5 +1,18 @@
 # 02. Numen 插件生态：Registry、Marketplace、Installer
 
+## 当前产品边界
+
+| 对象 | 归属与作用 |
+| --- | --- |
+| npm 插件包 | `@numenjs/console` 与 `@numenjs/workbench` 是两个独立包；本轮不发布。 |
+| 用户插件实例 | v2 的 `console`、`workbench` 分别装配各自产品，默认每类最多一个实例。 |
+| 内部子插件 | 包作者通过父 Context 装配；保留可导入 API 不代表允许 v2 独立配置。 |
+| 用户分组 | `group:<ident>` 组织多个独立实例，保留成员启用意图；不安装包或共享凭据。 |
+
+Workbench 依赖 Console，不属于 Console 的子插件。禁用 Workbench 不应销毁 Console
+的通用服务或其他插件 Entry；Console 恢复也不能复活用户明确禁用的 Workbench。
+Marketplace、Installer 与在线升级仍是后续设计，本轮只处理本地配置和生命周期。
+
 ## 1. 四层职责
 
 ```text

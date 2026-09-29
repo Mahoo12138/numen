@@ -26,7 +26,7 @@ test.beforeAll(async () => {
   const port = await availablePort()
   const configPath = join(directory, 'numen.config.yml')
   await writeConfig(configPath, {
-    version: 1,
+    version: 2,
     dataDir: 'data',
     logger: { console: false, capacity: 250, levels: { base: 2, e2e: 3 } },
     plugins: {
@@ -43,24 +43,8 @@ test.beforeAll(async () => {
       scheduler: { autoDispatch: false },
       triggers: {},
       console: {},
-      consoleEntries: {},
-      consoleAuth: {},
       server: { host: '127.0.0.1', port },
       workbench: {},
-      workbenchAutomationAuthoring: {},
-      workbenchAutomationActivation: {},
-      workbenchAutomationCatalog: {},
-      workbenchAutomations: {},
-      workbenchConnections: {},
-      workbenchCredentials: {},
-      workbenchHome: {},
-      workbenchLogs: {},
-      workbenchInvalidation: {},
-      workbenchRuns: {},
-      consoleSession: {},
-      consoleAssets: { mode: 'prod' },
-      consoleHttp: {},
-      consoleWs: {},
       health: {},
       readiness: {},
     },
@@ -143,7 +127,7 @@ test('publishes the latest focused field edit with one click', async ({ page }) 
   await page.getByRole('button', { name: 'Activate Revision 1' }).click()
   await expect(page.getByText('Active r1', { exact: true })).toBeVisible()
   await page.getByRole('tab', { name: 'Runs' }).click()
-  await page.getByText('Run manually', { exact: true }).first().click()
+  await page.getByText('Run a published version', { exact: true }).first().click()
   const startRun = page.getByRole('button', { name: 'Start Run', exact: true })
   const reloadParameters = page.getByRole('button', { name: 'Reload parameters', exact: true })
   await expect(startRun).toBeVisible()

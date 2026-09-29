@@ -1,0 +1,29 @@
+{
+  "archiveFiles": 413,
+  "assets": [
+    "package/dist/app/assets/index-B-FIgQnP.css",
+    "package/dist/app/index.html",
+    "package/dist/app/components.js",
+    "package/dist/app/assets/cordis-runtime-Dzq2nfYH.js",
+    "package/dist/app/cordis.js",
+    "package/dist/app/core-entry.js",
+    "package/dist/app/assets/index-C80YilDN.js",
+    "package/dist/app/assets/model-XaTKGix7.js",
+    "package/dist/app/assets/runtime-core.esm-bundler-DpQXMQzM.js",
+    "package/dist/app/assets/runtime-D3rfbLlV.js",
+    "package/dist/app/assets/runtime-dom.esm-bundler-CVsxjhCu.js",
+    "package/dist/app/vue.js"
+  ],
+  "assetReferencesChecked": 31,
+  "exportsChecked": 12,
+  "importAudit": {
+    "productImport": true,
+    "legacyRuntimeImport": true,
+    "serverHandlesAdded": 0,
+    "legacyLeaves": 11
+  },
+  "private": true,
+  "workspaceProtocolsRemaining": false,
+  "sourceFiles": 68,
+  "jsxFiles": 25
+}

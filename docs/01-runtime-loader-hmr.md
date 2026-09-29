@@ -1,5 +1,43 @@
 # 01. Numen Runtime、Loader、HMR、Server、CLI
 
+## 当前实现：两个产品入口与 v2 用户配置树
+
+完整默认界面使用两个独立入口，包名和生命周期所有权分别保留：
+
+```yaml
+version: 2
+dataDir: .numen
+plugins:
+  server: { host: 127.0.0.1, port: 5140 }
+  console: {}
+  workbench: {}
+  group:integrations:
+    $label: Integrations
+    $collapsed: false
+    plugins:
+      demo: {}
+      ~schedule: {}
+```
+
+这里省略了数据库、Scheduler 等独立宿主服务。Console 只装配 RPC、认证、Session、
+Transport 和通用 Entry 资产；Workbench 装配工作台及业务 Provider，消费 Console 服务，
+不创建 Console。只配置 Console 是合法用法。缺少领域依赖的 Workbench 子功能等待，
+不阻止其他子功能装配。两个父入口分别使用自己的 `ctx.plugin()` 和 Cordis Effect。
+
+用户分组是安装版 Loader 的原生 `Group`，不是 npm 包或产品子插件列表。组关闭不改写
+成员各自的启用意图；嵌套组共享原有服务可见性。实例 ID 在整树唯一，移动不改变 ID；
+显示名 `$label` 与身份分离。Safe Mode 递归限制第三方成员。分组移动可能重建 Context，
+不承诺零中断。CLI 配置/doctor 展示遵循同一配置树。
+
+v1 保持原有独立叶子装配语义，普通启动不改写配置。迁移先运行
+`pnpm numen config migrate --config <path>` 查看脱敏计划；明确执行才使用 `--apply --fingerprint <dry-run 输出的指纹>`，防止覆盖审阅后已变更的文件。
+不完整装配、部分组件禁用或不能证明等价的定制会报告冲突，不猜测启用意图。
+标准配置分别合并为 `console` 与 `workbench`；只有 Console 时不会新增 Workbench。
+迁移字段和兼容边界见 [本次核查记录](verification/console-editor-2026-09-28.md)。
+
+下面未标注为当前实现的 HMR、Supervisor 和 WebUI 管理内容仍是设计目标。
+完整配置 CAS、运行时应用对账和在线管理页面留在 M4；不要把 CLI 显式迁移当作这些能力。
+
 ## 1. Loader 定位
 
 Loader 采用 Koishi 的模型：**Host Bootstrap + Configuration Bridge**，不是数据库驱动的 PluginInstance Reconciler。

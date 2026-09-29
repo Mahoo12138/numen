@@ -1,6 +1,6 @@
 # 通用组件与 npm 发布
 
-官方包统一使用 `@numenjs/*`。这次搭建开发和发布流程，不执行远程发布。
+官方包统一使用 `@numenjs/*`。当前优先完善控制台与编辑器，只进行本地构建、回归和打包，不执行远程发布。
 
 ## 包边界
 
@@ -13,7 +13,7 @@
 | `packages/console` | 服务端 typed Console 与 Entry 协议 | `@numenjs/console` |
 | `packages/core` | 插件使用的领域 Contract | `@numenjs/core` |
 | `packages/i18n`、`packages/logging` | SDK 所依赖的共享服务 | 对应同名包 |
-| `packages/workbench` | 页面、业务状态、领域交互、宿主布局 | private 应用包 |
+| `packages/workbench` | 独立 Workbench 组合插件、页面、业务状态、领域交互、宿主布局 | 保持 private，不在本轮发布 |
 | 其余 `packages/*` | 现有服务、内置集成、Runtime、CLI | 暂时保持 private |
 | `examples/components-plugin` | 可独立构建、真实注册/卸载的示例插件 | private 示例 |
 
@@ -24,6 +24,18 @@ Console、Core、数据库或 Workbench；Schema 类型为 UI 层契约，领域
 已提取 SelectMenu、Button、StatePanel、FormSection，以及 string/number/boolean/enum/JSON/
 duration/ISO date-time 编辑器。Workbench 的选择器、Schema Registry、状态页、Inspector
 使用这些实现。Automation AST、Connection/Credential 服务等继续留在业务包，不作为通用控件暴露。
+
+具有本地文本缓冲的 Schema Literal Renderer 使用 `onDraftStateChange({ dirty, invalid })`
+同步上报尚未提交的输入状态，格式错误不能调用 `onCommit`。有效提交或组件卸载时清除状态；
+`onValidationChange` 同时服务于运行参数表单。Workbench 只登记状态，文本仍由 Renderer
+持有；明确丢弃通过重新挂载恢复当前 Source 值，不调用 `onCommit`。第三方 Renderer
+若缓存输入，也必须遵守该契约，Host 不能从插件私有状态推断尚未提交的文本。
+
+Console 的 root default 是组合插件，原有 SDK 命名导出保留。Workbench 的独立服务端
+组合入口是 `@numenjs/workbench/plugin`，原有浏览器 root 与 `/runtime` 保持兼容。
+Workbench 仍运行时依赖 private 的 Automation、Connections、Credentials、Scheduler 等
+领域包，错误类与 `instanceof` 语义保持；workspace 构建成功不代表可以独立从 npm 安装。
+生产资产仍在 `packages/workbench/dist/app`，Console 不反向导入 Workbench。
 
 ## 插件使用与共享运行时
 

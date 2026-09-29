@@ -1,0 +1,32 @@
+[
+  {
+    "antipattern": "overused-font",
+    "name": "Overused font",
+    "description": "Inter, Roboto, Fraunces, Geist, Plus Jakarta Sans, and Space Grotesk are used on so many sites they no longer feel distinctive. Each new wave of AI-generated UIs converges on the same handful of faces. Choose a face that gives your interface personality.",
+    "severity": "warning",
+    "category": "slop",
+    "file": "/Users/mahoo/Projects/numen/packages/workbench/src/styles.css",
+    "line": 4,
+    "snippet": "font-family: Inter"
+  },
+  {
+    "antipattern": "side-tab",
+    "name": "Side-tab accent border",
+    "description": "Thick colored border on one side of a card — the most recognizable tell of AI-generated UIs. Use a subtler accent or remove it entirely.",
+    "severity": "warning",
+    "category": "slop",
+    "file": "/Users/mahoo/Projects/numen/packages/workbench/src/styles.css",
+    "line": 143,
+    "snippet": ".activity-button[data-active=\"true\"]::before — absolute 3px pseudo-element stripe (left: 0)"
+  },
+  {
+    "antipattern": "side-tab",
+    "name": "Side-tab accent border",
+    "description": "Thick colored border on one side of a card — the most recognizable tell of AI-generated UIs. Use a subtler accent or remove it entirely.",
+    "severity": "warning",
+    "category": "slop",
+    "file": "/Users/mahoo/Projects/numen/packages/workbench/src/styles.css",
+    "line": 192,
+    "snippet": ".automation-row[data-active=\"true\"]::before — absolute 3px pseudo-element stripe (left: 0)"
+  }
+]

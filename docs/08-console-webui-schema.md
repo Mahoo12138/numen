@@ -1,5 +1,20 @@
 # 08. Numen Console、WebUI Extension、RPC 与 Schema UI
 
+## 2026-09-28 装配边界
+
+v2 使用 `console` 和 `workbench` 两个公开产品入口；Console root default 为组合插件，
+既有命名导出保留。Workbench 新增服务端 `@numenjs/workbench/plugin`，既有浏览器 root、
+`/contracts`、`/runtime` 和 `/server` 保持兼容。普通 import 不启动服务。
+
+包依赖保持 `Workbench → Console` 与 `Workbench → WebUI → Console`。通用 RPC、认证、
+Session、Transport、Entry registry/认证资产交付属于 Console；工作台 Procedure、Provider、
+HTML/CSS/JS 与共享浏览器 facade 由 Workbench 构建和注册。没有协议迁入 Core，也没有合包。
+后端与浏览器是各自的 Cordis 生命周期树，通过原有 Entry 协议协调。
+
+当前服务端 Entry 变化仍需浏览器重新获取清单（启动/重连）；主动失效通知和明确卸载与
+失败回滚的组合验收留在 M4。本次后端独立卸载验证不能代替在线浏览器卸载验收。
+
+
 ## 1. Browser 也是 Cordis Runtime
 
 参考 Koishi WebUI：

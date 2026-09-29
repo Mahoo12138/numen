@@ -39,16 +39,27 @@ If
 
 ### 当前 Canvas 结构编辑
 
-工具栏和选中步骤下方提供 Move up / Move down / Delete，均生成普通 Source command，复用完整文档 Undo/Redo 与乐观 autosave：
+结构编辑通过纯 Source commands 完成，复用完整文档 Undo/Redo 与乐观 autosave。当前开发版本直接采用显式目标接口，不保留省略目标的旧插入调用。
 
-- 排序仅交换同一 `Block.steps` 中的相邻成员。移动容器时整棵子树一起移动，保持 ID、表达式、Connection bindings 和执行策略。
-- 删除序列成员时删除其整棵子树。优先选中后一个兄弟节点，再选前一个；序列为空时选中可见的父 Block，根序列为空时清空选择。
-- 根 flow 不是 Block 时，删除它会生成保留根 ID 的空 Block，使 Source 继续保有合法 flow。根 Block 本身不作为可删除的 Canvas 行。
-- If 的 then/else、ForEach body、Parallel/Race branch Block 是结构插槽，不能当作序列成员独立删除或移动；它们内部的步骤可以编辑。Trigger 声明不属于这组命令。
-- 删除、排序不改变 presentation、已发布 Revision 或激活状态；Undo/Redo 恢复完整文档与选中节点。冲突恢复、重新加载和 Publish 期间禁用结构编辑。
-- 表达式引用不自动改写。新插入节点避开 Source 中仍被 `steps.*` 引用的 ID，避免删除后的旧引用静默指向新步骤。被删除或移到消费者之后的输出引用仍需用户检查；编译器对引用存在性、顺序和作用域的完整校验是下一模块。
+```ts
+type AutomationInsertTarget =
+  | { kind: 'block'; blockId: string; beforeNodeId?: string }
+  | { kind: 'triggers'; beforeTriggerId?: string }
+  | { kind: 'root'; beforeNodeId?: string }
+```
 
-跨 Block 移动、拖拽排序、独立增删分支/Trigger 和剪切复制不在当前模块范围内。
+- Block 目标支持指定步骤前插入和追加；步骤后的入口转换为下一个兄弟节点前或 Block 尾部。Quick Picker 打开时捕获目标，执行时重新校验，失效时保持草稿不变并报告错误，不回落根流程。非 Block 根流程使用显式 root 目标扩展为 Block，已有节点 ID 保持不变。
+- If 的 then/else、ForEach body、Parallel/Race branch 都有容器内插入入口和空状态。If 可添加/移除 else；Parallel/Race 至少保留两个分支。必需的结构插槽只能清空内容，不能作为普通步骤删除或移动。删除非空分支和清空容器先说明影响，再以一次操作执行。
+- Trigger 保持顶层 OR 语义，支持插入、排序、复制和删除，不可移入普通 flow。
+- 同容器排序、跨 Block 移动和剪切粘贴保持整个子树的 ID、表达式、Connection bindings 与执行策略。移动到自身后代、失效位置或错误类型的容器均被拒绝。剪切只记录待移动节点，成功粘贴后才修改 Source；节点删除或重新加载时清除待剪切状态。
+- 复制捕获 Source 与 Presentation 快照。粘贴为整棵子树分配新 ID，仅改写已识别 ValueExpr 中指向副本内部的引用；普通字面量与外部引用保持原值。含点 ID、重复 ID、不可解析引用或扩展载荷无法证明安全时禁用复制并说明限制。复制副本不依赖原节点继续存在。
+- ID 分配同时避开现存节点和仍被引用的节点 ID，防止悬空引用静默绑定到新节点。删除非 Block 根流程使用新 ID 的空 Block，旧根引用仍保持失效。
+- 跨作用域移动不重新绑定表达式；Publish 运行权威编译校验，Problems 定位到原 Source 节点和字段。
+- 每次变更使用同一份 Source、Presentation 和选择状态历史；Undo/Redo 恢复整棵子树和折叠状态，保存中的继续编辑不会被迟到响应覆盖。冲突恢复、重新加载和 Publish 期间禁用结构编辑。
+
+Canvas 显示分支和循环体的归属，支持折叠/展开。Outline 与 Problems 选择展开祖先容器，并滚动定位对应节点。可编辑时折叠状态保存在 Draft Presentation 中，刷新后恢复；复制容器映射其折叠状态，删除时清理被移除节点的折叠记录。归档或冲突等只读状态下，折叠/展开和大纲定位只改变当前视图，不保存 Presentation，也不解除编辑限制。
+
+拖拽尚未实现；目前通过菜单、明确目标和容器内入口操作。工具栏只保留已经接通的操作。
 
 ## 4. Control Flow vs Data Flow
 
@@ -106,6 +117,10 @@ Extension Slots
 
 Connection binding 与 input value 分离。
 
+字段展示默认值、必填、说明、Provider/Connection 可用性以及编译诊断。Literal 的字符串、数字、Duration、日期和 JSON，以及 Reference/Template 的临时文本保留在字段组件中；格式、范围或步进错误不会写回 Source。修正后的值通过现有 Source command 提交。切换字段模式、节点、页签或执行会替换输入的命令前，若仍有未提交内容，需要明确选择保留或丢弃；丢弃会恢复当前 Draft 值，不只清除提示。
+
+Execution Policy 仅编辑 Runtime 支持的 `timeoutMs`、`retry.maxAttempts` 与 `retry.backoffMs`，解释默认超时、总尝试次数和退避。Capability 未声明 `retrySafe` 时不提供新增重试配置；已有不安全重试可移除。Compiler 和 Runtime 仍负责最终校验，编辑器不提供“失败后继续”等未实现语义。
+
 ## 9. Magic Variables
 
 Variable Picker 来源：
@@ -122,6 +137,8 @@ error
 Ref 存稳定 ID，UI 显示 friendly name。
 
 Picker 做静态类型过滤与转换建议。
+
+变量候选保留来源节点 ID 和类型；尚不可用或不兼容的候选显示原因并禁用选择，避免静默消失。来源和选择都基于当前 Draft 的结构作用域，不使用运行时数据猜测引用。
 
 ## 10. Value Mode
 
@@ -156,19 +173,13 @@ Control/Renderer Plugin 缺失：
 
 - Source 原样保留
 - 显示 Unknown Control
-- 当前可查看节点身份，Source 和输入完整保留；恢复相同版本插件后继续编辑。作为序列成员的 Unknown Control 已支持同序列排序和整节点删除，不依赖插件定义。
+- 当前可查看节点身份，Source 和输入完整保留；恢复相同版本插件后继续编辑。作为序列成员的 Unknown Control 支持排序、跨容器移动和整节点删除，不依赖插件定义。复制所有扩展 Control 暂不可用，因为客户端命令层没有可证明其内部引用语义的契约。
 - Publish 因 compile dependency missing 被阻止，并定位原 Source 节点
 - 已发布 Revision 的 Run Flow 使用契约快照标题和指令 Source Map 聚合执行状态，不依赖实时 Control Registry
 
 ## 13. Presentation Metadata
 
-节点：
-
-```text
-x/y
-collapsed
-width
-```
+当前结构视图使用 `presentation.collapsedNodes: string[]` 保存折叠节点 ID。编辑器仅转换它拥有的 Presentation 字段，其余字段原样保留；不维护第二套节点或连线模型。
 
 与 Source semantics 分离。
 
@@ -238,13 +249,29 @@ FAILED
 
 Panel 提供 Timeline / Context / Logs。
 
+### 按需查看执行数据
+
+Execution/Attempt 行可显式打开 `numen:execution-data@1`。查询按 Run、Execution 和可选 Attempt 校验归属，只返回该 Execution 当前耐久输入输出；Attempt 链接不声称拥有独立的历史 I/O 快照。有效 Source 节点可与 Execution 列表双向定位，Runtime 内部指令不展示无效定位入口。
+
+可显示数据来自该 Run 固定 Revision 的契约快照，字段须显式标记 `schema.extra('extra', { numen: { execution: 'public' } })`。仅允许匹配 Schema 的标量叶子；容器不会继承公开权限。secret/password/resource 角色、敏感标记、Credential/Authorization/Cookie 等已知敏感字段优先隐藏；未知字段、无分类契约、自由字典和 ResourceRef 不展开。HTTP 内置契约只开放 method、timeoutMs、ok、status、bodyType，URL、Headers 和 Body 保持隐藏。插件作者应仅将确定可公开查看的字段标记为 public。
+
+每侧耐久 JSON 在 SQL 读取阶段限 64 KiB；投影限制深度 6、节点 128、数组 20 项、字符串 1024 字符、文本累计 8 KiB、每侧序列化 10 KiB、整个响应 24 KiB。接口要求认证并使用 `Cache-Control: no-store`；文本只在当前面板内按纯文本渲染，关闭或切换 Run 后丢弃并忽略迟到响应。数据不进入 URL、localStorage、全局日志或 HTML 注入路径；解析异常返回固定错误，不透传耐久数据片段。
+
+### 文档状态与离开保护
+
+顶部独立展示 Draft 版本及保存状态、最新发布版本、活动版本和 enabled 意图；Trigger 实际订阅健康另行显示，并校验激活代次，不能把 enabled 等同于已就绪。Trigger 服务缺失或卸载不阻塞 Draft 的查询和编辑。
+
+字段尚未提交时，状态栏明确显示本地输入状态，不将其称为已保存。合法聚焦输入在发布、归档前先提交并等待 Draft 保存；非法输入阻止发布/归档。切换 Automation、应用路由、浏览器前进/后退或关闭页面时，未提交字段和 DIRTY/SAVING/ERROR/CONFLICT 文档均受到保护。取消导航保留原文档和浏览器历史位置；确认丢弃后重新进入读取耐久 Draft。页签或节点切换只处理受影响的本地字段，已进入 Source 的编辑继续使用现有自动保存与撤销历史。浏览器不维护第二份 Draft 存储。
+
 ## Automation 输入和手动运行
 
 Settings 的 Automation inputs 表单编辑 Draft 的输入名称、类型、标签、说明、必填和默认值。修改通过 `SET_AUTOMATION_INPUTS` 命令进入完整文档历史，复用 Undo/Redo、自动保存和冲突保护。删除最后一个声明保留空契约；Allow undeclared inputs 明确移除契约。输入声明问题可从 Problems 跳到 Settings。Magic Variables 根据本地 Draft 的声明提供 `input.*` 选项及类型转换，不依赖运行状态。
 
-Runs 页通过 `numen:manual-run-form@1` Query 读取 Active Revision 的契约，复用 Schema Literal Renderers 生成参数表单。旧 Revision 没有声明时使用 JSON 对象输入。表单冻结加载时的 Revision ID；`numen:manual-run-start@1` Action 提交 `requestId`，由 Scheduler 核对 `expectedRevisionId`，并在同一事务中写入 Run、RunAccepted Journal 和请求内容指纹。相同 requestId 与相同 payload 的重试（包括进程重启后）返回原 runId；payload 不同返回 `409 MANUAL_RUN_REQUEST_CONFLICT`。浏览器在响应不确定时冻结原 payload 并提供安全重试。版本改变返回 409，用户显式 Reload parameters 后查看新契约。422 校验失败不会创建 Run，有效提交可通过 View Run 打开现有运行详情。
+Runs 页的“运行已发布版本”表单支持 `manual`（当前活动版本）与 `revision-test`（指定已发布版本）。`numen:manual-run-form@1` Query 接收 `{ automationId, mode, revisionId? }`，返回对应版本的输入契约及可选发布版本列表；未声明输入契约时使用 JSON 对象表单。试运行可以选择尚未激活的版本，且不改变 Draft、Active Revision、enabled、激活代次或 Trigger 订阅。
 
-手动运行不要求启用 Trigger 订阅，但必须先发布并激活 Revision。草稿或尚未激活的新 Revision 不影响运行表单。表单卸载会中止客户端请求，过期响应不会更新页面；这不撤销服务端可能已接受的 Run。无法确认提交结果时，可用冻结的 requestId 和原 payload 安全重试；只有服务端此前已接受的同一请求才返回原 Run。
+`numen:manual-run-start@1` Action 接收 `{ automationId, mode, revisionId, input, trigger, requestId }`。Trigger 数据显式填写为 JSON 值，不会重新调用触发器。Scheduler 根据该 Revision 的输入契约校验与填充默认值；manual 模式额外核对该版本仍为活动版本。接受时在同一事务中写入正常耐久 Run、带来源/Revision/requestId 的 RunAccepted Journal 和请求内容指纹。相同 requestId 与完整 payload 的重试（包括进程重启、激活变化和随后归档）返回原 runId；不同内容复用 ID 返回 `409 MANUAL_RUN_REQUEST_CONFLICT`。外部 Automation 的 Revision 和无效输入在接受前拒绝，不创建 Run。
+
+表单明确提示可能产生真实外部副作用。响应不确定时冻结原 mode/Revision/input/trigger/requestId，禁止切换版本、重新加载或更改参数，仅允许用同一请求安全恢复。View Run 打开耐久运行详情；Timeline 保留测试来源、版本和原请求 ID。表单卸载仅取消浏览器等待，不取消服务端已接受的 Run。当前 Draft 快照试运行尚未实现，持久性与回收方案见 [Draft 固定快照试运行设计建议](23-draft-test-snapshot-design.md)。
 
 JSON 编辑器保留未提交文本并上报本地格式状态；无效 JSON 会阻止手动运行提交。参数值回调不透传成原生 DOM `change` 监听器，避免把 Event 对象当成参数。
 
