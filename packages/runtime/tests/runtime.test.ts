@@ -19,7 +19,7 @@ afterEach(async () => {
 })
 
 describe('Numen runtime', () => {
-  it('boots the configured Cordis tree and exposes operational health', async () => {
+  it.each([1, 2] as const)('boots the v%i Cordis tree and exposes operational health', async (configVersion) => {
     const directory = await mkdtemp(join(tmpdir(), 'numen-runtime-'))
     temporaryDirectories.push(directory)
     const configPath = join(directory, 'numen.config.yml')
@@ -29,7 +29,7 @@ describe('Numen runtime', () => {
     await writeFile(join(workbenchRoot, 'index.html'), '<main id="root">Runtime Workbench</main>')
     await writeFile(workbenchEntry, 'export default function coreWorkbench() {}\n')
     await writeConfig(configPath, {
-      version: 1,
+      version: configVersion,
       dataDir: 'data',
       plugins: {
         database: { path: 'data/numen.db' },
@@ -47,25 +47,29 @@ describe('Numen runtime', () => {
         automations: {},
         scheduler: { autoDispatch: false },
         triggers: {},
-        console: {},
-        consoleEntries: {},
-        consoleAuth: { token: 'runtime-console-token', ownerId: 'runtime-owner' },
         server: { host: '127.0.0.1', port: 0 },
         workbench: { root: workbenchRoot, entrySource: workbenchEntry },
-        workbenchAutomationAuthoring: {},
-        workbenchAutomationActivation: {},
-        workbenchAutomationCatalog: {},
-        workbenchAutomations: {},
-        workbenchConnections: {},
-        workbenchCredentials: {},
-        workbenchHome: {},
-        workbenchLogs: {},
-        workbenchInvalidation: {},
-        workbenchRuns: {},
-        consoleSession: {},
-        consoleAssets: { mode: 'prod' },
-        consoleHttp: {},
-        consoleWs: {},
+        ...(configVersion === 2 ? {
+          console: { auth: { token: 'runtime-console-token', ownerId: 'runtime-owner' } },
+        } : {
+          console: {},
+          consoleEntries: {},
+          consoleAuth: { token: 'runtime-console-token', ownerId: 'runtime-owner' },
+          workbenchAutomationAuthoring: {},
+          workbenchAutomationActivation: {},
+          workbenchAutomationCatalog: {},
+          workbenchAutomations: {},
+          workbenchConnections: {},
+          workbenchCredentials: {},
+          workbenchHome: {},
+          workbenchLogs: {},
+          workbenchInvalidation: {},
+          workbenchRuns: {},
+          consoleSession: {},
+          consoleAssets: { mode: 'prod' },
+          consoleHttp: {},
+          consoleWs: {},
+        }),
         health: {},
         readiness: {},
       },
@@ -78,6 +82,10 @@ describe('Numen runtime', () => {
     expect(application.context.capabilities.get({ id: 'http:request', version: 1 })).toMatchObject({ providerAvailable: true })
     expect(application.context.capabilities.get({ id: 'schedule:cron', version: 1 })).toMatchObject({ providerAvailable: true })
     expect(application.context.console.list()).toEqual([
+      ...(configVersion === 2 ? [expect.objectContaining({
+        definition: expect.objectContaining({ id: 'console:entries-changed', version: 1, kind: 'subscription' }),
+        providerAvailable: true,
+      })] : []),
       expect.objectContaining({
         definition: expect.objectContaining({ id: 'numen:automation-activate-revision', version: 1, kind: 'action' }),
         providerAvailable: true,
@@ -146,6 +154,7 @@ describe('Numen runtime', () => {
         definition: expect.objectContaining({ id: 'numen:connection-update', version: 1, kind: 'action' }),
         providerAvailable: true,
       }),
+      expect.objectContaining({ definition: expect.objectContaining({ id: 'numen:connection-usage', version: 1, kind: 'query' }), providerAvailable: configVersion === 2 }),
       expect.objectContaining({
         definition: expect.objectContaining({ id: 'numen:connections-index', version: 1, kind: 'query' }),
         providerAvailable: true,
@@ -167,6 +176,10 @@ describe('Numen runtime', () => {
         providerAvailable: true,
       }),
       expect.objectContaining({
+        definition: expect.objectContaining({ id: 'numen:execution-data', version: 1, kind: 'query' }),
+        providerAvailable: true,
+      }),
+      expect.objectContaining({
         definition: expect.objectContaining({ id: 'numen:home-overview', version: 1, kind: 'query' }),
         providerAvailable: true,
       }),
@@ -174,6 +187,9 @@ describe('Numen runtime', () => {
       expect.objectContaining({ definition: expect.objectContaining({ id: 'numen:logs', version: 1, kind: 'query' }), providerAvailable: true }),
       expect.objectContaining({ definition: expect.objectContaining({ id: 'numen:manual-run-form', version: 1, kind: 'query' }), providerAvailable: true }),
       expect.objectContaining({ definition: expect.objectContaining({ id: 'numen:manual-run-start', version: 1, kind: 'action' }), providerAvailable: true }),
+      expect.objectContaining({ definition: expect.objectContaining({ id: 'numen:plugin-apply', version: 1, kind: 'action' }), providerAvailable: configVersion === 2 }),
+      expect.objectContaining({ definition: expect.objectContaining({ id: 'numen:plugin-preview', version: 1, kind: 'query' }), providerAvailable: configVersion === 2 }),
+      expect.objectContaining({ definition: expect.objectContaining({ id: 'numen:plugins', version: 1, kind: 'query' }), providerAvailable: configVersion === 2 }),
       expect.objectContaining({
         definition: expect.objectContaining({ id: 'numen:run-cancel', version: 1, kind: 'action' }),
         providerAvailable: true,
@@ -186,6 +202,7 @@ describe('Numen runtime', () => {
         definition: expect.objectContaining({ id: 'numen:runs-index', version: 1, kind: 'query' }),
         providerAvailable: true,
       }),
+      expect.objectContaining({ definition: expect.objectContaining({ id: 'numen:system', version: 1, kind: 'query' }), providerAvailable: configVersion === 2 }),
       expect.objectContaining({
         definition: expect.objectContaining({ id: 'numen:workbench-invalidation', version: 1, kind: 'subscription' }),
         providerAvailable: true,
@@ -225,7 +242,7 @@ describe('Numen runtime', () => {
       prod: workbenchEntry,
     }])
     expect(application.entries).toContainEqual(expect.objectContaining({
-      key: 'consoleWs', builtin: true, disabled: false,
+      key: configVersion === 1 ? 'consoleWs' : 'console', builtin: true, disabled: false,
     }))
     expect(application.entries).toContainEqual(expect.objectContaining({
       key: 'workbench', builtin: true, disabled: false,

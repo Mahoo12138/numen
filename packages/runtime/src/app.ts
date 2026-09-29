@@ -1,17 +1,9 @@
-import Loader, { type EntryOptions } from '@cordisjs/plugin-loader'
+import Loader, { Group } from '@cordisjs/plugin-loader'
 import { LoggingService } from '@numenjs/logging'
 import Server from '@cordisjs/plugin-server'
 import { AutomationService } from '@numenjs/automation'
-import {
-  ConsoleService,
-  ConsoleEntryRegistry,
-  SingleUserConsoleAuthService,
-  consoleAssetPlugin,
-  consoleHttpPlugin,
-  consoleSessionPlugin,
-  consoleWebSocketPlugin,
-} from '@numenjs/console'
-import { createRuntimeEntries, loadConfig, type LoadedConfig, type RuntimeEntry } from '@numenjs/config'
+import consolePlugin, { legacyConsoleBuiltins } from '@numenjs/console'
+import { createRuntimeEntries, loadConfig, readManagedConfig, type LoadedConfig, type RuntimeEntry } from '@numenjs/config'
 import { ConnectionService } from '@numenjs/connections'
 import { CredentialService } from '@numenjs/credentials'
 import { ResourceService } from '@numenjs/resources'
@@ -23,24 +15,13 @@ import httpIntegrationPlugin from '@numenjs/integration-http'
 import scheduleIntegrationPlugin from '@numenjs/integration-schedule'
 import { SchedulerService } from '@numenjs/scheduler'
 import { TriggerService } from '@numenjs/triggers'
-import {
-  workbenchAutomationAuthoringProviderPlugin,
-  workbenchAutomationActivationProviderPlugin,
-  workbenchAutomationCatalogProviderPlugin,
-  workbenchAutomationsProviderPlugin,
-  workbenchConnectionsProviderPlugin,
-  workbenchCredentialsProviderPlugin,
-  workbenchHomeProviderPlugin,
-  workbenchLogsProviderPlugin,
-  workbenchInvalidationProviderPlugin,
-  workbenchRunsProviderPlugin,
-  workbenchRuntimePlugin,
-} from '@numenjs/workbench/runtime'
+import workbenchPlugin, { legacyWorkbenchBuiltins } from '@numenjs/workbench/plugin'
 import { Context } from 'cordis'
 import { I18nService } from '@numenjs/i18n'
 import { resolve, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { healthPlugin, readinessPlugin } from './health.js'
+import { HostConfigurationService, toCordisEntry } from './config-management.js'
 
 export interface StartRuntimeOptions {
   configPath?: string
@@ -57,7 +38,7 @@ export interface NumenApplication {
   stop(): Promise<void>
 }
 
-const builtins = {
+const hostBuiltins = {
   i18n: I18nService,
   database: DatabaseService,
   capabilities: CapabilityRegistry,
@@ -74,44 +55,24 @@ const builtins = {
   automations: AutomationService,
   scheduler: SchedulerService,
   triggers: TriggerService,
-  console: ConsoleService,
-  consoleEntries: ConsoleEntryRegistry,
-  consoleAuth: SingleUserConsoleAuthService,
   server: Server,
-  workbench: workbenchRuntimePlugin,
-  workbenchAutomationAuthoring: workbenchAutomationAuthoringProviderPlugin,
-  workbenchAutomationActivation: workbenchAutomationActivationProviderPlugin,
-  workbenchAutomationCatalog: workbenchAutomationCatalogProviderPlugin,
-  workbenchAutomations: workbenchAutomationsProviderPlugin,
-  workbenchConnections: workbenchConnectionsProviderPlugin,
-  workbenchCredentials: workbenchCredentialsProviderPlugin,
-  workbenchHome: workbenchHomeProviderPlugin,
-  workbenchLogs: workbenchLogsProviderPlugin,
-  workbenchInvalidation: workbenchInvalidationProviderPlugin,
-  workbenchRuns: workbenchRunsProviderPlugin,
-  consoleSession: consoleSessionPlugin,
-  consoleAssets: consoleAssetPlugin,
-  consoleHttp: consoleHttpPlugin,
-  consoleWs: consoleWebSocketPlugin,
   health: healthPlugin,
   readiness: readinessPlugin,
 } as const
 
-export const runtimeBuiltinNames: ReadonlySet<string> = new Set(Object.keys(builtins))
+const productBuiltins = { ...hostBuiltins, console: consolePlugin, workbench: workbenchPlugin, group: Group }
+const legacyBuiltins = { ...hostBuiltins, ...legacyConsoleBuiltins, ...legacyWorkbenchBuiltins }
 
-function toCordisEntry(entry: RuntimeEntry): EntryOptions {
-  return {
-    id: entry.id,
-    name: entry.name,
-    config: entry.config,
-    disabled: entry.disabled,
-  }
-}
+// Keep the historical public builtin names for v1 resolution. v2 groups are
+// reserved syntax handled by Config, not an additional v1 builtin.
+export const runtimeBuiltinNames: ReadonlySet<string> = new Set([
+  ...Object.keys(legacyBuiltins),
+])
 
 export async function startRuntime(options: StartRuntimeOptions = {}): Promise<NumenApplication> {
   const config = await loadConfig(options.configPath)
   const safeMode = options.safeMode ?? false
-  const entries = createRuntimeEntries(config.config, runtimeBuiltinNames, safeMode)
+  let entries = createRuntimeEntries(config.config, runtimeBuiltinNames, safeMode)
   const context = new Context()
   context.baseUrl = pathToFileURL(config.baseDir + sep).href
 
@@ -145,7 +106,10 @@ export async function startRuntime(options: StartRuntimeOptions = {}): Promise<N
     })
     context.logger('runtime').info('Runtime starting%s', safeMode ? ' in safe mode' : '')
     await context.plugin(Loader, { baseUrl: context.baseUrl })
-    Object.assign(context.loader.builtins, builtins)
+    Object.assign(context.loader.builtins, config.config.version === 1 ? legacyBuiltins : productBuiltins)
+    const managementDocument = await readManagedConfig(config.filename, runtimeBuiltinNames, safeMode)
+    if (JSON.stringify(managementDocument.config) !== JSON.stringify(config.config)) throw new Error('Configuration changed during startup; restart with the current file.')
+    await context.plugin(HostConfigurationService, { filename: config.filename, builtins: runtimeBuiltinNames, safeMode, fingerprint: managementDocument.fingerprint, onSaved(document) { config.config = document.config; entries = document.entries } })
     await context.loader.root.update(entries.map(toCordisEntry))
     await context.loader.await()
     context.logger('runtime').info('Runtime ready')
@@ -159,7 +123,7 @@ export async function startRuntime(options: StartRuntimeOptions = {}): Promise<N
   return {
     context,
     config,
-    entries,
+    get entries() { return entries },
     safeMode,
     serverUrl: context.server?.baseUrl,
     workbenchUrl: context.workbench?.getLaunchUrl(),

@@ -144,7 +144,7 @@ try {
     automationId: automation.id, enabled: true,
     expectedActivationGeneration: activated.automation.activationGeneration,
   })
-  const manualInput = { automationId: automation.id, requestId: randomUUID(), expectedRevisionId: revision.id, input: {} }
+  const manualInput = { automationId: automation.id, requestId: randomUUID(), mode: 'manual', revisionId: revision.id, input: {}, trigger: { type: 'manual' } }
   const { runId } = await call('action', 'manual-run-start', manualInput)
   await completedRun(runId)
   const logHistory = await call('query', 'logs', { runId, limit: 100 })

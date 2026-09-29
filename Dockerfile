@@ -27,6 +27,7 @@ COPY packages/webui/package.json packages/webui/package.json
 COPY packages/components/package.json packages/components/package.json
 COPY packages/workbench/package.json packages/workbench/package.json
 COPY examples/components-plugin/package.json examples/components-plugin/package.json
+COPY patches ./patches
 RUN --mount=type=cache,id=numen-pnpm-store,target=/pnpm/store \
   pnpm config set store-dir /pnpm/store \
   && pnpm install --frozen-lockfile
@@ -53,7 +54,7 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/packages ./packages
 COPY deploy/numen.config.yml /etc/numen/numen.config.yml
 
-RUN mkdir -p /var/lib/numen && chown node:node /var/lib/numen /etc/numen
+RUN mkdir -p /var/lib/numen && chown node:node /var/lib/numen /etc/numen /etc/numen/numen.config.yml
 
 USER node
 EXPOSE 5140
