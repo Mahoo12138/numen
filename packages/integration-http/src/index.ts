@@ -81,20 +81,21 @@ const bodySchema = z.union([
 ]) as Schema<HttpRequestBody>
 
 const inputSchema = z.object({
-  method: z.union(['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE']).default('GET'),
+  method: z.union(['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE']).default('GET').extra('extra', { numen: { execution: 'public' } }),
   url: z.string().required(),
   headers: z.dict(z.string()),
   query: z.dict(z.string()),
   body: bodySchema,
-  timeoutMs: z.natural().min(1).max(maximumRequestTimeoutMs).role('ms'),
+  timeoutMs: z.natural().min(1).max(maximumRequestTimeoutMs).role('ms').extra('extra', { numen: { execution: 'public' } }),
 }) as unknown as Schema<HttpRequestInput>
 
 const outputSchema = z.object({
-  ok: z.boolean().required(),
-  status: z.natural().required(),
+  // Response body, headers, statusText and target URL are unclassified and stay private in Run inspection.
+  ok: z.boolean().required().extra('extra', { numen: { execution: 'public' } }),
+  status: z.natural().required().extra('extra', { numen: { execution: 'public' } }),
   statusText: z.string().required(),
   headers: z.dict(z.string()).required(),
-  bodyType: z.union(['text', 'json']).required(),
+  bodyType: z.union(['text', 'json']).required().extra('extra', { numen: { execution: 'public' } }),
   body: z.any().required(),
 }) as unknown as Schema<HttpRequestOutput>
 

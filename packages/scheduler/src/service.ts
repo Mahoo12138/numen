@@ -1,6 +1,6 @@
 import { withLogContext } from '@numenjs/logging'
 import '@numenjs/automation'
-import { AutomationArchivedError } from '@numenjs/automation'
+import { AutomationArchivedError, AutomationNotFoundError, AutomationRevisionNotFoundError } from '@numenjs/automation'
 import { ConnectionBindingError, ConnectionRuntimeUnavailableError, type ConnectionService } from '@numenjs/connections'
 import {
   capabilityKey,
@@ -333,11 +333,32 @@ export class SchedulerService extends Service {
     expectedRevisionId?: string,
     requestId?: string,
   ): Run {
+    return this.startRequestedRun(automationId, { mode: 'manual', ...(expectedRevisionId === undefined ? {} : { revisionId: expectedRevisionId }) }, input, trigger, requestId)
+  }
+
+  /** Runs an immutable published Revision without activating it or touching Trigger subscriptions. */
+  startRevisionTest(
+    automationId: string,
+    revisionId: string,
+    input: Record<string, NumenValue>,
+    trigger: NumenValue,
+    requestId: string,
+  ): Run {
+    return this.startRequestedRun(automationId, { mode: 'revision-test', revisionId }, input, trigger, requestId)
+  }
+
+  private startRequestedRun(
+    automationId: string,
+    target: { mode: 'manual'; revisionId?: string } | { mode: 'revision-test'; revisionId: string },
+    input: Record<string, NumenValue>,
+    trigger: NumenValue,
+    requestId?: string,
+  ): Run {
     if (!isNumenValue(input) || !isNumenValue(trigger)) throw new TypeError('run input and trigger must be Numen values')
     if (requestId !== undefined && !/^[a-zA-Z0-9_-]{16,80}$/.test(requestId)) throw new TypeError('invalid manual Run request id')
     const contentHash = requestId === undefined ? undefined : createHash('sha256').update(canonicalize({
       automationId,
-      ...(expectedRevisionId === undefined ? {} : { expectedRevisionId }),
+      ...target,
       input,
       trigger,
     })).digest('hex')
@@ -353,11 +374,15 @@ export class SchedulerService extends Service {
         }
       }
       const automation = this.ctx.automations.get(automationId)
-      if (!automation) throw new Error(`automation not found: ${automationId}`)
+      if (!automation) throw new AutomationNotFoundError(`automation not found: ${automationId}`)
       if (automation.archivedAt) throw new AutomationArchivedError(`automation is archived: ${automationId}`)
-      if (!automation.activeRevisionId) throw new Error(`automation has no active revision: ${automationId}`)
-      if (expectedRevisionId !== undefined && automation.activeRevisionId !== expectedRevisionId) throw new ManualRunRevisionConflictError()
-      const revision = this.ctx.automations.getRevision(automation.activeRevisionId)!
+      if (target.mode === 'manual') {
+        if (!automation.activeRevisionId) throw new ManualRunRevisionConflictError()
+        if (target.revisionId !== undefined && automation.activeRevisionId !== target.revisionId) throw new ManualRunRevisionConflictError()
+      }
+      const revisionId = target.mode === 'revision-test' ? target.revisionId : automation.activeRevisionId!
+      const revision = this.ctx.automations.getRevision(revisionId)
+      if (!revision || revision.automationId !== automationId) throw new AutomationRevisionNotFoundError(`revision not found for automation: ${revisionId}`)
       const resolvedInput = resolveAutomationInputs(revision.source, input)
       const acceptedRunId = id('run')
       const now = new Date().toISOString()
@@ -365,13 +390,13 @@ export class SchedulerService extends Service {
         INSERT INTO runs (
           id, automation_id, revision_id, status, trigger_json, input_json, created_at
         ) VALUES (?, ?, ?, 'QUEUED', ?, ?, ?)
-      `).run(acceptedRunId, automationId, automation.activeRevisionId, JSON.stringify(trigger), JSON.stringify(resolvedInput), now)
+      `).run(acceptedRunId, automationId, revision.id, JSON.stringify(trigger), JSON.stringify(resolvedInput), now)
       if (requestId !== undefined) {
         this.ctx.database.db.prepare(`
           INSERT INTO manual_run_requests (request_id, content_hash, run_id) VALUES (?, ?, ?)
         `).run(requestId, contentHash, acceptedRunId)
       }
-      this.appendEvent(acceptedRunId, 'RunAccepted', { source: 'manual' }, now)
+      this.appendEvent(acceptedRunId, 'RunAccepted', { source: target.mode, revisionId: revision.id, ...(requestId ? { requestId } : {}) }, now)
       created = true
       return acceptedRunId
     })
@@ -593,6 +618,38 @@ export class SchedulerService extends Service {
     return counts
   }
 
+  getRunIdentity(runId: string): Pick<Run, 'id' | 'revisionId'> | undefined {
+    const row = this.ctx.database.db.prepare('SELECT id, revision_id FROM runs WHERE id = ?').get(runId) as
+      { id: string; revision_id: string } | undefined
+    return row ? { id: row.id, revisionId: row.revision_id } : undefined
+  }
+
+  inspectExecution(runId: string, executionId: string, maxValueBytes = 65_536): {
+    execution: Execution; inputOmitted: boolean; outputOmitted: boolean
+  } | undefined {
+    if (!Number.isSafeInteger(maxValueBytes) || maxValueBytes < 1 || maxValueBytes > 65_536) throw new TypeError('invalid execution inspection limit')
+    // Bound JSON before parsing it. Loop values and errors are not part of this inspection surface.
+    const row = this.ctx.database.db.prepare(`
+      SELECT id, run_id, instruction_id, parent_execution_id, scope_execution_id, scope_branch,
+        NULL AS loop_item_json, loop_index, status, wake_at, blocked_reason, generation, created_at, updated_at,
+        CASE WHEN length(CAST(resolved_input_json AS BLOB)) <= ? THEN resolved_input_json ELSE NULL END AS resolved_input_json,
+        CASE WHEN length(CAST(output_json AS BLOB)) <= ? THEN output_json ELSE NULL END AS output_json,
+        length(CAST(resolved_input_json AS BLOB)) > ? AS input_omitted,
+        length(CAST(output_json AS BLOB)) > ? AS output_omitted
+      FROM executions WHERE run_id = ? AND id = ?
+    `).get(maxValueBytes, maxValueBytes, maxValueBytes, maxValueBytes, runId, executionId) as
+      (ExecutionRow & { input_omitted: number; output_omitted: number }) | undefined
+    return row ? { execution: mapExecution(row), inputOmitted: !!row.input_omitted, outputOmitted: !!row.output_omitted } : undefined
+  }
+
+  getAttempt(runId: string, executionId: string, attemptId: string): Pick<Attempt, 'id' | 'executionId' | 'number' | 'status'> | undefined {
+    const row = this.ctx.database.db.prepare(`
+      SELECT attempts.id, attempts.execution_id, attempts.number, attempts.status FROM attempts JOIN executions ON executions.id = attempts.execution_id
+      WHERE executions.run_id = ? AND executions.id = ? AND attempts.id = ?
+    `).get(runId, executionId, attemptId) as AttemptRow | undefined
+    return row ? { id: row.id, executionId: row.execution_id, number: row.number, status: row.status } : undefined
+  }
+
   listExecutions(runId: string): Execution[] {
     return (this.ctx.database.db.prepare(`
       SELECT * FROM executions WHERE run_id = ? ORDER BY created_at, id
@@ -603,6 +660,7 @@ export class SchedulerService extends Service {
     runId: string,
     limit = 25,
     cursor?: ExecutionListCursor,
+    filter: { instructionIds?: string[]; executionId?: string } = {},
   ): RunExecutionDiagnosticsPage {
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50) {
       throw new TypeError('execution diagnostics page limit must be an integer between 1 and 50')
@@ -610,13 +668,17 @@ export class SchedulerService extends Service {
     if (cursor && (!cursor.createdAt || !cursor.id)) {
       throw new TypeError('execution diagnostics cursor is invalid')
     }
+    const instructionFilter = filter.instructionIds
+      ? `AND instruction_id IN (${filter.instructionIds.map(() => '?').join(', ') || 'NULL'})` : ''
     const rows = this.ctx.database.db.prepare(`
       SELECT * FROM executions
       WHERE run_id = ?
+      ${instructionFilter}
+      ${filter.executionId ? 'AND id = ?' : ''}
       ${cursor ? 'AND (created_at < ? OR (created_at = ? AND id < ?))' : ''}
       ORDER BY created_at DESC, id DESC
       LIMIT ?
-    `).all(runId, ...(cursor
+    `).all(runId, ...(filter.instructionIds ?? []), ...(filter.executionId ? [filter.executionId] : []), ...(cursor
       ? [cursor.createdAt, cursor.createdAt, cursor.id, limit + 1]
       : [limit + 1])) as ExecutionRow[]
     const hasMore = rows.length > limit

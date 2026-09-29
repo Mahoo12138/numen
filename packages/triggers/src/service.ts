@@ -20,6 +20,14 @@ export interface TriggerServiceHealth {
   unavailableSubscriptions: number
 }
 
+export interface AutomationTriggerHealth {
+  status: 'DISABLED' | 'NO_REVISION' | 'NO_TRIGGERS' | 'UNAVAILABLE' | 'WAITING' | 'READY'
+  activationGeneration: number
+  revisionId?: string
+  expected: number
+  active: number
+}
+
 interface DesiredSubscription {
   key: string
   binding: TriggerBinding
@@ -36,6 +44,9 @@ interface ActiveSubscription extends DesiredSubscription {
 declare module 'cordis' {
   interface Context {
     triggers: TriggerService
+  }
+  interface Events {
+    'numen/trigger-runtime-change'(): void
   }
 }
 
@@ -72,6 +83,7 @@ export class TriggerService extends Service {
       this.ready = false
       for (const subscription of this.active.values()) this.disposeSubscription(subscription)
       this.active.clear()
+      this.ctx.emit('numen/trigger-runtime-change')
     }
   }
 
@@ -84,7 +96,27 @@ export class TriggerService extends Service {
     }
   }
 
+  automationHealth(automationId: string): AutomationTriggerHealth | undefined {
+    const automation = this.ctx.automations.get(automationId)
+    if (!automation) return
+    const revision = automation.activeRevisionId ? this.ctx.automations.getRevision(automation.activeRevisionId) : undefined
+    const enabled = automation.enabled && !automation.archivedAt
+    const expected = enabled ? revision?.source.triggers.length ?? 0 : 0
+    const active = [...this.active.values()].filter(subscription =>
+      subscription.binding.automationId === automationId
+      && subscription.binding.activationGeneration === automation.activationGeneration
+      && subscription.binding.revisionId === automation.activeRevisionId
+      && !subscription.controller.signal.aborted).length
+    const status = !enabled ? 'DISABLED' : !automation.activeRevisionId ? 'NO_REVISION'
+      : !this.ready || !revision ? 'UNAVAILABLE' : !expected ? 'NO_TRIGGERS' : active === expected ? 'READY' : 'WAITING'
+    return { status, expected, active, activationGeneration: automation.activationGeneration,
+      ...(automation.activeRevisionId ? { revisionId: automation.activeRevisionId } : {}) }
+  }
+
   reconcile(): void {
+    const previousActive = new Map(this.active)
+    const previousDesired = this.desiredSubscriptions
+    const previousUnavailable = this.unavailableSubscriptions
     const desired = this.collectDesiredSubscriptions()
     this.desiredSubscriptions = desired.size
 
@@ -121,6 +153,11 @@ export class TriggerService extends Service {
       }
     }
     this.unavailableSubscriptions = unavailable
+    if (previousDesired !== this.desiredSubscriptions || previousUnavailable !== unavailable
+      || previousActive.size !== this.active.size
+      || [...this.active].some(([key, subscription]) => previousActive.get(key) !== subscription)) {
+      this.ctx.emit('numen/trigger-runtime-change')
+    }
   }
 
   private collectDesiredSubscriptions(): Map<string, DesiredSubscription> {

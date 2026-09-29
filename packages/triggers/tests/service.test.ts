@@ -84,8 +84,10 @@ describe('TriggerService', () => {
     const created = root.automations.create({ name: 'Triggered automation', source: source(connectionId) })
     const revision = root.automations.publishDraft(created.automation.id, 1)
     root.automations.activateRevision(created.automation.id, revision.id)
+    expect(root.triggers.automationHealth(created.automation.id)).toMatchObject({ status: 'DISABLED', expected: 0, active: 0 })
     expect(root.triggers.health()).toMatchObject({ desiredSubscriptions: 0, activeSubscriptions: 0 })
     const enabled = root.automations.setEnabled(created.automation.id, true)
+    expect(root.triggers.automationHealth(created.automation.id)).toEqual({ status: 'READY', expected: 1, active: 1, revisionId: revision.id, activationGeneration: enabled.activationGeneration })
     expect(root.triggers.health()).toMatchObject({
       ready: true,
       desiredSubscriptions: 1,
@@ -115,6 +117,7 @@ describe('TriggerService', () => {
 
     const nextRevision = root.automations.publishDraft(created.automation.id, 1)
     root.automations.activateRevision(created.automation.id, nextRevision.id)
+    expect(root.triggers.automationHealth(created.automation.id)).toMatchObject({ status: 'READY', active: 1, revisionId: nextRevision.id })
     expect(disposals).toBe(1)
     expect(activations).toHaveLength(2)
     expect(activations[0]!.signal.aborted).toBe(true)
@@ -122,6 +125,7 @@ describe('TriggerService', () => {
       .toEqual({ status: 'stale' })
 
     root.automations.setEnabled(created.automation.id, false)
+    expect(root.triggers.automationHealth(created.automation.id)).toMatchObject({ status: 'DISABLED', expected: 0, active: 0 })
     expect(root.triggers.health()).toMatchObject({ desiredSubscriptions: 0, activeSubscriptions: 0 })
     expect(disposals).toBe(2)
     await root.fiber.dispose()
@@ -143,6 +147,7 @@ describe('TriggerService', () => {
     const revision = root.automations.publishDraft(created.automation.id, 1)
     root.automations.activateRevision(created.automation.id, revision.id)
     root.automations.setEnabled(created.automation.id, true)
+    expect(root.triggers.automationHealth(created.automation.id)).toMatchObject({ status: 'WAITING', expected: 1, active: 0 })
     expect(root.triggers.health()).toMatchObject({
       desiredSubscriptions: 1,
       activeSubscriptions: 0,
@@ -150,6 +155,7 @@ describe('TriggerService', () => {
     })
 
     root.capabilities.provideTrigger(root, definition, { activate() {} })
+    expect(root.triggers.automationHealth(created.automation.id)).toMatchObject({ status: 'READY', expected: 1, active: 1 })
     expect(root.triggers.health()).toMatchObject({
       desiredSubscriptions: 1,
       activeSubscriptions: 1,
