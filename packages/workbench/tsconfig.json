@@ -46,6 +46,15 @@
     },
     {
       "path": "../webui"
+    },
+    {
+      "path": "../triggers"
+    },
+    {
+      "path": "../config"
+    },
+    {
+      "path": "../database"
     }
   ]
 }

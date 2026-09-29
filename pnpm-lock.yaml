@@ -4,6 +4,14 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  '@cordisjs/plugin-loader@1.0.0-rc.5':
+    hash: b45b118d84b237194961ed7fc0de89243b6b437f0176b70787d4135198bff81c
+    path: patches/@cordisjs__plugin-loader@1.0.0-rc.5.patch
+  cordis@4.0.0-rc.8:
+    hash: 3d4000827fa49a241290f4d9fa50be51ca166f1f60e7c2d7c18ddcc71e3758f6
+    path: patches/cordis@4.0.0-rc.8.patch
+
 importers:
 
   .:
@@ -55,7 +63,7 @@ importers:
         version: link:../../packages/webui
       cordis:
         specifier: 4.0.0-rc.8
-        version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
+        version: 4.0.0-rc.8(patch_hash=3d4000827fa49a241290f4d9fa50be51ca166f1f60e7c2d7c18ddcc71e3758f6)(@cordisjs/plugin-loader@1.0.0-rc.5)
       vue:
         specifier: ^3.5.0
         version: 3.5.41(typescript@5.9.3)
@@ -77,7 +85,7 @@ importers:
         version: link:../database
       cordis:
         specifier: 4.0.0-rc.8
-        version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
+        version: 4.0.0-rc.8(patch_hash=3d4000827fa49a241290f4d9fa50be51ca166f1f60e7c2d7c18ddcc71e3758f6)(@cordisjs/plugin-loader@1.0.0-rc.5)
     devDependencies:
       schemastery:
         specifier: ^3.18.0
@@ -132,7 +140,7 @@ importers:
         version: link:../logging
       cordis:
         specifier: 4.0.0-rc.8
-        version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
+        version: 4.0.0-rc.8(patch_hash=3d4000827fa49a241290f4d9fa50be51ca166f1f60e7c2d7c18ddcc71e3758f6)(@cordisjs/plugin-loader@1.0.0-rc.5)
     devDependencies:
       schemastery:
         specifier: ^3.18.0
@@ -158,13 +166,13 @@ importers:
         version: 8.18.1
       cordis:
         specifier: 4.0.0-rc.8
-        version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
+        version: 4.0.0-rc.8(patch_hash=3d4000827fa49a241290f4d9fa50be51ca166f1f60e7c2d7c18ddcc71e3758f6)(@cordisjs/plugin-loader@1.0.0-rc.5)
 
   packages/core:
     dependencies:
       cordis:
         specifier: 4.0.0-rc.8
-        version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
+        version: 4.0.0-rc.8(patch_hash=3d4000827fa49a241290f4d9fa50be51ca166f1f60e7c2d7c18ddcc71e3758f6)(@cordisjs/plugin-loader@1.0.0-rc.5)
       schemastery:
         specifier: ^3.18.0
         version: 3.18.0
@@ -179,7 +187,7 @@ importers:
         version: link:../database
       cordis:
         specifier: 4.0.0-rc.8
-        version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
+        version: 4.0.0-rc.8(patch_hash=3d4000827fa49a241290f4d9fa50be51ca166f1f60e7c2d7c18ddcc71e3758f6)(@cordisjs/plugin-loader@1.0.0-rc.5)
     devDependencies:
       schemastery:
         specifier: ^3.18.0
@@ -192,7 +200,7 @@ importers:
         version: 13.0.3
       cordis:
         specifier: 4.0.0-rc.8
-        version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
+        version: 4.0.0-rc.8(patch_hash=3d4000827fa49a241290f4d9fa50be51ca166f1f60e7c2d7c18ddcc71e3758f6)(@cordisjs/plugin-loader@1.0.0-rc.5)
 
   packages/http:
     dependencies:
@@ -204,7 +212,7 @@ importers:
         version: 1.0.0(@cordisjs/plugin-http@1.5.2(cordis@4.0.0-rc.8)(undici@7.29.1))(cordis@4.0.0-rc.8)
       cordis:
         specifier: 4.0.0-rc.8
-        version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
+        version: 4.0.0-rc.8(patch_hash=3d4000827fa49a241290f4d9fa50be51ca166f1f60e7c2d7c18ddcc71e3758f6)(@cordisjs/plugin-loader@1.0.0-rc.5)
       schemastery:
         specifier: ^3.18.0
         version: 3.18.0
@@ -220,7 +228,7 @@ importers:
     devDependencies:
       cordis:
         specifier: 4.0.0-rc.8
-        version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
+        version: 4.0.0-rc.8(patch_hash=3d4000827fa49a241290f4d9fa50be51ca166f1f60e7c2d7c18ddcc71e3758f6)(@cordisjs/plugin-loader@1.0.0-rc.5)
 
   packages/integration-demo:
     dependencies:
@@ -229,7 +237,7 @@ importers:
         version: link:../core
       cordis:
         specifier: 4.0.0-rc.8
-        version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
+        version: 4.0.0-rc.8(patch_hash=3d4000827fa49a241290f4d9fa50be51ca166f1f60e7c2d7c18ddcc71e3758f6)(@cordisjs/plugin-loader@1.0.0-rc.5)
       schemastery:
         specifier: ^3.18.0
         version: 3.18.0
@@ -257,7 +265,7 @@ importers:
         version: link:../http
       cordis:
         specifier: 4.0.0-rc.8
-        version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
+        version: 4.0.0-rc.8(patch_hash=3d4000827fa49a241290f4d9fa50be51ca166f1f60e7c2d7c18ddcc71e3758f6)(@cordisjs/plugin-loader@1.0.0-rc.5)
       schemastery:
         specifier: ^3.18.0
         version: 3.18.0
@@ -282,7 +290,7 @@ importers:
         version: link:../core
       cordis:
         specifier: 4.0.0-rc.8
-        version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
+        version: 4.0.0-rc.8(patch_hash=3d4000827fa49a241290f4d9fa50be51ca166f1f60e7c2d7c18ddcc71e3758f6)(@cordisjs/plugin-loader@1.0.0-rc.5)
       schemastery:
         specifier: ^3.18.0
         version: 3.18.0
@@ -317,7 +325,7 @@ importers:
     devDependencies:
       cordis:
         specifier: 4.0.0-rc.8
-        version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
+        version: 4.0.0-rc.8(patch_hash=3d4000827fa49a241290f4d9fa50be51ca166f1f60e7c2d7c18ddcc71e3758f6)(@cordisjs/plugin-loader@1.0.0-rc.5)
 
   packages/resources:
     dependencies:
@@ -329,13 +337,13 @@ importers:
         version: link:../database
       cordis:
         specifier: 4.0.0-rc.8
-        version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
+        version: 4.0.0-rc.8(patch_hash=3d4000827fa49a241290f4d9fa50be51ca166f1f60e7c2d7c18ddcc71e3758f6)(@cordisjs/plugin-loader@1.0.0-rc.5)
 
   packages/runtime:
     dependencies:
       '@cordisjs/plugin-loader':
         specifier: ^1.0.0-rc.5
-        version: 1.0.0-rc.5(cordis@4.0.0-rc.8)
+        version: 1.0.0-rc.5(patch_hash=b45b118d84b237194961ed7fc0de89243b6b437f0176b70787d4135198bff81c)(cordis@4.0.0-rc.8)
       '@cordisjs/plugin-logger-console':
         specifier: ^1.0.0
         version: 1.0.0(cordis@4.0.0-rc.8)
@@ -395,7 +403,7 @@ importers:
         version: link:../workbench
       cordis:
         specifier: 4.0.0-rc.8
-        version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
+        version: 4.0.0-rc.8(patch_hash=3d4000827fa49a241290f4d9fa50be51ca166f1f60e7c2d7c18ddcc71e3758f6)(@cordisjs/plugin-loader@1.0.0-rc.5)
     devDependencies:
       schemastery:
         specifier: ^3.18.0
@@ -423,7 +431,7 @@ importers:
         version: link:../resources
       cordis:
         specifier: 4.0.0-rc.8
-        version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
+        version: 4.0.0-rc.8(patch_hash=3d4000827fa49a241290f4d9fa50be51ca166f1f60e7c2d7c18ddcc71e3758f6)(@cordisjs/plugin-loader@1.0.0-rc.5)
     devDependencies:
       '@numenjs/credentials':
         specifier: workspace:*
@@ -451,7 +459,7 @@ importers:
         version: link:../scheduler
       cordis:
         specifier: 4.0.0-rc.8
-        version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
+        version: 4.0.0-rc.8(patch_hash=3d4000827fa49a241290f4d9fa50be51ca166f1f60e7c2d7c18ddcc71e3758f6)(@cordisjs/plugin-loader@1.0.0-rc.5)
     devDependencies:
       '@numenjs/credentials':
         specifier: workspace:*
@@ -483,7 +491,7 @@ importers:
         version: 8.18.1
       cordis:
         specifier: 4.0.0-rc.8
-        version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
+        version: 4.0.0-rc.8(patch_hash=3d4000827fa49a241290f4d9fa50be51ca166f1f60e7c2d7c18ddcc71e3758f6)(@cordisjs/plugin-loader@1.0.0-rc.5)
       schemastery:
         specifier: ^3.18.0
         version: 3.18.0
@@ -505,6 +513,9 @@ importers:
       '@numenjs/components':
         specifier: workspace:*
         version: link:../components
+      '@numenjs/config':
+        specifier: workspace:*
+        version: link:../config
       '@numenjs/connections':
         specifier: workspace:*
         version: link:../connections
@@ -517,6 +528,9 @@ importers:
       '@numenjs/credentials':
         specifier: workspace:*
         version: link:../credentials
+      '@numenjs/database':
+        specifier: workspace:*
+        version: link:../database
       '@numenjs/i18n':
         specifier: workspace:*
         version: link:../i18n
@@ -526,12 +540,15 @@ importers:
       '@numenjs/scheduler':
         specifier: workspace:*
         version: link:../scheduler
+      '@numenjs/triggers':
+        specifier: workspace:*
+        version: link:../triggers
       '@numenjs/webui':
         specifier: workspace:*
         version: link:../webui
       cordis:
         specifier: 4.0.0-rc.8
-        version: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
+        version: 4.0.0-rc.8(patch_hash=3d4000827fa49a241290f4d9fa50be51ca166f1f60e7c2d7c18ddcc71e3758f6)(@cordisjs/plugin-loader@1.0.0-rc.5)
       schemastery:
         specifier: ^3.18.0
         version: 3.18.0
@@ -2188,13 +2205,13 @@ snapshots:
   '@cordisjs/plugin-http-socks@1.0.0(@cordisjs/plugin-http@1.5.2(cordis@4.0.0-rc.8)(undici@7.29.1))(cordis@4.0.0-rc.8)':
     dependencies:
       '@cordisjs/plugin-http': 1.5.2(cordis@4.0.0-rc.8)(undici@7.29.1)
-      cordis: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
+      cordis: 4.0.0-rc.8(patch_hash=3d4000827fa49a241290f4d9fa50be51ca166f1f60e7c2d7c18ddcc71e3758f6)(@cordisjs/plugin-loader@1.0.0-rc.5)
       socks: 2.8.10
 
   '@cordisjs/plugin-http@1.5.2(cordis@4.0.0-rc.8)(undici@7.29.1)':
     dependencies:
       '@cordisjs/fetch-file': 1.0.3
-      cordis: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
+      cordis: 4.0.0-rc.8(patch_hash=3d4000827fa49a241290f4d9fa50be51ca166f1f60e7c2d7c18ddcc71e3758f6)(@cordisjs/plugin-loader@1.0.0-rc.5)
       cosmokit: 1.8.1
       schemastery: 3.18.0
     optionalDependencies:
@@ -2202,14 +2219,14 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@cordisjs/plugin-loader@1.0.0-rc.5(cordis@4.0.0-rc.8)':
+  '@cordisjs/plugin-loader@1.0.0-rc.5(patch_hash=b45b118d84b237194961ed7fc0de89243b6b437f0176b70787d4135198bff81c)(cordis@4.0.0-rc.8)':
     dependencies:
-      cordis: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
+      cordis: 4.0.0-rc.8(patch_hash=3d4000827fa49a241290f4d9fa50be51ca166f1f60e7c2d7c18ddcc71e3758f6)(@cordisjs/plugin-loader@1.0.0-rc.5)
       cosmokit: 1.8.1
 
   '@cordisjs/plugin-logger-console@1.0.0(cordis@4.0.0-rc.8)':
     dependencies:
-      cordis: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
+      cordis: 4.0.0-rc.8(patch_hash=3d4000827fa49a241290f4d9fa50be51ca166f1f60e7c2d7c18ddcc71e3758f6)(@cordisjs/plugin-loader@1.0.0-rc.5)
       cosmokit: 1.8.1
       schemastery: 3.18.0
       supports-color: 9.4.0
@@ -2219,7 +2236,7 @@ snapshots:
       '@standard-schema/spec': 1.1.0
       '@types/ws': 8.18.1
       accepts: 1.3.8
-      cordis: 4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5)
+      cordis: 4.0.0-rc.8(patch_hash=3d4000827fa49a241290f4d9fa50be51ca166f1f60e7c2d7c18ddcc71e3758f6)(@cordisjs/plugin-loader@1.0.0-rc.5)
       cosmokit: 1.8.1
       path-to-regexp: 8.4.2
       path-to-regexp-typed: 8.0.0(path-to-regexp@8.4.2)
@@ -2738,12 +2755,12 @@ snapshots:
 
   convert-source-map@2.0.0: {}
 
-  cordis@4.0.0-rc.8(@cordisjs/plugin-loader@1.0.0-rc.5):
+  cordis@4.0.0-rc.8(patch_hash=3d4000827fa49a241290f4d9fa50be51ca166f1f60e7c2d7c18ddcc71e3758f6)(@cordisjs/plugin-loader@1.0.0-rc.5):
     dependencies:
       '@standard-schema/spec': 1.1.0
       cosmokit: 1.8.1
     optionalDependencies:
-      '@cordisjs/plugin-loader': 1.0.0-rc.5(cordis@4.0.0-rc.8)
+      '@cordisjs/plugin-loader': 1.0.0-rc.5(patch_hash=b45b118d84b237194961ed7fc0de89243b6b437f0176b70787d4135198bff81c)(cordis@4.0.0-rc.8)
 
   cosmokit@1.8.1: {}
 

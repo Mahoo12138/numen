@@ -1,0 +1,75 @@
+diff --git a/lib/index.d.ts b/lib/index.d.ts
+index 2383b13b5ec680b43347e937923ac49151534013..d60a6c439451b8fb8f42c714a01bd7989042198c 100644
+--- a/lib/index.d.ts
++++ b/lib/index.d.ts
+@@ -15,7 +15,7 @@ declare module 'cordis' {
+         'loader/config-update'(): void;
+         'loader/entry-init'(entry: Entry): void;
+         'loader/partial-dispose'(entry: Entry, legacy: Partial<EntryOptions>, active: boolean): void;
+-        'loader/patch-context'(entry: Entry, next: () => void): void;
++        'loader/patch-context'(entry: Entry, next: () => void | Promise<void>): void | Promise<void>;
+     }
+     interface Context {
+         loader: Loader;
+diff --git a/lib/index.js b/lib/index.js
+index 8d6aa7345f549a4efb5b6e999051148341080885..32fd6d9f95887f3d757b29ec4c0a04a2c2124329 100644
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -116,7 +116,7 @@ var Group = class extends EntryGroup {
+     this.ctx = ctx;
+     this.config = config;
+     ctx.on("internal/update", (config2) => {
+-      this.update(config2);
++      return this.update(config2);
+     });
+   }
+   ctx;
+@@ -331,10 +331,10 @@ var Entry = class _Entry {
+     return interpolate(this.ctx, this.options.config);
+   }
+   _patchContext(diff) {
+-    this.context.waterfall("loader/patch-context", this, () => {
++    return this.context.waterfall("loader/patch-context", this, () => {
+       Object.setPrototypeOf(this.ctx, this.parent.ctx);
+       if (this.fiber?.uid && (diff.includes("config") || this.options.group)) {
+-        this.fiber.update(this._resolveConfig(this.fiber.runtime.callback), true);
++        return this.fiber.update(this._resolveConfig(this.fiber.runtime.callback), true);
+       }
+     });
+   }
+@@ -365,7 +365,7 @@ var Entry = class _Entry {
+       const diff = Object.keys({ ...this.options, ...legacy }).filter((key) => !deepEqual(this.options[key], legacy[key]));
+       if (!diff.length && !force) return;
+       this.context.emit("loader/partial-dispose", this, legacy, true);
+-      this._patchContext(diff);
++      await this._patchContext(diff);
+     } else {
+       await this.init();
+     }
+@@ -388,6 +388,9 @@ var Entry = class _Entry {
+     this.fiber?.await().finally(() => {
+       if (this.loader.getTasks().length) return;
+       this.ctx.reflect.notify(["loader"]);
++    }).catch(() => {
++      // Fiber logs initialization errors and retains FAILED state.
++      // Observing completion must not create an unhandled rejection.
+     });
+   }
+   async _init() {
+@@ -510,7 +513,7 @@ function isolate(ctx) {
+     Object.setPrototypeOf(entry.ctx[Context3.intercept], entry.parent.ctx[Context3.intercept]);
+     swap(entry.ctx[Context3.isolate], newMap);
+     swap(entry.ctx[Context3.intercept], entry.options.intercept);
+-    next();
++    const result = next();
+     for (const [symbol1, symbol2, flag1, flag2] of Object.values(diff)) {
+       if (flag1 === flag2 && entry.ctx.reflect.store[symbol1] && !entry.ctx.reflect.store[symbol2]) {
+         entry.ctx.reflect.store[symbol2] = entry.ctx.reflect.store[symbol1];
+@@ -528,6 +531,7 @@ function isolate(ctx) {
+         delete entry.ctx[delims[name]];
+       }
+     }
++    return result;
+   });
+   ctx.on("loader/partial-dispose", (entry, legacy, active) => {
+     for (const [name, label] of Object.entries(legacy.isolate ?? {})) {

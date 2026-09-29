@@ -11,7 +11,11 @@
     "onlyBuiltDependencies": [
       "better-sqlite3",
       "esbuild"
-    ]
+    ],
+    "patchedDependencies": {
+      "cordis@4.0.0-rc.8": "patches/cordis@4.0.0-rc.8.patch",
+      "@cordisjs/plugin-loader@1.0.0-rc.5": "patches/@cordisjs__plugin-loader@1.0.0-rc.5.patch"
+    }
   },
   "scripts": {
     "build": "pnpm --filter @numenjs/components build && tsc -b && pnpm --filter @numenjs/workbench build:app",

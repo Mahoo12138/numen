@@ -22,6 +22,10 @@
       "types": "./dist/runtime.d.ts",
       "default": "./dist/runtime.js"
     },
+    "./plugin": {
+      "types": "./dist/plugin.d.ts",
+      "default": "./dist/plugin.js"
+    },
     "./i18n": {
       "types": "./dist/i18n.d.ts",
       "default": "./dist/i18n.js"
@@ -46,7 +50,10 @@
     "schemastery": "^3.18.0",
     "vue": "^3.5.0",
     "@numenjs/logging": "workspace:*",
-    "@numenjs/components": "workspace:*"
+    "@numenjs/components": "workspace:*",
+    "@numenjs/triggers": "workspace:*",
+    "@numenjs/config": "workspace:*",
+    "@numenjs/database": "workspace:*"
   },
   "devDependencies": {
     "@vue/server-renderer": "^3.5.0",

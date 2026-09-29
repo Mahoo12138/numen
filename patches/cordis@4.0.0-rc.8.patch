@@ -1,0 +1,38 @@
+diff --git a/lib/events.d.ts b/lib/events.d.ts
+index 4ce8a52ec6513d6d213f30c49c05dce0a8d1362e..8f622e482a1131fdd5463bb4bcdcbf68c3c4ccf3 100644
+--- a/lib/events.d.ts
++++ b/lib/events.d.ts
+@@ -51,7 +51,7 @@ export interface Events {
+     'internal/plugin'(fiber: Fiber): void;
+     'internal/status'(fiber: Fiber, oldValue: FiberState): void;
+     'internal/service'(this: Context, name: string, value: any): void;
+-    'internal/update'(this: Fiber, config: any, noSave: boolean, next: () => void): void;
++    'internal/update'(this: Fiber, config: any, noSave: boolean, next: () => void | Promise<void>): void | Promise<void>;
+     'internal/get'(ctx: Context, name: string, error: Error, next: () => any): any;
+     'internal/set'(ctx: Context, name: string, value: any, error: Error, next: () => boolean): boolean;
+     'internal/listener'(this: Context, name: string, listener: any, prepend: boolean): void;
+diff --git a/lib/fiber.d.ts b/lib/fiber.d.ts
+index a676704c793a415cd9a38e68e34601842d1e412a..aa3c04bdb82aa8cf2aab867bffda34248b329cf6 100644
+--- a/lib/fiber.d.ts
++++ b/lib/fiber.d.ts
+@@ -76,6 +76,6 @@ export declare class Fiber {
+     private _unload;
+     await(): Promise<this>;
+     restart(): Promise<void>;
+-    update(config: any, noSave?: boolean): void;
++    update(config: any, noSave?: boolean): void | Promise<void>;
+ }
+ export {};
+diff --git a/lib/index.js b/lib/index.js
+index f8b5b87b82f36408d548d3d82258cf2696464c04..57c24e7c6065545392cff7dbefe4e425ac995ed9 100644
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -1014,7 +1014,7 @@ var Fiber = class {
+     const fiber = this.ctx.fiber;
+     fiber.assertActive();
+     config = resolveConfig(fiber.runtime, config);
+-    fiber.context.waterfall(fiber, "internal/update", config, noSave, () => {
++    return fiber.context.waterfall(fiber, "internal/update", config, noSave, () => {
+       fiber.config = config;
+       fiber._error = void 0;
+       return fiber.restart();
