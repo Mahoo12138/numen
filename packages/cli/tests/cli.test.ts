@@ -125,3 +125,50 @@ it('prints a fragment-only Workbench launch URL only when explicitly requested',
     await rm(directory, { recursive: true, force: true })
   }
 })
+
+it('requires a reviewed dry-run fingerprint and never prints migration secrets', async () => {
+  const { readFile, writeFile } = await import('node:fs/promises')
+  const directory = await mkdtemp(join(tmpdir(), 'numen-cli-migrate-'))
+  try {
+    const configPath = join(directory, 'numen.config.yml')
+    await writeConfig(configPath, { version: 1, dataDir: 'data', plugins: {
+      console: {}, consoleEntries: {}, consoleAuth: { token: 'keep-this-secret' }, consoleSession: {},
+      consoleAssets: {}, consoleHttp: {}, consoleWs: {},
+    } })
+    const original = await readFile(configPath, 'utf8')
+    const output: string[] = []
+    const io = { out: (message: string) => output.push(message), error: (message: string) => output.push(message) }
+    expect(await runCli(['config', 'migrate', '--config', configPath], io)).toBe(0)
+    const plan = JSON.parse(output[0]!)
+    expect(plan).toMatchObject({ applied: false, conflicts: [], fromVersion: 1, toVersion: 2 })
+    expect(output.join()).not.toContain('keep-this-secret')
+    expect(await readFile(configPath, 'utf8')).toBe(original)
+    await expect(runCli(['config', 'migrate', '--config', configPath, '--apply'], io)).rejects.toThrow('requires --fingerprint')
+    await writeFile(configPath, `${original}# changed\n`)
+    await expect(runCli(['config', 'migrate', '--config', configPath, '--apply', '--fingerprint', plan.fingerprint], io)).rejects.toThrow('changed since dry-run')
+    output.length = 0
+    await runCli(['config', 'migrate', '--config', configPath], io)
+    expect(await runCli(['config', 'migrate', '--config', configPath, '--apply', '--fingerprint', JSON.parse(output[0]!).fingerprint], io)).toBe(0)
+    expect(JSON.parse(output[1]!)).toMatchObject({ applied: true })
+    expect(output.join()).not.toContain('keep-this-secret')
+    expect(await readFile(configPath, 'utf8')).toContain('version: 2')
+  } finally { await rm(directory, { recursive: true, force: true }) }
+})
+
+it('doctor reports nested effective state and preserves member intent with Console dependency diagnostics', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'numen-cli-groups-'))
+  try {
+    const configPath = join(directory, 'numen.config.yml')
+    await writeConfig(configPath, { version: 2, dataDir: 'data', plugins: {
+      '~group:services': { plugins: { console: {}, credentials: { masterKeyEnv: 'NUMEN_GROUP_TEST_KEY' } } },
+      workbench: {}, 'group:external': { plugins: { custom: {} } },
+    } })
+    const output: string[] = []
+    await runCli(['doctor', '--safe', '--config', configPath], { out: message => output.push(message), error: message => output.push(message) })
+    const report = JSON.parse(output[0]!)
+    expect(report.credentialMasterKey.environment).toBe('NUMEN_GROUP_TEST_KEY')
+    expect(report.diagnostics[0]).toContain('Console is unavailable')
+    expect(report.plugins.find((entry: { key: string }) => entry.key === 'console')).toMatchObject({ enabled: false, selfEnabled: true, parentId: 'group-services' })
+    expect(report.plugins.find((entry: { key: string }) => entry.key === 'custom')).toMatchObject({ enabled: false, selfEnabled: true, builtin: false })
+  } finally { await rm(directory, { recursive: true, force: true }) }
+})

@@ -61,3 +61,13 @@ describe('configuration', () => {
     })).toThrow(ConfigError)
   })
 })
+
+it('keeps version 1 group names and builtin package precedence unchanged', () => {
+  const config = validateConfig({ version: 1, dataDir: '.numen', plugins: {
+    'group:legacy': { plugins: { child: {} } }, health: { $package: '@external/health', $label: 'plugin-owned' },
+  } })
+  expect(createRuntimeEntries(config, new Set(['health']))).toEqual([
+    { id: 'group-legacy', key: 'group:legacy', name: 'numen-plugin-group', config: { plugins: { child: {} } }, disabled: false, builtin: false },
+    { id: 'health', key: 'health', name: 'cordis:health', config: { $label: 'plugin-owned' }, disabled: false, builtin: true },
+  ])
+})

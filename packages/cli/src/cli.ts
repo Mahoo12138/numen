@@ -1,7 +1,7 @@
-import { createRuntimeEntries, loadConfig } from '@numenjs/config'
+import { applyConfigMigration, ConfigError, createRuntimeEntries, flattenRuntimeEntries, loadConfig, planConfigMigration } from '@numenjs/config'
 import { runtimeBuiltinNames, startRuntime } from '@numenjs/runtime'
 import { randomBytes } from 'node:crypto'
-import { access } from 'node:fs/promises'
+import { access, readFile } from 'node:fs/promises'
 import { constants } from 'node:fs'
 import { parseArgs } from 'node:util'
 
@@ -11,6 +11,7 @@ Usage:
   numen start [--config <file>] [--safe] [--print-launch-url]
   numen key generate
   numen config validate [--config <file>]
+  numen config migrate [--config <file>] [--apply --fingerprint <dry-run fingerprint>]
   numen doctor [--config <file>]
   numen --help
 `
@@ -45,6 +46,9 @@ export async function runCli(argv = process.argv.slice(2), io = defaultIo): Prom
     options: {
       config: { type: 'string', short: 'c', default: 'numen.config.yml' },
       safe: { type: 'boolean', default: false },
+      apply: { type: 'boolean', default: false },
+      'dry-run': { type: 'boolean', default: false },
+      fingerprint: { type: 'string' },
       'print-launch-url': { type: 'boolean', default: false },
       help: { type: 'boolean', short: 'h', default: false },
     },
@@ -68,6 +72,19 @@ export async function runCli(argv = process.argv.slice(2), io = defaultIo): Prom
     return 0
   }
 
+  if (command === 'config' && positionals[1] === 'migrate') {
+    if (values.apply && values['dry-run']) throw new ConfigError('--apply and --dry-run cannot be combined')
+    if (values.apply) {
+      if (!values.fingerprint) throw new ConfigError('--apply requires --fingerprint from a reviewed dry-run plan')
+      const result = await applyConfigMigration(values.config, values.fingerprint, runtimeBuiltinNames)
+      io.out(JSON.stringify({ ...result.plan, applied: true, backup: result.backup }, null, 2))
+      return 0
+    }
+    const plan = planConfigMigration(await readFile(values.config, 'utf8'), runtimeBuiltinNames)
+    io.out(JSON.stringify({ ...plan, applied: false }, null, 2))
+    return plan.conflicts.length ? 1 : 0
+  }
+
   if (command === 'doctor') {
     const loaded = await loadConfig(values.config)
     const entries = createRuntimeEntries(
@@ -81,7 +98,8 @@ export async function runCli(argv = process.argv.slice(2), io = defaultIo): Prom
     } catch {
       writable = false
     }
-    const credentialEntry = entries.find(entry => entry.name === 'cordis:credentials')
+    const flattened = flattenRuntimeEntries(entries)
+    const credentialEntry = flattened.find(entry => entry.name === 'cordis:credentials')
     const configuredEnvironment = credentialEntry?.config.masterKeyEnv
     const masterKeyEnvironment = typeof configuredEnvironment === 'string'
       ? configuredEnvironment
@@ -99,10 +117,13 @@ export async function runCli(argv = process.argv.slice(2), io = defaultIo): Prom
       },
       node: process.version,
       safeMode: values.safe,
-      plugins: entries.map(entry => ({
+      diagnostics: loaded.config.version === 2 && flattened.some(entry => entry.name === 'cordis:workbench' && entry.effectiveEnabled) && !flattened.some(entry => entry.name === 'cordis:console' && entry.effectiveEnabled)
+        ? ['Workbench has enabled intent but Console is unavailable; dependent services will wait unless a compatible provider is installed.'] : [],
+      plugins: flattened.map(entry => ({
         key: entry.key,
         package: entry.name,
-        enabled: !entry.disabled,
+        enabled: entry.effectiveEnabled ?? !entry.disabled,
+        ...(entry.selfEnabled === undefined ? {} : { selfEnabled: entry.selfEnabled, parentId: entry.parentId, label: entry.label, group: !!entry.children }),
         builtin: entry.builtin,
       })),
     }, null, 2))
