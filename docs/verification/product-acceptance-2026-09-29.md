@@ -2,7 +2,7 @@
 
 依据 2026-09-28 r2 开发计划第 14 节，对当前 M0–M4 实现重新验收。基线为 `98e5b70`，本轮接续此前尚未提交的开发内容；仍是非 release 阶段，不新增兼容层、不发布、不推送。此前各阶段记录是当时的历史结果，本文件记录本次实际复跑结果。
 
-**结论：已实现范围的回归通过；M5 整体验收仍有一个功能缺口，不能标为全部通过。** 场景 E 的故障和恢复已验证，但业务对象尚不能精确定位到所属插件实例。M3-05 Draft 快照持久化仍待数据模型决策，不属于已交付能力。
+**首轮结论（归属补完前）：已实现范围的回归通过；M5 整体验收仍有一个功能缺口，不能标为全部通过。** 当时场景 E 的故障和恢复已验证，但业务对象尚不能精确定位到所属插件实例。该缺口已在同日后续实现，见文末“实例归属与导航补完”。M3-05 Draft 快照持久化仍待数据模型决策，不属于已交付能力。
 
 ## 场景与结果
 
@@ -54,4 +54,50 @@
 
 本轮按以下模块提交已验证的实现及其测试：依赖补丁和 workspace 声明、Config/CLI、Console/WebUI/i18n、Schema 组件、Scheduler/Triggers/HTTP 诊断、Workbench 编辑与管理、Runtime/默认配置/容器接线、端到端验收与文档。历史 M0–M4 截图和 JSON 检查记录随文档保留，属于当时证据，不冒充本轮重新生成。
 
-剩余工作是场景 E 的实例归属诊断与导航，以及另行决策后的 M3-05 Draft 快照。影响预览仍明确 unknown；缺失的归属信息不能根据包名或 Capability ID 猜测。Workbench 仍是 private workspace 包，本地 public 包消费验证不代表 Workbench 可独立从 registry 安装。Dockerfile 与 smoke 脚本已静态检查和配置校验，但本轮没有构建/启动容器，也没有远程 CI 或发布验收。
+首轮留下的工作是场景 E 的实例归属诊断与导航，以及另行决策后的 M3-05 Draft 快照。影响预览仍明确 unknown；缺失的归属信息不能根据包名或 Capability ID 猜测。Workbench 仍是 private workspace 包，本地 public 包消费验证不代表 Workbench 可独立从 registry 安装。Dockerfile 与 smoke 脚本已静态检查和配置校验，但本轮没有构建/启动容器，也没有远程 CI 或发布验收。
+
+## 实例归属与导航补完（2026-09-29）
+
+基线 `686fdf7`。用户要求参考 Koishi 的类似操作后实现，范围限于场景 E 的归属诊断与导航。
+
+### Koishi 依据与适配
+
+本轮实际读取 `koishijs/webui` 的 `main` 源码，以下链接指向分支，并非固定提交：
+
+- [Status Profile](https://github.com/koishijs/webui/blob/main/plugins/status/src/profile.ts) 对 Bot 的实际 `bot.ctx.scope` 调用 `loader.paths()`，将所属路径交给前端。
+- [Bot 状态导航](https://github.com/koishijs/webui/blob/main/plugins/status/client/bots/index.vue) 使用该路径跳转到插件配置。
+- [Config ServiceProvider](https://github.com/koishijs/webui/blob/main/plugins/config/src/shared/services.ts) 从真实服务实例的 Context 获取所属 Scope，并监听服务变化更新。
+
+采用其“实际注册上下文 → Loader 身份 → 实例导航”的做法，使用 Numen 当前 Cordis 的 Fiber/Entry；没有引入旧 Scope API 兼容层，也不按包名或 Capability ID 推测归属。
+
+### 实现与边界
+
+- Core/Connections 在 Definition 与 Provider 注册及释放时发送真实所有者 Context 和独立生命周期 token。Host 在加载用户实例之前开始观察，沿内部子插件的 Fiber 父链找到最近的 Loader Entry。
+- 索引只保存稳定 ID、插件来源、token、观察时间与存活状态，不持有已卸载的 Context/Fiber。最多保留 4096 条观察；淘汰、从未加载或 Host 重启后未重新注册的项目显示 unknown。历史归属只作为排查线索，不承诺插件恢复后必然提供相同注册项。
+- Definition 和 Provider 可属于不同实例；Definition 提前卸载也撤销 Provider 注册证据。旧生命周期的迟到释放不能覆盖新注册，重复释放不重复发事件。
+- 每次诊断结合当前配置重算父组路径和实际状态；实例删除、换来源、配置外部漂移时不提供错误目标。该索引不是完整依赖影响图，也不是持久化审计历史。
+- Connection 展示 Adapter Definition/Provider 和 Type Definition；Run 使用自身不可变 Revision 的 invoke 指令解析 Capability 与绑定 Connection，不读取当前 Draft。校验 Execution 所属 Run，删除的 Connection 明确提示；一次最多 64 项依赖，输出不含配置、凭据、输入或输出值。
+- 两处界面按需加载，已展开面板通过事件自动更新。可直达精确实例或禁用父组；定位会临时显示折叠路径、滚动并聚焦目标，不改写 `$collapsed`。刷新保留定位，返回保留 Connection 选择或 Run 的原视图与列表筛选。目标不存在时明确提示；返回地址仅接受已知内部对象路由。
+
+### 补充验收
+
+新增运行时用例验证独立定义/实现、内部子插件、分组禁用与恢复、跨组移动、定义先卸载、迟到释放、未托管注册、外部配置漂移、实例删除/换源，以及重启后的 unknown。Core Trigger 与 Connection Adapter 另覆盖定义先释放、重复清理与新旧 Provider 交错。
+
+组合浏览器用例实际经过：Home → 异常 Connection → Adapter 实例 → 刷新 → 返回；Run Timeline → Capability 实例 → 返回并保留 RUNNING 筛选 → 禁用父组 → 恢复，原阻塞 Run 完成。随后在面板展开时从 Host 停用/恢复 Adapter，断言自动从 current 变 previous 再恢复；缺失实例深链无替代选中。原有保存冲突、未应用 JSON、订阅清理、稳定身份移动和 Host 重启断言继续保留。
+
+另外先复现了后台更新重新抢焦点的问题：深链定位后将焦点移到命令中心，再由 Host 重命名另一组，旧实现会错误聚焦回目标实例。改为分别观察目标 ID 与是否加载完成之后，该回归通过，正常后台刷新保留当前焦点。返回路径解析也覆盖了反斜杠造成的非法 URL，解析失败时不提供返回按钮，不会令整个页面渲染失败。
+
+浏览器为本机 Playwright/Chromium，临时 `127.0.0.1` 端口、隔离 SQLite 与本地 fixture；Browser 插件不可用。查看了 1440×960 英文定位/诊断画面和 390×844 中文归属面板，主要按钮可见，无水平溢出。没有真实外部账号、其他浏览器或远程环境验收。
+
+| 本轮命令 | 实际结果 |
+| --- | --- |
+| `pnpm test` | 101 个文件、498 项通过 |
+| `pnpm typecheck` / `pnpm build` / `pnpm build:examples` | 通过；最后的焦点与返回路径修复后单元测试、类型与生产构建再次通过 |
+| `pnpm exec playwright test --output=/tmp/numen-ownership-browser-complete` | 24 项通过，约 1.6 分钟 |
+| `pnpm exec playwright test e2e/product-acceptance.spec.ts e2e/management.spec.ts --output=/tmp/numen-ownership-browser-final-accepted` | 最后焦点与返回路径修复后的 3 项相关回归通过 |
+| `pnpm release:check` | 6 个 public 包本地打包、安装、类型、ESM/SSR、构建适配器与共享 Cordis 检查通过；没有发布 |
+| `git diff --check` / `git diff --cached --check` | 通过，按模块检查实际暂存范围 |
+
+日志保留在 `/tmp/numen-ownership-{unit-final,typecheck-final,build-final,examples-final,package-check,browser-complete,browser-final-accepted}.log`；焦点问题的失败证据保留在 `/tmp/numen-ownership-focus-regression.log`。最后截图位于 `/tmp/numen-ownership-browser-final-accepted/product-acceptance-recover-a6c93--conflict-and-pending-input/` 的 `located-instance-desktop.png`、`blocked-run-desktop.png` 和 `ownership-mobile-zh.png`，不写入产品资产。
+
+场景 E 的实例导航缺口已补齐；M3-05 数据模型决策、完整依赖影响图和发布工作不包含在本次交付中。

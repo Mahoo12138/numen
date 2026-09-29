@@ -276,7 +276,7 @@ bounded classified Execution data with Source navigation. Verification: 90 test 
 See [Configuration and debugging verification](docs/verification/editor-debugging-2026-09-28.md).
 
 1. M3-05: [Draft snapshot persistence design](docs/23-draft-test-snapshot-design.md) is ready for review; saved-Draft capture and Run-lifetime retention await a data-model decision. Draft snapshot execution is not implemented.
-2. M5 follow-up: implement reliable business-object-to-plugin ownership diagnostics and direct navigation (scenario E). Combined failure/recovery, editor protection, subscriptions, configuration reconciliation, and restart acceptance now pass; the full milestone remains open for that navigation gap.
+2. M5 scenario E ownership/navigation implemented: Connection Adapter/Type and immutable Run instruction dependencies resolve through their actual registration Context to a stable Loader Entry. Definition and Provider owners remain separate; current, previous, and unknown observations are explicit. Deep links reveal collapsed ancestors, focus the exact instance, and return to the originating Connection or Run with its list context intact.
 
 M4 implemented and verified: shared Command Center/toolbar/keyboard actions, host-owned
 configuration CAS and separate saved/applied results, plugin/group management and management-channel
@@ -291,11 +291,20 @@ typecheck, production and example builds, CLI checks, and six public-package loc
 checks pass. A combined browser case covers grouped dependency failure/recovery, a lost
 configuration response, WebSocket reconnection, Entry reload, in-flight Draft conflict,
 pending-input preservation, stable-ID movement and Host restart. See the
-[acceptance matrix and remaining gap](docs/verification/product-acceptance-2026-09-29.md).
+[acceptance matrix and ownership follow-up](docs/verification/product-acceptance-2026-09-29.md).
 
-Draft snapshot execution remains unimplemented. M5 is not marked complete because exact
-Connection/Capability-to-plugin-instance diagnostics are still missing. Plugin dependency
-impact and unavailable package versions remain explicitly unknown; no release work was performed.
+Ownership follow-up: 101 unit-test files / 498 tests, typecheck, production/example builds,
+and six public-package local consumer checks pass. All 24 browser cases pass; after the final
+focus-preservation fix, the three affected management/combined cases pass again. The expanded acceptance verifies
+exact instance navigation, disabled-group recovery, reload/return, live ownership refresh,
+missing targets, and bilingual desktop/mobile rendering. Its evidence and current browser
+results are recorded in the acceptance follow-up.
+
+Draft snapshot execution remains unimplemented. Ownership observations are bounded and
+process-local: an instance never registered in the current Host session is unknown; package
+names do not establish ownership. Plugin dependency impact and unavailable package versions
+remain explicitly unknown. This closes the scenario E navigation gap, not the deferred M3-05
+data-model decision or release/distribution work.
 
 ### Local 0.1.0 baseline
 
