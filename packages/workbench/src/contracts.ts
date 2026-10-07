@@ -774,3 +774,46 @@ export type WorkbenchStartManualRunInput = {
   trigger: NumenValue
 } & ({ mode: WorkbenchPublishedRunLaunchMode; revisionId: string } | { mode: 'draft-test'; expectedDraftVersion: number })
 export interface WorkbenchStartManualRunResult { runId: string; snapshotId?: string; sourceDraftVersion?: number }
+
+export const workbenchAutomationSnapshotQueryRef = { id: 'numen:automation-snapshot', version: 1 } as const satisfies ConsoleProcedureRef
+
+export interface WorkbenchAutomationSnapshotQueryInput { automationId: string; snapshotId: string }
+
+export interface WorkbenchAutomationSnapshotSourceNode {
+  nodeId: string
+  type: WorkbenchRunFlowNode['type']
+  capability?: CapabilityRef
+  control?: CapabilityRef
+  input: WorkbenchInspectedValue
+  /** Expression kinds only: paths, template text and function arguments remain opaque. */
+  expressionFields: Array<{ field: string; type: string }>
+  connectionBindingCount: number
+  policy?: { timeoutMs?: number; retry?: { maxAttempts: number; backoffMs?: number } }
+}
+
+export interface WorkbenchAutomationSnapshotDetail {
+  automationName: string
+  identity: {
+    id: string
+    automationId: string
+    purpose: 'published' | 'draft-test'
+    number?: number
+    sourceDraftVersion?: number
+    protocolVersion: number
+    irVersion: number
+    contentHash: string
+    createdAt: string
+  }
+  compatibility: 'supported' | 'unsupported-protocol'
+  flow: WorkbenchRunDetail['flow']
+  source: {
+    nodes: WorkbenchAutomationSnapshotSourceNode[]
+    triggers: Array<{ id: string; capability: CapabilityRef; config: WorkbenchInspectedValue; connectionBindingCount: number }>
+    policy: { maxActive?: number; overflow?: 'queue' | 'drop' | 'replace'; hasGroupBy: boolean }
+    truncated: boolean
+  }
+  /** Only this editor's known collapsed-node presentation field is inspectable. */
+  presentation: { collapsedNodes: string[]; hiddenFields: number; truncated: boolean }
+  inputs: Array<{ name: string; type: 'string' | 'number' | 'boolean' | 'object' | 'array'; required: boolean; hasDefault: boolean }>
+  inputsTruncated: boolean
+}

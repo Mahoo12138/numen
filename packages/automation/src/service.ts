@@ -22,6 +22,10 @@ export class AutomationRevisionNotFoundError extends AutomationNotFoundError {
   override name = 'AutomationRevisionNotFoundError'
 }
 
+export class AutomationSnapshotInspectionLimitError extends Error {
+  override name = 'AutomationSnapshotInspectionLimitError'
+}
+
 export class AutomationActivationConflictError extends Error {
   override name = 'AutomationActivationConflictError'
 
@@ -489,6 +493,20 @@ export class AutomationService extends Service {
     const row = this.ctx.database.db.prepare('SELECT * FROM automation_revisions WHERE id = ?')
       .get(snapshotId) as RevisionRow | undefined
     return row ? mapExecutionSnapshot(row) : undefined
+  }
+
+  /** Check membership and stored UTF-8 bytes before parsing immutable inspection data. */
+  getExecutionSnapshotForInspection(snapshotId: string, automationId: string, maximumBytes = 8 * 1024 * 1024): AutomationExecutionSnapshot | undefined {
+    if (!Number.isSafeInteger(maximumBytes) || maximumBytes < 1) throw new TypeError('invalid snapshot inspection byte limit')
+    const row = this.ctx.database.db.prepare(`
+      SELECT length(CAST(source_json AS BLOB)) + length(CAST(presentation_json AS BLOB))
+        + length(CAST(compiled_plan_json AS BLOB)) + length(CAST(dependency_manifest_json AS BLOB))
+        + length(CAST(contract_snapshot_json AS BLOB)) AS json_bytes
+      FROM automation_revisions WHERE id = ? AND automation_id = ?
+    `).get(snapshotId, automationId) as { json_bytes: number } | undefined
+    if (!row) return
+    if (row.json_bytes > maximumBytes) throw new AutomationSnapshotInspectionLimitError('snapshot inspection exceeds its stored data limit')
+    return this.getExecutionSnapshot(snapshotId)
   }
 
   /** Bounded list metadata without reading Source, IR, contracts or presentation JSON. */

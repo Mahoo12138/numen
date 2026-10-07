@@ -63,6 +63,7 @@ export interface AutomationEditorProps {
   inspectorOpen?: boolean
   inspectorFocusNodeId?: string
   onActivateRevision?(revisionId: string): void
+  onViewSnapshot?(snapshotId: string): void
   onSetEnabled?(enabled: boolean): void
   onStepChange(id: string): void
   onTabChange(tab: string): void
@@ -123,6 +124,7 @@ export function AutomationEditor({
   draftTestForm,
   draftTestSessionActive,
   onActivateRevision,
+  onViewSnapshot,
   onSetEnabled,
   onStepChange,
   onTabChange,
@@ -344,6 +346,8 @@ export function AutomationEditor({
                   <div><strong>{t('workbench.revision')}{revision.number}</strong>{revision.active ? <em>{t('workbench.active')}</em> : null}</div>
                   <small>{revision.contentHash}</small>
                   <time datetime={revision.createdAt}>{revision.createdAt}</time>
+                  {onViewSnapshot ? <Button variant="secondary" aria-label={t('workbench.snapshots.viewRevision', { number: revision.number })}
+                    type="button" onClick={() => onViewSnapshot(revision.id)}>{t('workbench.snapshots.view')}</Button> : null}
                   {activation && onActivateRevision ? <Button
                     aria-label={t('workbench.activateRevisionValue0', { value0: revision.number })}
                     class="revision-activate-button"

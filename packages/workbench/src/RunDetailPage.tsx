@@ -3,6 +3,7 @@ import { diagnosticText, t, metadataText, formatDateTime, statusLabel } from './
 import { Ban, Braces, ChevronLeft, Clock3, GitBranch, ListTree, RotateCcw, ScrollText } from '@lucide/vue'
 import { computed, nextTick, onScopeDispose, reactive, ref, shallowReactive, watch } from 'vue'
 import { ExecutionDataPanel } from './ExecutionDataPanel.js'
+import { ReadonlyAutomationFlow } from './ReadonlyAutomationFlow.js'
 import { PluginOwnership } from './PluginOwnership.js'
 import { useExecutionData } from './useExecutionData.js'
 import {
@@ -16,6 +17,7 @@ import {
 } from './contracts.js'
 import {
   coreWorkbenchRoutes,
+  coreWorkbenchAutomationSnapshotRoute,
   coreWorkbenchRunContextRoute,
   coreWorkbenchRunFlowRoute,
   coreWorkbenchRunTimelineRoute,
@@ -180,7 +182,7 @@ export const RunDetailPage = defineSetupComponent<WorkbenchPageProps>(
 
     return () => (
       <main class="main-workbench core-page run-detail-page">
-        <RunDetailHeader onAutomation={() => { if (detail.status === 'READY' && detail.data) props.navigation?.navigate(coreWorkbenchRoutes.automations, { query: { automation: detail.data.run.automationId } }) }} onLogs={() => props.navigation?.navigate(coreWorkbenchRoutes.system, { query: { runId: runId.value, from: new URLSearchParams(props.navigation?.route.search ?? '').get('from') ?? undefined } })} cancellation={cancellation} onBack={openRuns} onCancel={cancelRun} state={detail} />
+        <RunDetailHeader onSnapshot={() => { if (detail.status === 'READY' && detail.data) props.navigation?.navigate(coreWorkbenchAutomationSnapshotRoute, { parameters: { automationId: detail.data.run.automationId, snapshotId: detail.data.run.revisionId }, query: { fromRun: detail.data.run.id } }) }} onAutomation={() => { if (detail.status === 'READY' && detail.data) props.navigation?.navigate(coreWorkbenchRoutes.automations, { query: { automation: detail.data.run.automationId } }) }} onLogs={() => props.navigation?.navigate(coreWorkbenchRoutes.system, { query: { runId: runId.value, from: new URLSearchParams(props.navigation?.route.search ?? '').get('from') ?? undefined } })} cancellation={cancellation} onBack={openRuns} onCancel={cancelRun} state={detail} />
         <ExecutionDataPanel state={inspection.state.value} onClose={closeInspection} onLocate={selectSource} />
         <RunDetailContent
           activeView={activeView.value}
@@ -207,13 +209,14 @@ export const RunDetailPage = defineSetupComponent<WorkbenchPageProps>(
   },
 )
 
-function RunDetailHeader({ state, cancellation, onBack, onCancel, onLogs, onAutomation }: {
+function RunDetailHeader({ state, cancellation, onBack, onCancel, onLogs, onAutomation, onSnapshot }: {
   state: ConsoleQueryState<WorkbenchRunDetail | null>
   cancellation: { pending: boolean; error?: string; confirmedStatus?: WorkbenchCancelRunResult['status'] }
   onBack(): void
   onCancel(): void
   onLogs(): void
   onAutomation(): void
+  onSnapshot(): void
 }) {
   const run = state.status === 'READY' ? state.data?.run : undefined
   const status = cancellation.confirmedStatus ?? run?.status
@@ -229,6 +232,7 @@ function RunDetailHeader({ state, cancellation, onBack, onCancel, onLogs, onAuto
       </div>
       {run ? (
         <div class="run-detail-actions">
+          <Button variant="secondary" class="secondary-button" type="button" onClick={onSnapshot}>{t('workbench.snapshots.view')}</Button>
           <Button variant="secondary" class="secondary-button" type="button" onClick={onAutomation}>{t('workbench.navigation.openAutomation')}</Button>
           <Button variant="secondary" class="secondary-button" type="button" onClick={onLogs}>{t('workbench.logs.viewRun')}</Button>
           {cancellable ? (
@@ -384,25 +388,9 @@ function RunFlowView({ detail, onSelectNode, selectedNodeId }: { detail: Workben
         <div><h2 id="run-flow-title">{t('workbench.flow')}</h2><span>{t('workbench.immutableRevisionStructureDurableExecutionStatus')}</span></div>
         <strong>{detail.flow.root.executionCount}</strong>
       </div>
-      <ol class="run-flow-tree">
-        <RunFlowNode node={detail.flow.root} onSelectNode={onSelectNode} selectedNodeId={selectedNodeId} selectable={false} />
-      </ol>
+      <ReadonlyAutomationFlow flow={detail.flow} showExecutionState onSelectNode={onSelectNode} selectedNodeId={selectedNodeId} />
       {detail.flow.truncated ? <p class="run-projection-note">{t('workbench.thisFlowExceedsThe250NodeInspectionLimitTheRemainingStructureIsHidden')}</p> : null}
     </section>
-  )
-}
-
-function RunFlowNode({ node, onSelectNode, selectedNodeId, selectable = true }: { node: WorkbenchRunDetail['flow']['root']; onSelectNode?: ((id: string) => void) | undefined; selectedNodeId?: string | undefined; selectable?: boolean }) {
-  return (
-    <li>
-      <div class="run-flow-node" data-status={node.status} data-selected={node.id === selectedNodeId}>
-        <span aria-hidden="true" class="run-flow-marker" />
-        <div><strong>{node.title}</strong><p>{node.detail}</p><code>{node.id}</code></div>
-        <em data-status={node.status}>{statusLabel(node.status)}</em>
-        {onSelectNode && selectable ? <Button data-run-source-id={node.id} aria-label={t('workbench.runData.executionsFor', { node: node.id })} onClick={() => onSelectNode(node.id)} type="button">{t('workbench.runData.executions')}</Button> : null}
-      </div>
-      {node.children.length ? <ol>{node.children.map(child => <RunFlowNode key={child.id} node={child} onSelectNode={onSelectNode} selectedNodeId={selectedNodeId} />)}</ol> : null}
-    </li>
   )
 }
 

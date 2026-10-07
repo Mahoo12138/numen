@@ -3,7 +3,7 @@ import { localizeCatalogItem, useWorkbenchI18n } from './i18n.js'
 import { AutomationRuns } from './AutomationRuns.js'
 import { ManualRunForm } from './ManualRunForm.js'
 import { Button } from '@numenjs/components'
-import { coreWorkbenchRunFlowRoute } from './routes.js'
+import { coreWorkbenchRunFlowRoute, coreWorkbenchAutomationSnapshotRoute } from './routes.js'
 import type { SourceRef } from '@numenjs/core'
 import { computed, h, inject, nextTick, onScopeDispose, provide, ref, watch, type ComputedRef, type InjectionKey } from 'vue'
 import { DraftConflictRecovery } from './DraftConflictRecovery.js'
@@ -422,6 +422,9 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
       },
     } : {}),
     onOpenInspector: () => props.onInspectorOpenChange(!props.inspectorOpen),
+    onViewSnapshot: (snapshotId: string) => {
+      if (authoring.document) props.navigation?.navigate(coreWorkbenchAutomationSnapshotRoute, { parameters: { automationId: authoring.document.automationId, snapshotId } })
+    },
     onStepChange: id => {
       if (id !== activeStepId.value && !allowInputChange()) return
       const step = steps.value.find(item => item.id === id)

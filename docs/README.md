@@ -73,3 +73,4 @@
 - [20. 通用组件与 npm 发布](20-components-and-publishing.md)
 - [23. Draft 固定快照试运行设计建议](23-draft-test-snapshot-design.md)
 - [24. Draft 快照决策与迁移影响清单（已批准）](24-draft-test-snapshot-decision.md)
+- [N2-01 固定快照查看验收](verification/version-workspace-2026-10-08.md)

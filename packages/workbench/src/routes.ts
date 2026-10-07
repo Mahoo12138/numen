@@ -10,6 +10,7 @@ export const coreWorkbenchRoutes = {
 } as const satisfies Record<string, FrontendExtensionRef>
 
 export const coreWorkbenchCredentialsRoute = { id: 'numen:credentials', version: 1 } as const satisfies FrontendExtensionRef
+export const coreWorkbenchAutomationSnapshotRoute = { id: 'numen:automation-snapshot', version: 1 } as const satisfies FrontendExtensionRef
 
 export const coreWorkbenchRunRoutes = {
   flow: { id: 'numen:run-flow', version: 1 },
@@ -27,6 +28,7 @@ const activityByRouteId = new Map<string, CoreWorkbenchActivityId>(
   Object.entries(coreWorkbenchRoutes).map(([activityId, route]) => [route.id, activityId as CoreWorkbenchActivityId]),
 )
 activityByRouteId.set(coreWorkbenchCredentialsRoute.id, 'connections')
+activityByRouteId.set(coreWorkbenchAutomationSnapshotRoute.id, 'automations')
 for (const route of Object.values(coreWorkbenchRunRoutes)) activityByRouteId.set(route.id, 'runs')
 
 export function activityIdForRoute(route?: FrontendExtensionRef): CoreWorkbenchActivityId | undefined {
@@ -34,6 +36,7 @@ export function activityIdForRoute(route?: FrontendExtensionRef): CoreWorkbenchA
   const activityId = activityByRouteId.get(route.id)
   if (!activityId) return
   if (route.id === coreWorkbenchCredentialsRoute.id) return route.version === coreWorkbenchCredentialsRoute.version ? activityId : undefined
+  if (route.id === coreWorkbenchAutomationSnapshotRoute.id) return route.version === coreWorkbenchAutomationSnapshotRoute.version ? activityId : undefined
   const runRoute = Object.values(coreWorkbenchRunRoutes).find(candidate => candidate.id === route.id)
   if (runRoute) {
     return route.version === runRoute.version ? activityId : undefined

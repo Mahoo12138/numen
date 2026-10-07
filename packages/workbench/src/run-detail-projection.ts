@@ -125,7 +125,7 @@ const flowStatusPriority: WorkbenchRunFlowStatus[] = [
   'FAILED', 'CANCELLING', 'RUNNING', 'BLOCKED', 'WAITING', 'CANCELLED', 'QUEUED', 'COMPLETED', 'IDLE',
 ]
 
-function projectRunFlow(
+export function projectRunFlow(
   revision: AutomationExecutionSnapshot | undefined,
   summaries: RunInstructionExecutionSummary[],
 ): WorkbenchRunDetail['flow'] {
@@ -177,15 +177,16 @@ function projectFlowNode(
   capabilityTitles: ReadonlyMap<string, string>,
   budget: { remaining: number; truncated: boolean },
   label?: string,
+  depth = 0,
 ): WorkbenchRunFlowNode | undefined {
-  if (budget.remaining <= 0) {
+  if (budget.remaining <= 0 || depth > 64) {
     budget.truncated = true
     return
   }
   budget.remaining -= 1
   const children: WorkbenchRunFlowNode[] = []
   const append = (child: ControlSource, childLabel?: string) => {
-    const projected = projectFlowNode(child, summaries, capabilityTitles, budget, childLabel)
+    const projected = projectFlowNode(child, summaries, capabilityTitles, budget, childLabel, depth + 1)
     if (projected) children.push(projected)
   }
   switch (control.type) {
