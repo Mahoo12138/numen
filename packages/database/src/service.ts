@@ -47,11 +47,17 @@ export class DatabaseService extends Service {
 
     const database = new Database(this.path)
     this.connection = database
-    database.pragma('foreign_keys = ON')
-    database.pragma('journal_mode = WAL')
-    database.pragma('busy_timeout = 5000')
-    runMigrations(database)
-    this.ready = true
+    try {
+      database.pragma('foreign_keys = ON')
+      database.pragma('journal_mode = WAL')
+      database.pragma('busy_timeout = 5000')
+      runMigrations(database)
+      this.ready = true
+    } catch (error) {
+      this.connection = undefined
+      database.close()
+      throw error
+    }
 
     yield () => {
       this.ready = false

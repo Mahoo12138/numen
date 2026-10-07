@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { createReadStream, createWriteStream } from 'node:fs'
-import { link, mkdir, readdir, stat, unlink } from 'node:fs/promises'
+import { closeSync, createReadStream, createWriteStream, fstatSync, openSync, unlinkSync } from 'node:fs'
+import { link, mkdir, open, readdir, stat, unlink } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { Readable, Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
@@ -71,6 +71,24 @@ export class LocalResourceStore {
     return createReadStream(this.pathForDigest(digest))
   }
 
+  async verifyReadable(digest: string): Promise<void> {
+    const file = await open(this.pathForDigest(digest), 'r')
+    try {
+      if (!(await file.stat()).isFile()) throw new Error(`resource object is not a file: ${digest}`)
+    } finally {
+      await file.close()
+    }
+  }
+
+  verifyReadableSync(digest: string): void {
+    const file = openSync(this.pathForDigest(digest), 'r')
+    try {
+      if (!fstatSync(file).isFile()) throw new Error(`resource object is not a file: ${digest}`)
+    } finally {
+      closeSync(file)
+    }
+  }
+
   async has(digest: string): Promise<boolean> {
     try {
       const info = await stat(this.pathForDigest(digest))
@@ -84,6 +102,16 @@ export class LocalResourceStore {
   async delete(digest: string): Promise<boolean> {
     try {
       await unlink(this.pathForDigest(digest))
+      return true
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false
+      throw error
+    }
+  }
+
+  deleteSync(digest: string): boolean {
+    try {
+      unlinkSync(this.pathForDigest(digest))
       return true
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false

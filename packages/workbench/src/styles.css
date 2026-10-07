@@ -947,6 +947,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .automation-manual-run .manual-run-actions .secondary-button,
 .automation-manual-run .manual-run-result-actions .secondary-button { width: auto; min-height: 32px; margin: 0; padding-inline: 12px; }
 .automation-manual-run > [role="status"], .automation-manual-run > [role="alert"] { margin: 12px 0 0; }
+.automation-draft-test { min-width: 0; max-height: 50vh; overflow: auto; border-bottom: 1px solid var(--wb-border); background: var(--wb-surface-subtle); }
+.automation-draft-test .automation-manual-run { padding-block: 16px; overflow: visible; }
+.draft-test-result { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 0; padding: 12px 28px; color: var(--wb-accent-strong); overflow-wrap: anywhere; }
+.automation-draft-test .activation-help { overflow-wrap: anywhere; }
 @media (max-width: 680px) {
   .automation-input-settings, .automation-manual-run { padding: 18px 16px; }
   .automation-input-metadata { grid-template-columns: minmax(0, 1fr) 100px; }

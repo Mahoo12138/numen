@@ -39,7 +39,7 @@ export function workbenchPluginOwnershipProviderPlugin(ctx: Context): void {
       // Enforce run/execution ownership before reading the immutable compiled instruction.
       const execution = scheduler.inspectExecution(input.runId, input.executionId, 1)?.execution
       if (!run || !execution) throw new ConsoleProcedureError(404, 'EXECUTION_NOT_FOUND', 'The Execution does not belong to this Run.')
-      const revision = automations.getRevision(run.revisionId)
+      const revision = automations.getExecutionSnapshot(run.revisionId)
       const instruction = revision?.compiledPlan.instructions[execution.instructionId]
       if (!instruction) throw new ConsoleProcedureError(404, 'INSTRUCTION_NOT_FOUND', 'The immutable instruction is unavailable.')
       if (instruction.op === 'invoke') {

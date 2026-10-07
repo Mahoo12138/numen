@@ -97,6 +97,21 @@ declare module 'cordis' {
 const ownerPartPattern = /^[a-zA-Z0-9][a-zA-Z0-9_.:-]*$/
 const mediaTypePattern = /^[a-zA-Z0-9][a-zA-Z0-9!#$&^_.+-]*\/[a-zA-Z0-9][a-zA-Z0-9!#$&^_.+-]*$/
 
+const garbageEligibility = `
+  NOT EXISTS (
+    SELECT 1 FROM resource_owners WHERE resource_owners.resource_id = resources.id
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM resource_leases
+    WHERE resource_leases.resource_id = resources.id AND resource_leases.expires_at > ?
+  )
+  AND (
+    resources.state = 'DELETING'
+    OR (resources.state = 'STAGED' AND resources.staged_expires_at <= ?)
+    OR (resources.state = 'COMMITTED' AND resources.gc_after IS NOT NULL AND resources.gc_after <= ?)
+  )
+`
+
 function resolveStorePath(ctx: Context, path: string): string {
   if (isAbsolute(path)) return path
   if (ctx.baseUrl?.startsWith('file:')) return fileURLToPath(new URL(path.replaceAll(sep, '/'), ctx.baseUrl))
@@ -139,6 +154,7 @@ export class ResourceService extends Service {
   private readonly stagingTtlMs: number
   private readonly gcGraceMs: number
   private readonly temporaryMaxAgeMs: number
+  private collection: Promise<void> = Promise.resolve()
 
   constructor(ctx: Context, public config: ResourceConfig) {
     super(ctx, 'resources')
@@ -169,26 +185,39 @@ export class ResourceService extends Service {
     const nowMs = Date.now()
     const now = new Date(nowMs).toISOString()
     try {
-      this.ctx.database.db.prepare(`
-        INSERT INTO resources (
-          id, name, media_type, size, digest, store_id, state,
-          staged_expires_at, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, 'local', 'STAGED', ?, ?, ?)
-      `).run(
-        resourceId,
-        name,
-        input.mediaType,
-        stored.size,
-        stored.digest,
-        new Date(nowMs + ttlMs).toISOString(),
-        now,
-        now,
-      )
+      this.ctx.database.transaction(() => {
+        const deleting = this.ctx.database.db.prepare(`
+          SELECT 1 FROM resources WHERE digest = ? AND state = 'DELETING' LIMIT 1
+        `).get(stored.digest)
+        if (deleting) throw new Error(`resource content is being deleted: ${stored.digest}`)
+        // The write may have overlapped a completed GC unlink. Check the physical
+        // object while holding the same write boundary as its metadata publication.
+        this.store.verifyReadableSync(stored.digest)
+        this.ctx.database.db.prepare(`
+          INSERT INTO resources (
+            id, name, media_type, size, digest, store_id, state,
+            staged_expires_at, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, 'local', 'STAGED', ?, ?, ?)
+        `).run(
+          resourceId,
+          name,
+          input.mediaType,
+          stored.size,
+          stored.digest,
+          new Date(nowMs + ttlMs).toISOString(),
+          now,
+          now,
+        )
+      })
     } catch (error) {
-      const referenced = this.ctx.database.db.prepare(`
-        SELECT 1 FROM resources WHERE digest = ? AND state != 'GONE' LIMIT 1
-      `).get(stored.digest)
-      if (!referenced) await this.store.delete(stored.digest)
+      this.ctx.database.transaction(() => {
+        const referenced = this.ctx.database.db.prepare(`
+          SELECT 1 FROM resources WHERE digest = ? AND state != 'GONE' LIMIT 1
+        `).get(stored.digest)
+        // Failed publication has no DELETING row to fence later writers, so its
+        // unreferenced bytes must be removed without yielding the write boundary.
+        if (!referenced) this.store.deleteSync(stored.digest)
+      })
       throw error
     }
     return this.get(resourceId)!
@@ -207,6 +236,28 @@ export class ResourceService extends Service {
   open(resourceId: string): Readable {
     const resource = this.requireReadable(resourceId)
     return this.store.read(resource.digest)
+  }
+
+  async preflight(resourceId: string): Promise<ResourceMetadata> {
+    const resource = this.requireAcceptableResource(resourceId)
+    try {
+      await this.store.verifyReadable(resource.digest)
+    } catch (cause) {
+      throw new ResourceNotFoundError(`resource object is not readable: ${resourceId}`, { cause })
+    }
+    // This is a preflight only: commitOwner rechecks the state inside the
+    // caller's synchronous acceptance transaction and creates a durable owner.
+    return this.requireAcceptableResource(resourceId)
+  }
+
+  assertAcceptable(resourceId: string): ResourceMetadata {
+    const resource = this.requireAcceptableResource(resourceId)
+    try {
+      this.store.verifyReadableSync(resource.digest)
+    } catch (cause) {
+      throw new ResourceNotFoundError(`resource object is not readable: ${resourceId}`, { cause })
+    }
+    return resource
   }
 
   commitOwner(resourceId: string, owner: ResourceOwner): ResourceMetadata {
@@ -267,14 +318,18 @@ export class ResourceService extends Service {
     const holder = holderInput.trim()
     if (!holder) throw new TypeError('resource lease holder is required')
     const leaseDuration = this.duration(durationMs, 'lease duration')
-    this.requireReadable(resourceId)
     const leaseId = `lease_${randomUUID().replaceAll('-', '')}`
     const nowMs = Date.now()
     const now = new Date(nowMs).toISOString()
-    this.ctx.database.db.prepare(`
-      INSERT INTO resource_leases (id, resource_id, holder, expires_at, created_at)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(leaseId, resourceId, holder, new Date(nowMs + leaseDuration).toISOString(), now)
+    const acquire = () => {
+      this.requireReadable(resourceId)
+      this.ctx.database.db.prepare(`
+        INSERT INTO resource_leases (id, resource_id, holder, expires_at, created_at)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(leaseId, resourceId, holder, new Date(nowMs + leaseDuration).toISOString(), now)
+    }
+    if (this.ctx.database.db.inTransaction) acquire()
+    else this.ctx.database.transaction(acquire)
     return this.getLease(leaseId)!
   }
 
@@ -287,39 +342,26 @@ export class ResourceService extends Service {
     return !!this.ctx.database.db.prepare('DELETE FROM resource_leases WHERE id = ?').run(leaseId).changes
   }
 
-  async collectGarbage(nowInput = new Date()): Promise<number> {
+  collectGarbage(nowInput = new Date()): Promise<number> {
     const now = nowInput.toISOString()
+    const collection = this.collection.then(() => this.collectGarbageAt(now))
+    this.collection = collection.then(() => {}, () => {})
+    return collection
+  }
+
+  private async collectGarbageAt(now: string): Promise<number> {
     this.ctx.database.db.prepare('DELETE FROM resource_leases WHERE expires_at <= ?').run(now)
     const rows = this.ctx.database.db.prepare(`
       SELECT resources.* FROM resources
-      WHERE resources.state = 'DELETING'
-         OR (
-           resources.state = 'STAGED'
-           AND resources.staged_expires_at <= ?
-           AND NOT EXISTS (
-             SELECT 1 FROM resource_leases
-             WHERE resource_leases.resource_id = resources.id AND resource_leases.expires_at > ?
-           )
-         )
-         OR (
-           resources.state = 'COMMITTED'
-           AND resources.gc_after IS NOT NULL AND resources.gc_after <= ?
-           AND NOT EXISTS (
-             SELECT 1 FROM resource_owners WHERE resource_owners.resource_id = resources.id
-           )
-           AND NOT EXISTS (
-             SELECT 1 FROM resource_leases
-             WHERE resource_leases.resource_id = resources.id AND resource_leases.expires_at > ?
-           )
-         )
+      WHERE ${garbageEligibility}
       ORDER BY resources.created_at, resources.id
-    `).all(now, now, now, now) as ResourceRow[]
+    `).all(now, now, now) as ResourceRow[]
     let collected = 0
     for (const row of rows) {
       const claimed = this.ctx.database.db.prepare(`
         UPDATE resources SET state = 'DELETING', updated_at = ?
-        WHERE id = ? AND state IN ('STAGED', 'COMMITTED', 'DELETING')
-      `).run(now, row.id)
+        WHERE id = ? AND ${garbageEligibility}
+      `).run(now, row.id, now, now, now)
       if (!claimed.changes) continue
       const shared = this.ctx.database.db.prepare(`
         SELECT 1 FROM resources
@@ -369,6 +411,14 @@ export class ResourceService extends Service {
     const resource = this.requireResource(resourceId)
     if (resource.state !== 'STAGED' && resource.state !== 'COMMITTED') {
       throw new Error(`resource is not readable: ${resourceId} (${resource.state})`)
+    }
+    return resource
+  }
+
+  private requireAcceptableResource(resourceId: string): ResourceMetadata {
+    const resource = this.requireResource(resourceId)
+    if (resource.state !== 'STAGED' && resource.state !== 'COMMITTED') {
+      throw new ResourceNotFoundError(`resource is not readable: ${resourceId} (${resource.state})`)
     }
     return resource
   }

@@ -1,6 +1,9 @@
 import { AutomationInputs } from './AutomationInputs.js'
 import { localizeCatalogItem, useWorkbenchI18n } from './i18n.js'
 import { AutomationRuns } from './AutomationRuns.js'
+import { ManualRunForm } from './ManualRunForm.js'
+import { Button } from '@numenjs/components'
+import { coreWorkbenchRunFlowRoute } from './routes.js'
 import type { SourceRef } from '@numenjs/core'
 import { computed, h, inject, nextTick, onScopeDispose, provide, ref, watch, type ComputedRef, type InjectionKey } from 'vue'
 import { DraftConflictRecovery } from './DraftConflictRecovery.js'
@@ -27,6 +30,7 @@ import {
   type WorkbenchArchiveAutomationInput,
   type WorkbenchRemoveArchivedAutomationInput,
   type WorkbenchRestoreAutomationInput,
+  type WorkbenchStartManualRunResult,
 } from './contracts.js'
 import { Inspector, type InspectorFieldFocus } from './Inspector.js'
 import type { WorkbenchPageChromeProps } from './types.js'
@@ -53,6 +57,8 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
   const inputs = createAutomationInputSession(() => globalThis.confirm(t('workbench.document.discardInputs')))
   provideAutomationInputSession(inputs)
   const inputBlocked = ref(false)
+  const draftTestMounted = ref(false), draftTestOpen = ref(false), draftTestProtection = ref(false)
+  const lastDraftTest = ref<WorkbenchStartManualRunResult>()
   const blurCurrentInput = () => {
     if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) document.activeElement.blur()
   }
@@ -205,7 +211,7 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
     detail,
     reloadDetail,
   })
-  const needsProtection = computed(() => automationDocumentNeedsProtection(authoring.savePhase, inputs.hasUncommitted, authoring.publishPending))
+  const needsProtection = computed(() => draftTestProtection.value || automationDocumentNeedsProtection(authoring.savePhase, inputs.hasUncommitted, authoring.publishPending))
   function allowDocumentLeave(): boolean {
     blurCurrentInput()
     return !needsProtection.value || globalThis.confirm(t('workbench.document.leaveUnsaved'))
@@ -241,11 +247,27 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
     cleanup(() => window.removeEventListener('beforeunload', beforeUnload))
   }, { immediate: true, flush: 'sync' })
   watch(() => inputs.hasUncommitted, pending => { if (!pending) inputBlocked.value = false }, { flush: 'sync' })
-  watch(automationId, () => { inputs.clear(); inputBlocked.value = false })
+  watch(automationId, () => { inputs.clear(); inputBlocked.value = false; draftTestMounted.value = false; draftTestOpen.value = false; lastDraftTest.value = undefined; draftTestProtection.value = false })
   const publishDraft = () => {
     blurCurrentInput()
     if (inputs.hasUncommitted) { inputBlocked.value = true; return }
     authoring.publish()
+  }
+  const openDraftTest = () => {
+    if (!draftTestMounted.value) {
+      blurCurrentInput()
+      if (inputs.hasUncommitted) { inputBlocked.value = true; return }
+    }
+    draftTestMounted.value = true; draftTestOpen.value = true
+    void nextTick(() => document.querySelector<HTMLElement>('.automation-draft-test')?.scrollIntoView({ block: 'nearest' }))
+  }
+  const prepareDraftTest = async (signal: AbortSignal): Promise<number | undefined> => {
+    blurCurrentInput()
+    if (inputs.hasUncommitted) { inputBlocked.value = true; return }
+    const id = authoring.document?.automationId
+    const saved = await authoring.flushDraft(signal)
+    if (!saved || signal.aborted || !id || authoring.document?.automationId !== id || inputs.hasUncommitted) return
+    return authoring.document.version
   }
   const archiveAutomation = (automationIdTarget: string, expectedActivationGeneration: number) => {
     // Commit focused valid text before lifecyclePending makes the form read-only.
@@ -351,12 +373,30 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
       ...(editable.value ? { onDeleteStep: nodeId => { if (allowInputChange()) authoring.deleteStep(nodeId) }, onMoveStep: (nodeId, direction) => { if (allowInputChange()) authoring.moveStep(nodeId, direction) } } : {}),
       onReloadInsertCatalog: reloadInsertCatalog,
       ...(editable.value ? { onUndo: () => { if (allowInputChange()) authoring.undo() }, onRedo: () => { if (allowInputChange()) authoring.redo() }, onPublish: publishDraft } : {}),
+      ...(editable.value || draftTestMounted.value ? { onTestDraft: openDraftTest, draftTestSessionActive: draftTestMounted.value } : {}),
       onReloadDraft: () => { if (allowDocumentLeave()) { inputs.discard(); authoring.reload() } },
       ...(editable.value ? { onRetrySave: authoring.retrySave } : {}),
     } : {}),
     ...(props.consoleClient && authoring.document ? {
       inputSettings: h(AutomationInputs, { key: authoring.document.automationId, inputs: authoring.document.source.inputs, canEdit: editable.value && authoring.canEdit, problems: authoring.problems, onChange: inputs => { if (editable.value) authoring.setAutomationInputs(inputs) }, ...(props.schemaUI ? { schemaUI: props.schemaUI } : {}) }),
       manualRunForm: h(AutomationRuns, { key: authoring.document.automationId, automationId: authoring.document.automationId, archived: archived.value, consoleClient: props.consoleClient, ...(props.schemaUI ? { schemaUI: props.schemaUI } : {}), ...(props.navigation ? { navigation: props.navigation } : {}) }),
+      ...(draftTestMounted.value ? { draftTestForm: h('section', { class: 'automation-draft-test' }, [
+        ...(lastDraftTest.value?.sourceDraftVersion ? [h('p', { role: 'status', class: 'draft-test-result' }, [
+          t('workbench.draftTest.acceptedSnapshot', { version: lastDraftTest.value.sourceDraftVersion }),
+          authoring.document.version !== lastDraftTest.value.sourceDraftVersion || authoring.savePhase !== 'CLEAN' || inputs.hasUncommitted ? ` · ${t('workbench.draftTest.currentChanged')}` : '',
+          h(Button, { type: 'button', onClick: () => props.navigation?.navigate(coreWorkbenchRunFlowRoute, { parameters: { id: lastDraftTest.value!.runId } }) }, () => t('workbench.viewRun')),
+        ])] : []),
+        h('div', { style: { display: draftTestOpen.value ? undefined : 'none' } }, [h(ManualRunForm, {
+          key: authoring.document.automationId, automationId: authoring.document.automationId, consoleClient: props.consoleClient,
+          initialMode: 'draft-test', prepareDraft: prepareDraftTest,
+          canStartNewRun: !archived.value,
+          currentDraftChanged: (version: number) => authoring.document?.version !== version || authoring.savePhase !== 'CLEAN' || inputs.hasUncommitted,
+          onAccepted: (result: WorkbenchStartManualRunResult) => { lastDraftTest.value = result },
+          onProtectionChange: (protect: boolean) => { draftTestProtection.value = protect },
+          onLocate: (source: SourceRef) => selectProblem(source), onClose: () => { draftTestOpen.value = false },
+          ...(props.schemaUI ? { schemaUI: props.schemaUI } : {}), ...(props.navigation ? { navigation: props.navigation } : {}),
+        })]),
+      ]) } : {}),
     } : {}),
     ...(props.consoleClient && authoring.document && authoring.conflict ? {
       conflictRecovery: h(DraftConflictRecovery, {
@@ -427,6 +467,7 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
       edit('automation.moveUp', t('workbench.moveUp'), options?.canMoveUp, () => { if (selected) view.onMoveStep?.(selected, 'up') }, { alt: true, key: 'ArrowUp' }),
       edit('automation.moveDown', t('workbench.moveDown'), options?.canMoveDown, () => { if (selected) view.onMoveStep?.(selected, 'down') }, { alt: true, key: 'ArrowDown' }),
       { id: 'automation.publish', label: t('workbench.publish'), visible: !!source, ...(!view.authoring?.canPublish ? { disabledReason: t('workbench.commands.readOnly') } : {}), execute: publishDraft },
+      { id: 'automation.draftTest', label: t(draftTestMounted.value ? 'workbench.draftTest.show' : 'workbench.draftTest.open'), visible: !!source, ...(!draftTestMounted.value && !view.authoring?.canPublish ? { disabledReason: t('workbench.commands.readOnly') } : {}), execute: () => { activeTab.value = 'Editor'; openDraftTest() } },
       { id: 'automation.runs', label: t('workbench.viewRuns'), visible: !!source, execute: () => openRuns() },
       { id: 'automation.testRun', label: t('workbench.commands.testRun'), visible: !!source,
         ...(archived.value || !effectiveDetail.value?.revisions.length ? { disabledReason: t(archived.value ? 'workbench.commands.readOnly' : 'workbench.commands.publishFirst') } : {}), execute: () => openRuns(true) },
@@ -440,6 +481,7 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
     if (nodeId === '__inputs') { activeTab.value = 'Settings'; props.onInspectorOpenChange(false); return }
     const step = steps.value.find(item => item.sourceId === nodeId)
     if (!step) return
+    activeTab.value = 'Editor'
     authoring.selectNode(nodeId, editable.value && authoring.canEdit)
     fieldFocus.value = {
       nodeId,

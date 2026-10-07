@@ -128,6 +128,8 @@ export const workbenchRunsIndexQuery: ConsoleQueryDefinition<Record<string, unkn
       automationId: z.string().required(),
       automationName: z.string().required(),
       revisionId: z.string().required(),
+      snapshotPurpose: z.union(['published', 'draft-test']),
+      sourceDraftVersion: z.number().step(1).min(1),
       status: runStatus,
       createdAt: z.string().required(),
       startedAt: z.string(),
@@ -160,6 +162,8 @@ export const workbenchRunDetailQuery: ConsoleQueryDefinition<Record<string, unkn
       automationName: z.string().required(),
       revisionId: z.string().required(),
       revisionNumber: z.number(),
+      snapshotPurpose: z.union(['published', 'draft-test']),
+      sourceDraftVersion: z.number().step(1).min(1),
       status: runStatus,
       groupKey: z.string(),
       cancelReason: cancellationReason,
@@ -250,18 +254,22 @@ export function workbenchRunsProviderPlugin(ctx: Context): void {
           failed: counts.FAILED,
           cancelled: counts.CANCELLED,
         },
-        items: page.items.map(run => ({
-          id: run.id,
-          automationId: run.automationId,
-          automationName: automationNames.get(run.automationId) ?? 'Unknown automation',
-          revisionId: run.revisionId,
-          status: run.status,
-          createdAt: run.createdAt,
-          ...(run.startedAt ? { startedAt: run.startedAt } : {}),
-          ...(run.finishedAt ? { finishedAt: run.finishedAt } : {}),
-          executionCount: run.executionCount,
-          attemptCount: run.attemptCount,
-        })),
+        items: page.items.map(run => {
+          const snapshot = ctx.automations.getExecutionSnapshotIdentity(run.revisionId)
+          return {
+            id: run.id,
+            automationId: run.automationId,
+            automationName: automationNames.get(run.automationId) ?? 'Unknown automation',
+            revisionId: run.revisionId,
+            ...(snapshot ? { snapshotPurpose: snapshot.purpose, ...(snapshot.purpose === 'draft-test' ? { sourceDraftVersion: snapshot.sourceDraftVersion } : {}) } : {}),
+            status: run.status,
+            createdAt: run.createdAt,
+            ...(run.startedAt ? { startedAt: run.startedAt } : {}),
+            ...(run.finishedAt ? { finishedAt: run.finishedAt } : {}),
+            executionCount: run.executionCount,
+            attemptCount: run.attemptCount,
+          }
+        }),
         ...(page.nextCursor ? { nextCursor: encodeCursor({ ...page.nextCursor, ...filters }) } : {}),
       }
     },
@@ -271,7 +279,7 @@ export function workbenchRunsProviderPlugin(ctx: Context): void {
       const run = ctx.scheduler.getRun(input.runId)
       if (!run) return null
       const automation = ctx.automations.get(run.automationId)
-      const revision = ctx.automations.getRevision(run.revisionId)
+      const revision = ctx.automations.getExecutionSnapshot(run.revisionId)
       const inspection = ctx.scheduler.inspectRun(run.id)!
       const diagnostics = ctx.scheduler.listExecutionDiagnosticsPage(
         run.id,

@@ -111,7 +111,7 @@ test('preserves unapplied input across cancelled node, tab, automation and histo
   await expect(headers).toHaveValue(invalid)
 
   await page.getByRole('button', { name: 'Publish', exact: true }).click()
-  await expect(page.getByText('Apply or correct the pending field input before publishing or archiving. Your input has been kept.', { exact: true })).toBeVisible()
+  await expect(page.getByText('Apply or correct the pending field input before publishing, archiving, or testing. Your input has been kept.', { exact: true })).toBeVisible()
   expect(application.context.automations.listRevisions(automationId)).toHaveLength(0)
   expect(draft()).toEqual(before)
   await page.screenshot({ path: testInfo.outputPath('document-invalid-desktop.png'), fullPage: true })

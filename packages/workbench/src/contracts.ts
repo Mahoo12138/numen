@@ -75,6 +75,8 @@ export interface WorkbenchRunsQueryInput {
 
 export interface WorkbenchRunIndexItem extends WorkbenchHomeRun {
   revisionId: string
+  snapshotPurpose?: 'published' | 'draft-test'
+  sourceDraftVersion?: number
   startedAt?: string
   executionCount: number
   attemptCount: number
@@ -207,6 +209,8 @@ export interface WorkbenchRunDetail {
     automationName: string
     revisionId: string
     revisionNumber?: number
+    snapshotPurpose?: 'published' | 'draft-test'
+    sourceDraftVersion?: number
     status: WorkbenchRunStatus
     groupKey?: string
     cancelReason?: CancellationReason
@@ -746,26 +750,27 @@ export interface WorkbenchAutomationActivationResult {
 
 export const workbenchManualRunFormQueryRef = { id: 'numen:manual-run-form', version: 1 } as const satisfies ConsoleProcedureRef
 export const workbenchStartManualRunActionRef = { id: 'numen:manual-run-start', version: 1 } as const satisfies ConsoleProcedureRef
-export type WorkbenchRunLaunchMode = 'manual' | 'revision-test'
-export interface WorkbenchManualRunFormInput {
+export type WorkbenchPublishedRunLaunchMode = 'manual' | 'revision-test'
+export type WorkbenchRunLaunchMode = WorkbenchPublishedRunLaunchMode | 'draft-test'
+export type WorkbenchManualRunFormInput = {
   automationId: string
-  mode: WorkbenchRunLaunchMode
+  mode: WorkbenchPublishedRunLaunchMode
   revisionId?: string
-}
-export interface WorkbenchManualRunForm {
+} | { automationId: string; mode: 'draft-test'; expectedDraftVersion: number }
+interface WorkbenchRunFormFields {
   automationId: string
-  mode: WorkbenchRunLaunchMode
+  inputs?: NonNullable<AutomationSource['inputs']>
+}
+export type WorkbenchManualRunForm = WorkbenchRunFormFields & ({
+  mode: WorkbenchPublishedRunLaunchMode
   revisions: Array<{ id: string; number: number; active: boolean }>
   revisionId: string
   revisionNumber: number
-  inputs?: NonNullable<AutomationSource['inputs']>
-}
-export interface WorkbenchStartManualRunInput {
+} | { mode: 'draft-test'; draftVersion: number })
+export type WorkbenchStartManualRunInput = {
   automationId: string
   requestId: string
-  mode: WorkbenchRunLaunchMode
-  revisionId: string
   input: Record<string, NumenValue>
   trigger: NumenValue
-}
-export interface WorkbenchStartManualRunResult { runId: string }
+} & ({ mode: WorkbenchPublishedRunLaunchMode; revisionId: string } | { mode: 'draft-test'; expectedDraftVersion: number })
+export interface WorkbenchStartManualRunResult { runId: string; snapshotId?: string; sourceDraftVersion?: number }

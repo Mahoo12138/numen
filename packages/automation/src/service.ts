@@ -2,6 +2,9 @@ import {
   type Automation,
   type AutomationDraft,
   type AutomationRevision,
+  type AutomationExecutionSnapshot,
+  type AutomationSnapshotFields,
+  type DraftTestAutomationSnapshot,
   type AutomationSource,
   type NumenValue,
   type ControlResolver,
@@ -81,6 +84,9 @@ export interface AutomationSummary extends Automation {
   latestRevisionNumber?: number
 }
 
+/** Compiled saved Draft data; insertion still checks its exact source version. */
+export type PreparedDraftTestSnapshot = Omit<DraftTestAutomationSnapshot, 'id' | 'createdAt'>
+
 interface AutomationRow {
   id: string
   name: string
@@ -112,7 +118,10 @@ interface DraftRow {
 interface RevisionRow {
   id: string
   automation_id: string
-  number: number
+  number: number | null
+  purpose: string
+  source_draft_version: number | null
+  base_revision_id: string | null
   protocol_version: number
   source_json: string
   presentation_json: string
@@ -170,11 +179,10 @@ function mapDraft(row: DraftRow): AutomationDraft {
   }
 }
 
-function mapRevision(row: RevisionRow): AutomationRevision {
-  return {
+function mapExecutionSnapshot(row: RevisionRow): AutomationExecutionSnapshot {
+  const fields: AutomationSnapshotFields = {
     id: row.id,
     automationId: row.automation_id,
-    number: row.number,
     protocolVersion: row.protocol_version,
     source: parseJson(row.source_json),
     presentation: parseJson(row.presentation_json),
@@ -185,6 +193,27 @@ function mapRevision(row: RevisionRow): AutomationRevision {
     contentHash: row.content_hash,
     createdAt: row.created_at,
   }
+  const provenance = {
+    ...(row.base_revision_id ? { baseRevisionId: row.base_revision_id } : {}),
+  }
+  if (row.purpose === 'published' && typeof row.number === 'number' && Number.isSafeInteger(row.number) && row.number > 0
+    && (row.source_draft_version === null || (Number.isSafeInteger(row.source_draft_version) && row.source_draft_version > 0))) {
+    return {
+      ...fields, ...provenance, purpose: 'published', number: row.number,
+      ...(row.source_draft_version === null ? {} : { sourceDraftVersion: row.source_draft_version }),
+    }
+  }
+  if (row.purpose === 'draft-test' && row.number === null
+    && typeof row.source_draft_version === 'number' && Number.isSafeInteger(row.source_draft_version) && row.source_draft_version > 0) {
+    return { ...fields, ...provenance, purpose: 'draft-test', sourceDraftVersion: row.source_draft_version }
+  }
+  throw new Error(`invalid automation execution snapshot: ${row.id}`)
+}
+
+function mapRevision(row: RevisionRow): AutomationRevision {
+  const snapshot = mapExecutionSnapshot(row)
+  if (snapshot.purpose !== 'published') throw new Error(`snapshot is not a published Revision: ${row.id}`)
+  return snapshot
 }
 
 function canonicalize(value: unknown): string {
@@ -278,6 +307,7 @@ export class AutomationService extends Service {
       FROM automations
       JOIN automation_drafts ON automation_drafts.automation_id = automations.id
       LEFT JOIN automation_revisions ON automation_revisions.automation_id = automations.id
+        AND automation_revisions.purpose = 'published'
       WHERE automations.archived_at IS ${includeArchived ? 'NOT ' : ''}NULL
       GROUP BY automations.id
       ORDER BY automations.updated_at DESC, automations.id DESC
@@ -339,22 +369,7 @@ export class AutomationService extends Service {
       throw new DraftConflictError(expectedDraftVersion, draft.version)
     }
 
-    const compiled = compileAutomation(
-      draft.source,
-      this.ctx.capabilities,
-      this.ctx.get('connections') as ConnectionResolver | undefined,
-      this.ctx.get('controls') as ControlResolver | undefined,
-    )
-    const protocolVersion = 1
-    const semanticSnapshot = {
-      protocolVersion,
-      source: draft.source,
-      irVersion: compiled.plan.irVersion,
-      compiledPlan: compiled.plan,
-      dependencyManifest: compiled.dependencyManifest,
-      contractSnapshot: compiled.contractSnapshot,
-    }
-    const contentHash = createHash('sha256').update(canonicalize(semanticSnapshot)).digest('hex')
+    const snapshot = this.compileDraftSnapshot(draft)
     const revisionId = `rev_${randomUUID().replaceAll('-', '')}`
     const now = new Date().toISOString()
 
@@ -367,27 +382,29 @@ export class AutomationService extends Service {
       if (current.version !== draft.version) throw new DraftConflictError(draft.version, current.version)
       const { number } = this.ctx.database.db.prepare(`
         SELECT COALESCE(MAX(number), 0) + 1 AS number
-        FROM automation_revisions WHERE automation_id = ?
+        FROM automation_revisions WHERE automation_id = ? AND purpose = 'published'
       `).get(automationId) as { number: number }
       this.ctx.database.db.prepare(`
         INSERT INTO automation_revisions (
           id, automation_id, number, protocol_version, source_json, presentation_json,
           ir_version, compiled_plan_json, dependency_manifest_json,
-          contract_snapshot_json, content_hash, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          contract_snapshot_json, content_hash, created_at, purpose, source_draft_version, base_revision_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published', ?, ?)
       `).run(
         revisionId,
         automationId,
         number,
-        protocolVersion,
+        snapshot.protocolVersion,
         JSON.stringify(draft.source),
         JSON.stringify(draft.presentation),
-        compiled.plan.irVersion,
-        JSON.stringify(compiled.plan),
-        JSON.stringify(compiled.dependencyManifest),
-        JSON.stringify(compiled.contractSnapshot),
-        contentHash,
+        snapshot.irVersion,
+        JSON.stringify(snapshot.compiledPlan),
+        JSON.stringify(snapshot.dependencyManifest),
+        JSON.stringify(snapshot.contractSnapshot),
+        snapshot.contentHash,
         now,
+        draft.version,
+        draft.baseRevisionId ?? null,
       )
       this.ctx.database.db.prepare(`
         UPDATE automation_drafts SET base_revision_id = ? WHERE automation_id = ?
@@ -398,16 +415,105 @@ export class AutomationService extends Service {
     return revision
   }
 
+  private compileDraftSnapshot(draft: AutomationDraft): Omit<AutomationSnapshotFields, 'id' | 'createdAt'> {
+    const compiled = compileAutomation(
+      draft.source,
+      this.ctx.capabilities,
+      this.ctx.get('connections') as ConnectionResolver | undefined,
+      this.ctx.get('controls') as ControlResolver | undefined,
+    )
+    const semanticSnapshot = {
+      protocolVersion: 1,
+      source: draft.source,
+      irVersion: compiled.plan.irVersion,
+      compiledPlan: compiled.plan,
+      dependencyManifest: compiled.dependencyManifest,
+      contractSnapshot: compiled.contractSnapshot,
+    }
+    return {
+      automationId: draft.automationId,
+      ...semanticSnapshot,
+      presentation: draft.presentation,
+      contentHash: createHash('sha256').update(canonicalize(semanticSnapshot)).digest('hex'),
+    }
+  }
+
+  prepareDraftTestSnapshot(automationId: string, expectedDraftVersion: number): PreparedDraftTestSnapshot {
+    if (!Number.isSafeInteger(expectedDraftVersion) || expectedDraftVersion < 1) {
+      throw new TypeError('expected draft version must be a positive integer')
+    }
+    const draft = this.requireDraftTestVersion(automationId, expectedDraftVersion)
+    return {
+      ...this.compileDraftSnapshot(draft),
+      purpose: 'draft-test',
+      sourceDraftVersion: draft.version,
+      ...(draft.baseRevisionId ? { baseRevisionId: draft.baseRevisionId } : {}),
+    }
+  }
+
+  /** May be nested in the Scheduler's synchronous acceptance transaction. */
+  createDraftTestSnapshot(prepared: PreparedDraftTestSnapshot): DraftTestAutomationSnapshot {
+    return this.ctx.database.transaction(() => {
+      this.requireDraftTestVersion(prepared.automationId, prepared.sourceDraftVersion)
+      const snapshotId = `snap_${randomUUID().replaceAll('-', '')}`
+      this.ctx.database.db.prepare(`
+        INSERT INTO automation_revisions (
+          id, automation_id, number, protocol_version, source_json, presentation_json,
+          ir_version, compiled_plan_json, dependency_manifest_json,
+          contract_snapshot_json, content_hash, created_at, purpose, source_draft_version, base_revision_id
+        ) VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft-test', ?, ?)
+      `).run(
+        snapshotId, prepared.automationId, prepared.protocolVersion,
+        JSON.stringify(prepared.source), JSON.stringify(prepared.presentation), prepared.irVersion,
+        JSON.stringify(prepared.compiledPlan), JSON.stringify(prepared.dependencyManifest),
+        JSON.stringify(prepared.contractSnapshot), prepared.contentHash, new Date().toISOString(),
+        prepared.sourceDraftVersion, prepared.baseRevisionId ?? null,
+      )
+      const snapshot = this.getExecutionSnapshot(snapshotId)!
+      if (snapshot.purpose !== 'draft-test') throw new Error('expected Draft test snapshot')
+      return snapshot
+    })
+  }
+
+  private requireDraftTestVersion(automationId: string, expectedVersion: number): AutomationDraft {
+    const automation = this.get(automationId)
+    if (!automation) throw new AutomationNotFoundError(`automation not found: ${automationId}`)
+    this.requireNotArchived(automation)
+    const draft = this.getDraft(automationId)
+    if (!draft) throw new AutomationNotFoundError(`automation not found: ${automationId}`)
+    if (draft.version !== expectedVersion) throw new DraftConflictError(expectedVersion, draft.version)
+    return draft
+  }
+
+  getExecutionSnapshot(snapshotId: string): AutomationExecutionSnapshot | undefined {
+    const row = this.ctx.database.db.prepare('SELECT * FROM automation_revisions WHERE id = ?')
+      .get(snapshotId) as RevisionRow | undefined
+    return row ? mapExecutionSnapshot(row) : undefined
+  }
+
+  /** Bounded list metadata without reading Source, IR, contracts or presentation JSON. */
+  getExecutionSnapshotIdentity(snapshotId: string):
+    | { id: string; purpose: 'published'; number: number }
+    | { id: string; purpose: 'draft-test'; sourceDraftVersion: number }
+    | undefined {
+    const row = this.ctx.database.db.prepare('SELECT id, purpose, number, source_draft_version FROM automation_revisions WHERE id = ?')
+      .get(snapshotId) as Pick<RevisionRow, 'id' | 'purpose' | 'number' | 'source_draft_version'> | undefined
+    if (!row) return
+    if (row.purpose === 'published' && row.number !== null) return { id: row.id, purpose: 'published', number: row.number }
+    if (row.purpose === 'draft-test' && row.source_draft_version !== null) return { id: row.id, purpose: 'draft-test', sourceDraftVersion: row.source_draft_version }
+    throw new Error(`invalid automation execution snapshot identity: ${row.id}`)
+  }
+
   getRevision(revisionId: string): AutomationRevision | undefined {
     const row = this.ctx.database.db
-      .prepare('SELECT * FROM automation_revisions WHERE id = ?')
+      .prepare("SELECT * FROM automation_revisions WHERE id = ? AND purpose = 'published'")
       .get(revisionId) as RevisionRow | undefined
     return row ? mapRevision(row) : undefined
   }
 
   listRevisions(automationId: string): AutomationRevision[] {
     return (this.ctx.database.db.prepare(`
-      SELECT * FROM automation_revisions WHERE automation_id = ? ORDER BY number DESC
+      SELECT * FROM automation_revisions WHERE automation_id = ? AND purpose = 'published' ORDER BY number DESC
     `).all(automationId) as RevisionRow[]).map(mapRevision)
   }
 
@@ -416,7 +522,7 @@ export class AutomationService extends Service {
       const current = this.requireActivationGeneration(automationId, expectedActivationGeneration)
       this.requireNotArchived(current)
       const revision = this.ctx.database.db.prepare(`
-        SELECT 1 FROM automation_revisions WHERE id = ? AND automation_id = ?
+        SELECT 1 FROM automation_revisions WHERE id = ? AND automation_id = ? AND purpose = 'published'
       `).get(revisionId, automationId)
       if (!revision) throw new AutomationRevisionNotFoundError(`revision not found for automation: ${revisionId}`)
       if (current.activeRevisionId === revisionId) return { automation: current, changed: false }
@@ -504,21 +610,24 @@ export class AutomationService extends Service {
       if (active.count) throw new AutomationHasActiveRunsError(active.count)
       const { count: runCount } = this.ctx.database.db.prepare('SELECT COUNT(*) AS count FROM runs WHERE automation_id = ?').get(automationId) as { count: number }
 
+      const removedOwnerPredicate = `
+        (owner_type = 'execution' AND owner_id IN (
+          SELECT executions.id FROM executions JOIN runs ON runs.id = executions.run_id WHERE runs.automation_id = ?
+        )) OR (owner_type = 'run' AND owner_id IN (SELECT id FROM runs WHERE automation_id = ?))
+          OR (owner_type = 'snapshot' AND owner_id IN (SELECT id FROM automation_revisions WHERE automation_id = ?))
+      `
+      const releasedResources = this.ctx.database.db.prepare(`
+        SELECT DISTINCT resource_id FROM resource_owners WHERE ${removedOwnerPredicate}
+      `).pluck().all(automationId, automationId, automationId) as string[]
+      this.ctx.database.db.prepare(`DELETE FROM resource_owners WHERE ${removedOwnerPredicate}`)
+        .run(automationId, automationId, automationId)
       const now = new Date().toISOString()
-      this.ctx.database.db.prepare(`
+      const scheduleGc = this.ctx.database.db.prepare(`
         UPDATE resources SET gc_after = ?, updated_at = ?
-        WHERE state = 'COMMITTED' AND id IN (
-          SELECT owned.resource_id FROM resource_owners owned
-          WHERE owned.owner_type = 'execution'
-            AND owned.owner_id IN (SELECT executions.id FROM executions JOIN runs ON runs.id = executions.run_id WHERE runs.automation_id = ?)
-            AND NOT EXISTS (
-              SELECT 1 FROM resource_owners other WHERE other.resource_id = owned.resource_id
-                AND NOT (other.owner_type = 'execution' AND other.owner_id IN (
-                  SELECT executions.id FROM executions JOIN runs ON runs.id = executions.run_id WHERE runs.automation_id = ?
-                ))
-            )
-        )
-      `).run(now, now, automationId, automationId)
+        WHERE id = ? AND state = 'COMMITTED'
+          AND NOT EXISTS (SELECT 1 FROM resource_owners WHERE resource_owners.resource_id = resources.id)
+      `)
+      for (const resourceId of releasedResources) scheduleGc.run(now, now, resourceId)
       this.ctx.database.db.prepare(`
         DELETE FROM execution_iterations
         WHERE iterate_execution_id IN (SELECT id FROM executions WHERE run_id IN (SELECT id FROM runs WHERE automation_id = ?))
@@ -528,10 +637,6 @@ export class AutomationService extends Service {
       this.ctx.database.db.prepare(`
         UPDATE executions SET parent_execution_id = NULL, scope_execution_id = NULL
         WHERE run_id IN (SELECT id FROM runs WHERE automation_id = ?)
-      `).run(automationId)
-      this.ctx.database.db.prepare(`
-        DELETE FROM resource_owners WHERE owner_type = 'execution'
-          AND owner_id IN (SELECT executions.id FROM executions JOIN runs ON runs.id = executions.run_id WHERE runs.automation_id = ?)
       `).run(automationId)
       this.ctx.database.db.prepare('DELETE FROM runs WHERE automation_id = ?').run(automationId)
       this.ctx.database.db.prepare('DELETE FROM automations WHERE id = ? AND archived_at = ?').run(automationId, expectedArchivedAt)

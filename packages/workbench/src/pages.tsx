@@ -223,7 +223,7 @@ function RunsIndex({ state, canGoPrevious, onNext, onPrevious, onReload, onOpenR
                         disabled={!onOpenRun}
                         onClick={() => onOpenRun?.(run.id)}
                         type="button"
-                      ><strong>{run.automationName}</strong><small>{run.id}</small></button>
+                      ><strong>{run.automationName}</strong><small>{run.id}</small>{run.snapshotPurpose === 'draft-test' ? <small>{t('workbench.draftTest.target', { version: run.sourceDraftVersion })}</small> : null}</button>
                     </td>
                     <td><em data-status={run.status}>{statusLabel(run.status)}</em></td>
                     <td>{formatTime(run.startedAt ?? run.createdAt)}</td>

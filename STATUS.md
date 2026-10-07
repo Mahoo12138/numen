@@ -284,6 +284,44 @@ no horizontal overflow or unexpected browser errors occurred. Final browser evid
 `/tmp/numen-n0-browser-final`, with `/tmp/numen-n0-{unit,typecheck,build,examples,browser-final}.log`.
 This is local verification of uncommitted changes, not remote CI, other browser engines or release validation.
 
+### N1 Draft snapshot execution — verified 2026-10-08
+
+The user explicitly approved the three semantics on 2026-10-08: test the exact saved Draft,
+keep published and draft-test snapshots distinct without consuming publication numbers or
+activation, and retain snapshots for the lifetime of Run history without an implicit TTL.
+[The approved decision and migration record](docs/24-draft-test-snapshot-decision.md)
+contains the audited query boundaries, v15 migration, resource/GC behavior and backup limits.
+
+The editor saves valid focused fields, waits for queued saves, and loads parameters for the
+resulting exact version. Later editing does not change that target. Version/compile/resource
+rejections do not accept partial history. An uncertain response freezes the full request; an
+existing session can be closed, reopened and recovered even after archiving. New requests
+remain prohibited while archived. Historical Run Flow and ownership/data inspection use the
+accepted Source/IR/contracts, never the current Draft or a recompiled replacement.
+
+Snapshot, resource owners, Run, Journal and request deduplication commit atomically.
+The v15 migration preserves legacy IDs, values, hashes, indexes and Run/Trigger foreign keys.
+Published queries/statistics/Activate remain purpose-filtered. Snapshot and run owners survive
+waiting and restart; permanent Automation removal releases only its owners, retaining shared
+owners and leases. GC atomically rechecks eligibility, and shared digest upload/deletion races
+have failure reproductions and regression coverage.
+
+Actual local validation: `pnpm typecheck`, `pnpm build`, `pnpm build:examples`,
+109 unit/integration files / 560 tests, and all 37 production-browser cases passed.
+The six new browser cases exercise real save/version/compile fencing, fixed historical Source,
+lost acceptance followed by close/archive/reopen, focused parameter protection and explicit reload.
+Runtime coverage includes Cron alongside waiting/parallel Draft execution, compiler unload,
+Console shutdown, GC, complete Runtime recreation, and recovery after SIGKILL in a separate
+Node process. Pointer regression coverage verifies one-click Publish and drag-off cancellation.
+
+Final 1440×960 desktop and 390×844 Chinese mobile screenshots were viewed without horizontal
+overflow. Evidence is retained in `/tmp/numen-n1-browser-final`,
+`/tmp/numen-n1-{typecheck-final,build-final,unit-final,browser-final}.log` and
+`/tmp/numen-n1-examples.log`. Only temporary Runtime/configuration/database/resource directories
+were used; the user's business database was not migrated. These are local checks of uncommitted
+changes, not remote CI, other browser engines or deployment verification. Multiple Hosts
+performing GC on the same resource directory remain outside the existing single-node guarantee.
+
 M0/M1 foundation implemented and verified: independent Console/Workbench composition,
 v2 native groups and explicit migration, v1 compatibility, two sets of ten lifecycle cycles,
 80 test files / 395 tests, seven browser cases, production assets, and six public-package
@@ -304,7 +342,7 @@ bounded classified Execution data with Source navigation. Verification: 90 test 
 17 production-browser cases, typecheck, production build and independently bundled example.
 See [Configuration and debugging verification](docs/verification/editor-debugging-2026-09-28.md).
 
-1. M3-05: [Draft snapshot persistence design](docs/23-draft-test-snapshot-design.md) is ready for review; saved-Draft capture and Run-lifetime retention await a data-model decision. Draft snapshot execution is not implemented.
+1. M3-05 is implemented by the approved N1 work above; [the design](docs/23-draft-test-snapshot-design.md) links to the current implementation and acceptance record.
 2. M5 scenario E ownership/navigation implemented: Connection Adapter/Type and immutable Run instruction dependencies resolve through their actual registration Context to a stable Loader Entry. Definition and Provider owners remain separate; current, previous, and unknown observations are explicit. Deep links reveal collapsed ancestors, focus the exact instance, and return to the originating Connection or Run with its list context intact.
 
 M4 implemented and verified: shared Command Center/toolbar/keyboard actions, host-owned
@@ -329,11 +367,10 @@ exact instance navigation, disabled-group recovery, reload/return, live ownershi
 missing targets, and bilingual desktop/mobile rendering. Its evidence and current browser
 results are recorded in the acceptance follow-up.
 
-Draft snapshot execution remains unimplemented. Ownership observations are bounded and
+At the 2026-09-29 ownership follow-up, Draft snapshot execution was deferred; it is now implemented by N1 above. Ownership observations are bounded and
 process-local: an instance never registered in the current Host session is unknown; package
 names do not establish ownership. Plugin dependency impact and unavailable package versions
-remain explicitly unknown. This closes the scenario E navigation gap, not the deferred M3-05
-data-model decision or release/distribution work.
+remain explicitly unknown. That follow-up closed the scenario E navigation gap; N1 now addresses M3-05 separately. Release/distribution work remains deferred.
 
 ### Local 0.1.0 baseline
 
@@ -413,7 +450,10 @@ local release verification.
 
 - **Canvas structural editing seam — pass:** one pure Source command locates Block membership, moves adjacent siblings or deletes a subtree, and computes valid selection without mutating node identity or mandatory control slots. The existing document owner retains complete undo/redo and edits made during autosave. Insert allocation reserves IDs still mentioned by surviving step references. Toolbar and selected-row actions share eligibility rules and remain disabled during conflicts and publishing. Tests cover nested control bodies, subtree identity, unknown extensions, no-op boundaries, root deletion, selection, history, and in-flight saves. Production-browser QA verifies nested sorting, delete/undo, empty-flow recovery, persisted order, unchanged Revision/activation/presentation, and 1440px/390px layouts.
 
-## Verification Baseline
+## Historical Release Verification Baseline
+
+The current N0/N1 working-tree validation is recorded above. The following checks describe
+the earlier release baseline and do not establish release validation for these changes.
 
 ```text
 Typecheck: passing

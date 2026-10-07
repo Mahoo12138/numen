@@ -8,7 +8,7 @@ import {
   isNumenValue,
   isResourceRef,
   type Attempt,
-  type AutomationRevision,
+  type AutomationExecutionSnapshot,
   type CancellationReason,
   type ContractSnapshotCapability,
   type CoreInstruction,
@@ -25,6 +25,7 @@ import '@numenjs/resources'
 import { Service, type Context } from 'cordis'
 import { createHash, randomUUID } from 'node:crypto'
 import { evaluateExpression, type EvaluationBindings } from './evaluator.js'
+import { assertDraftTestRequestValues, collectRunResourceIds, collectSnapshotResourceIds, draftTestAcceptanceLimits } from './resource-references.js'
 
 export class ManualRunRevisionConflictError extends Error {
   constructor() { super('The active Revision changed. Reload the run form before submitting.'); this.name = 'ManualRunRevisionConflictError' }
@@ -32,6 +33,10 @@ export class ManualRunRevisionConflictError extends Error {
 
 export class ManualRunRequestConflictError extends Error {
   constructor() { super('The manual Run request ID was already used with different content.'); this.name = 'ManualRunRequestConflictError' }
+}
+
+export class DraftTestResourceUnavailableError extends Error {
+  constructor(cause: unknown) { super('A referenced resource is unavailable.', { cause }); this.name = 'DraftTestResourceUnavailableError' }
 }
 
 export interface SchedulerConfig {
@@ -345,6 +350,87 @@ export class SchedulerService extends Service {
     requestId: string,
   ): Run {
     return this.startRequestedRun(automationId, { mode: 'revision-test', revisionId }, input, trigger, requestId)
+  }
+
+  /** Accepts a fixed saved Draft without publishing it or changing activation. */
+  async startDraftTest(
+    automationId: string,
+    expectedDraftVersion: number,
+    input: Record<string, NumenValue>,
+    trigger: NumenValue,
+    requestId: string,
+  ): Promise<Run> {
+    if (!Number.isSafeInteger(expectedDraftVersion) || expectedDraftVersion < 1) throw new TypeError('invalid expected Draft version')
+    if (!/^[a-zA-Z0-9_-]{16,80}$/.test(requestId)) throw new TypeError('invalid manual Run request id')
+    assertDraftTestRequestValues(input, trigger)
+    // Freeze the complete raw request across the asynchronous physical-resource preflight.
+    const rawInput = structuredClone(input)
+    const acceptedTrigger = structuredClone(trigger)
+    const contentHash = createHash('sha256').update(canonicalize({
+      mode: 'draft-test', automationId, expectedDraftVersion, input: rawInput, trigger: acceptedTrigger,
+    })).digest('hex')
+    const recoverAccepted = (): Run | undefined => {
+      const previous = this.ctx.database.db.prepare(
+        'SELECT content_hash, run_id FROM manual_run_requests WHERE request_id = ?',
+      ).get(requestId) as { content_hash: string; run_id: string } | undefined
+      if (!previous) return
+      if (previous.content_hash !== contentHash) throw new ManualRunRequestConflictError()
+      const run = this.getRun(previous.run_id)
+      if (!run) throw new Error(`accepted Run is missing: ${previous.run_id}`)
+      return run
+    }
+    const previous = recoverAccepted()
+    if (previous) return previous
+
+    try {
+      const prepared = this.ctx.automations.prepareDraftTestSnapshot(automationId, expectedDraftVersion)
+      const resolvedInput = resolveAutomationInputs(prepared.source, rawInput)
+      const snapshotResources = collectSnapshotResourceIds(prepared)
+      const runResources = collectRunResourceIds(resolvedInput, acceptedTrigger)
+      const allResources = new Set([...snapshotResources, ...runResources])
+      if (allResources.size > draftTestAcceptanceLimits.maxResources) throw new TypeError('draft test references exceed the resource limit')
+      for (const resourceId of allResources) {
+        try { await this.ctx.resources.preflight(resourceId) } catch (cause) { throw new DraftTestResourceUnavailableError(cause) }
+      }
+      let created = false
+      const run = this.ctx.database.transaction(() => {
+        const duplicate = recoverAccepted()
+        if (duplicate) return duplicate
+        for (const resourceId of allResources) {
+          try { this.ctx.resources.assertAcceptable(resourceId) } catch (cause) { throw new DraftTestResourceUnavailableError(cause) }
+        }
+        // This rechecks Draft version/archive inside the same immediate transaction.
+        const snapshot = this.ctx.automations.createDraftTestSnapshot(prepared)
+        const acceptedRunId = id('run')
+        const now = new Date().toISOString()
+        for (const resourceId of snapshotResources) this.ctx.resources.commitOwner(resourceId, { type: 'snapshot', id: snapshot.id })
+        for (const resourceId of runResources) this.ctx.resources.commitOwner(resourceId, { type: 'run', id: acceptedRunId })
+        this.ctx.database.db.prepare(`
+          INSERT INTO runs (
+            id, automation_id, revision_id, status, trigger_json, input_json, created_at
+          ) VALUES (?, ?, ?, 'QUEUED', ?, ?, ?)
+        `).run(acceptedRunId, automationId, snapshot.id, JSON.stringify(acceptedTrigger), JSON.stringify(resolvedInput), now)
+        this.ctx.database.db.prepare(`
+          INSERT INTO manual_run_requests (request_id, content_hash, run_id) VALUES (?, ?, ?)
+        `).run(requestId, contentHash, acceptedRunId)
+        this.appendEvent(acceptedRunId, 'RunAccepted', {
+          source: 'draft-test', snapshotId: snapshot.id, revisionId: snapshot.id,
+          sourceDraftVersion: snapshot.sourceDraftVersion, requestId, contentHash,
+        }, now, false)
+        created = true
+        return this.getRun(acceptedRunId)!
+      })
+      if (created) {
+        this.scheduleRunChange(run.id)
+        if (this.autoDispatch) this.kick()
+      }
+      return run
+    } catch (error) {
+      // Another connection may have accepted this exact request while preflight awaited.
+      const accepted = recoverAccepted()
+      if (accepted) return accepted
+      throw error
+    }
   }
 
   private startRequestedRun(
@@ -836,7 +922,7 @@ export class SchedulerService extends Service {
     throw new Error(`scheduler exceeded ${maxTransitions} transitions without becoming idle`)
   }
 
-  private appendEvent(runId: string, type: string, payload: NumenValue, occurredAt = new Date().toISOString()): void {
+  private appendEvent(runId: string, type: string, payload: NumenValue, occurredAt = new Date().toISOString(), notify = true): void {
     const { sequence } = this.ctx.database.db.prepare(`
       SELECT COALESCE(MAX(sequence), 0) + 1 AS sequence FROM run_events WHERE run_id = ?
     `).get(runId) as { sequence: number }
@@ -844,7 +930,7 @@ export class SchedulerService extends Service {
       INSERT INTO run_events (run_id, sequence, type, payload_json, occurred_at)
       VALUES (?, ?, ?, ?, ?)
     `).run(runId, sequence, type, JSON.stringify(payload), occurredAt)
-    this.scheduleRunChange(runId)
+    if (notify) this.scheduleRunChange(runId)
   }
 
   private readonly loggedRunStates = new Map<string, string>()
@@ -910,7 +996,7 @@ export class SchedulerService extends Service {
       SELECT * FROM runs WHERE status = 'QUEUED' ORDER BY created_at, id LIMIT 1
     `).get() as RunRow | undefined
     if (!row) return false
-    const revision = this.ctx.automations.getRevision(row.revision_id)
+    const revision = this.ctx.automations.getExecutionSnapshot(row.revision_id)
     if (!revision) {
       this.failQueuedRun(row.id, { code: 'REVISION_MISSING', revisionId: row.revision_id })
       return true
@@ -952,10 +1038,10 @@ export class SchedulerService extends Service {
       .get(executionId) as ExecutionRow | undefined
   }
 
-  private getRevisionForExecution(execution: Execution): { run: Run; revision: AutomationRevision; instruction: CoreInstruction } {
+  private getRevisionForExecution(execution: Execution): { run: Run; revision: AutomationExecutionSnapshot; instruction: CoreInstruction } {
     const run = this.getRun(execution.runId)
     if (!run) throw new Error(`run not found: ${execution.runId}`)
-    const revision = this.ctx.automations.getRevision(run.revisionId)
+    const revision = this.ctx.automations.getExecutionSnapshot(run.revisionId)
     if (!revision) throw new Error(`revision not found: ${run.revisionId}`)
     const instruction = revision.compiledPlan.instructions[execution.instructionId]
     if (!instruction) throw new Error(`instruction not found: ${execution.instructionId}`)
@@ -1538,7 +1624,7 @@ export class SchedulerService extends Service {
 
     for (const attempt of attempts) {
       const run = this.getRun(attempt.run_id)
-      const revision = run ? this.ctx.automations.getRevision(run.revisionId) : undefined
+      const revision = run ? this.ctx.automations.getExecutionSnapshot(run.revisionId) : undefined
       const instruction = revision?.compiledPlan.instructions[attempt.instruction_id]
       const contract = instruction?.op === 'invoke'
         ? revision?.contractSnapshot.capabilities.find(item => capabilityKey(item) === capabilityKey(instruction.capability))

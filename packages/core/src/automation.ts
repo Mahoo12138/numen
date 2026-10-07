@@ -226,10 +226,9 @@ export interface ContractSnapshot {
   capabilities: ContractSnapshotCapability[]
 }
 
-export interface AutomationRevision {
+export interface AutomationSnapshotFields {
   id: string
   automationId: string
-  number: number
   protocolVersion: number
   source: AutomationSource
   presentation: Record<string, NumenValue>
@@ -240,3 +239,21 @@ export interface AutomationRevision {
   contentHash: string
   createdAt: string
 }
+
+/** A published Revision can be selected for activation or a manual run. */
+export interface AutomationRevision extends AutomationSnapshotFields {
+  purpose: 'published'
+  number: number
+  /** Absent on legacy Revisions whose original Draft version is unknown. */
+  sourceDraftVersion?: number
+  baseRevisionId?: string
+}
+
+/** A fixed execution snapshot of a saved Draft; it has no publication number. */
+export interface DraftTestAutomationSnapshot extends AutomationSnapshotFields {
+  purpose: 'draft-test'
+  sourceDraftVersion: number
+  baseRevisionId?: string
+}
+
+export type AutomationExecutionSnapshot = AutomationRevision | DraftTestAutomationSnapshot

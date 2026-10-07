@@ -225,7 +225,7 @@ function RunDetailHeader({ state, cancellation, onBack, onCancel, onLogs, onAuto
       </button>
       <div class="run-detail-heading">
         <h1>{run?.automationName ?? t('workbench.runDetail')}</h1>
-        <p>{run ? t('workbench.value0RevisionValue1', { value0: run.id, value1: run.revisionNumber ?? run.revisionId }) : t('workbench.durableExecutionTimelineAndDiagnostics')}</p>
+        <p>{run ? run.snapshotPurpose === 'draft-test' ? `${run.id} · ${t('workbench.draftTest.target', { version: run.sourceDraftVersion })}` : t('workbench.value0RevisionValue1', { value0: run.id, value1: run.revisionNumber ?? run.revisionId }) : t('workbench.durableExecutionTimelineAndDiagnostics')}</p>
       </div>
       {run ? (
         <div class="run-detail-actions">

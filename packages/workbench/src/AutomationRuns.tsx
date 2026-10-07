@@ -62,7 +62,7 @@ export const AutomationRuns = defineSetupComponent<AutomationRunsProps>('Automat
         {index.data.items.length ? <div class="runs-table-wrap"><table class="runs-table">
           <thead><tr><th>{t('workbench.runRevision')}</th><th>{t('workbench.status')}</th><th>{t('workbench.accepted')}</th><th>{t('workbench.work')}</th></tr></thead>
           <tbody>{index.data.items.map(run => <tr key={run.id}>
-            <td><button class="run-detail-link" aria-label={t('workbench.openRunValue0', { value0: run.id })} disabled={!props.navigation} onClick={() => props.navigation?.navigate(coreWorkbenchRunFlowRoute, { parameters: { id: run.id } })} type="button"><strong>{run.id}</strong><small>{run.revisionId}</small></button></td>
+            <td><button class="run-detail-link" aria-label={t('workbench.openRunValue0', { value0: run.id })} disabled={!props.navigation} onClick={() => props.navigation?.navigate(coreWorkbenchRunFlowRoute, { parameters: { id: run.id } })} type="button"><strong>{run.id}</strong><small>{run.snapshotPurpose === 'draft-test' ? t('workbench.draftTest.target', { version: run.sourceDraftVersion }) : run.revisionId}</small></button></td>
             <td><em data-status={run.status}>{label(run.status)}</em></td><td>{time(run.createdAt)}</td>
             <td>{run.executionCount}{t('workbench.executions')}{run.attemptCount}{t('workbench.attempts')}</td>
           </tr>)}</tbody>

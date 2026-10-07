@@ -25,7 +25,7 @@ export function provideExecutionData(ctx: Context): void {
         if (!run || !stored) throw new ConsoleProcedureError(404, 'EXECUTION_NOT_FOUND', 'The Execution was not found in this Run.')
         const attempt = input.attemptId ? ctx.scheduler.getAttempt(run.id, input.executionId, input.attemptId) : undefined
         if (input.attemptId && !attempt) throw new ConsoleProcedureError(404, 'ATTEMPT_NOT_FOUND', 'The Attempt was not found in this Execution.')
-        const revision = ctx.automations.getRevision(run.revisionId)
+        const revision = ctx.automations.getExecutionSnapshot(run.revisionId)
         const instruction = revision?.compiledPlan.instructions[stored.execution.instructionId]
         const contract = instruction?.op === 'invoke' ? revision?.contractSnapshot.capabilities.find(item =>
           item.id === instruction.capability.id && item.version === instruction.capability.version) : undefined

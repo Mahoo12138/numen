@@ -353,6 +353,33 @@ export const coreMigrations: readonly Migration[] = [
       database.exec('CREATE INDEX automations_archive_idx ON automations(archived_at, updated_at DESC);')
     },
   },
+  {
+    version: 15,
+    name: 'draft-test-execution-snapshots',
+    up(database) {
+      const { version } = database.prepare('SELECT sqlite_version() AS version').get() as { version: string }
+      const [major = 0, minor = 0] = version.split('.').map(Number)
+      if (major < 3 || (major === 3 && minor < 53)) {
+        throw new Error(`draft test snapshot migration requires SQLite 3.53 or later; found ${version}`)
+      }
+      // The bundled SQLite supports this DDL without rebuilding the parent table,
+      // preserving every downstream foreign key and the publication UNIQUE index.
+      database.exec(`
+        ALTER TABLE automation_revisions ALTER COLUMN number DROP NOT NULL;
+        ALTER TABLE automation_revisions ADD COLUMN source_draft_version INTEGER;
+        ALTER TABLE automation_revisions ADD COLUMN base_revision_id TEXT;
+        ALTER TABLE automation_revisions ADD COLUMN purpose TEXT NOT NULL DEFAULT 'published'
+          CHECK (
+            (purpose = 'published' AND typeof(number) = 'integer' AND number > 0
+              AND (source_draft_version IS NULL OR
+                (typeof(source_draft_version) = 'integer' AND source_draft_version > 0)))
+            OR
+            (purpose = 'draft-test' AND number IS NULL
+              AND typeof(source_draft_version) = 'integer' AND source_draft_version > 0)
+          );
+      `)
+    },
+  },
 ]
 
 export function runMigrations(
@@ -371,6 +398,12 @@ export function runMigrations(
     .prepare('SELECT version, name FROM schema_migrations ORDER BY version')
     .all() as Array<{ version: number; name: string }>
   const applied = new Map(appliedRows.map(row => [row.version, row.name]))
+
+  const supportedVersion = Math.max(0, ...migrations.map(migration => migration.version))
+  const currentVersion = Math.max(0, ...applied.keys())
+  if (currentVersion > supportedVersion) {
+    throw new Error(`unsupported database schema version ${currentVersion}; maximum supported is ${supportedVersion}`)
+  }
 
   for (const migration of migrations) {
     const existingName = applied.get(migration.version)

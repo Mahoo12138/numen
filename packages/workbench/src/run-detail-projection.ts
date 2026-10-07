@@ -1,6 +1,6 @@
 import {
   capabilityKey,
-  type AutomationRevision,
+  type AutomationExecutionSnapshot,
   type ControlSource,
   type NumenValue,
   type Run,
@@ -23,7 +23,7 @@ import type {
 export function projectWorkbenchRunDetail(
   run: Run,
   automationName: string,
-  revision: AutomationRevision | undefined,
+  revision: AutomationExecutionSnapshot | undefined,
   inspection: RunInspection,
   diagnostics: RunExecutionDiagnosticsPage,
   events: RunEventPage,
@@ -41,7 +41,7 @@ export function projectWorkbenchRunDetail(
       automationId: run.automationId,
       automationName,
       revisionId: run.revisionId,
-      ...(revision ? { revisionNumber: revision.number } : {}),
+      ...(revision ? { snapshotPurpose: revision.purpose, ...(revision.purpose === 'draft-test' ? { sourceDraftVersion: revision.sourceDraftVersion } : { revisionNumber: revision.number }) } : {}),
       status: run.status,
       ...(run.groupKey ? { groupKey: run.groupKey } : {}),
       ...(run.cancelReason ? { cancelReason: run.cancelReason } : {}),
@@ -106,7 +106,7 @@ export function projectWorkbenchRunDetail(
 }
 
 /** Resolve against the actual, visible immutable Source tree, never an instruction-name convention. */
-export function sourceNodeIdForExecution(revision: AutomationRevision | undefined, instructionId: string): string | undefined {
+export function sourceNodeIdForExecution(revision: AutomationExecutionSnapshot | undefined, instructionId: string): string | undefined {
   if (!revision) return
   const candidate = revision.compiledPlan.sourceMap?.[instructionId]?.nodeId ?? instructionId
   const pending = [revision.source.flow]
@@ -126,7 +126,7 @@ const flowStatusPriority: WorkbenchRunFlowStatus[] = [
 ]
 
 function projectRunFlow(
-  revision: AutomationRevision | undefined,
+  revision: AutomationExecutionSnapshot | undefined,
   summaries: RunInstructionExecutionSummary[],
 ): WorkbenchRunDetail['flow'] {
   if (!revision) {
@@ -163,7 +163,7 @@ function projectRunFlow(
     id: '__flow',
     type: 'block',
     title: 'Flow',
-    detail: `Revision ${revision.number} · IR ${revision.irVersion}`,
+    detail: revision.purpose === 'draft-test' ? `Draft test · Draft v${revision.sourceDraftVersion} · IR ${revision.irVersion}` : `Revision ${revision.number} · IR ${revision.irVersion}`,
     status: source.status,
     executionCount: source.executionCount,
     children: [source],
@@ -311,7 +311,7 @@ function projectContextValue(
 }
 
 function instructionTitle(
-  instruction: AutomationRevision['compiledPlan']['instructions'][string] | undefined,
+  instruction: AutomationExecutionSnapshot['compiledPlan']['instructions'][string] | undefined,
   instructionId: string,
   capabilityTitles: ReadonlyMap<string, string>,
 ): string {

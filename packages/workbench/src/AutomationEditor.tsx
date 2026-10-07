@@ -56,6 +56,8 @@ export interface AutomationEditorProps {
   }
   inputSettings?: VNodeChild
   manualRunForm?: VNodeChild
+  draftTestForm?: VNodeChild
+  draftTestSessionActive?: boolean
   conflictRecovery?: VNodeChild
   activation?: AutomationActivationView
   inspectorOpen?: boolean
@@ -80,6 +82,7 @@ export interface AutomationEditorProps {
   onUndo?(): void
   onRedo?(): void
   onPublish?(): void
+  onTestDraft?(): void
   onReloadDraft?(): void
   onRetrySave?(): void
   onReload?(): void
@@ -117,6 +120,8 @@ export function AutomationEditor({
   conflictRecovery,
   inputSettings,
   manualRunForm,
+  draftTestForm,
+  draftTestSessionActive,
   onActivateRevision,
   onSetEnabled,
   onStepChange,
@@ -137,6 +142,7 @@ export function AutomationEditor({
   onUndo,
   onRedo,
   onPublish,
+  onTestDraft,
   onReloadDraft,
   onRetrySave,
   onReload,
@@ -179,6 +185,9 @@ export function AutomationEditor({
             </p> : null}
           </div>
           <div class="entity-title-actions">
+            {onTestDraft ? <Button variant="secondary" disabled={!draftTestSessionActive && !authoring?.canPublish} type="button"
+              onMousedown={event => { if (event.button === 0) event.preventDefault() }}
+              onClick={onTestDraft}>{t(draftTestSessionActive ? 'workbench.draftTest.show' : 'workbench.draftTest.open')}</Button> : null}
             {detail && activation && onSetEnabled ? <button
               aria-label={detail.automation.enabled ? t('workbench.disableAutomation') : t('workbench.enableAutomation')}
               aria-checked={detail.automation.enabled}
@@ -192,6 +201,9 @@ export function AutomationEditor({
               <Button variant="primary"
                 class="publish-button"
                 disabled={!authoring.canPublish}
+                // The command commits focused fields. Delay blur until click so status
+                // wrapping cannot move this button between mouse down and mouse up.
+                onMousedown={event => { if (event.button === 0) event.preventDefault() }}
                 onClick={() => commands ? commands.execute('automation.publish') : onPublish()}
                 type="button"
               >{authoring.publishPending ? t('workbench.publishing') : t('workbench.publish')}</Button>
@@ -227,6 +239,7 @@ export function AutomationEditor({
           ))}
         </nav>
       </header>
+      {draftTestForm}
       {authoring?.inputBlocked ? <section class="authoring-notice" data-tone="error" role="alert">{t('workbench.document.applyInputsFirst')}</section> : null}
       {authoring?.editError ? <section class="authoring-notice" data-tone="error" role="alert"><span>{t(`workbench.structure.errors.${authoring.editError}`) === `workbench.structure.errors.${authoring.editError}` ? authoring.editError : t(`workbench.structure.errors.${authoring.editError}`)}</span></section> : null}
       {activation?.error ? <section class="authoring-notice" data-tone="error" role="alert"><span>{activation.error}</span></section> : null}

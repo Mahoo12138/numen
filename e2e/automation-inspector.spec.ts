@@ -129,8 +129,17 @@ test('publishes a just-entered timeout with one click and restricts retry contro
   await expect(page.getByLabel('Maximum attempts', { exact: true })).toHaveCount(0)
   await page.locator('.execution-policy-fields').getByLabel('Timeout (ms)', { exact: true }).fill('1200')
   await pending(page, true)
+  // Cancelling a pointer gesture must not publish or commit the focused field.
+  const publish = page.getByRole('button', { name: 'Publish', exact: true })
+  const bounds = (await publish.boundingBox())!
+  await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height + 50)
+  await page.mouse.up()
+  await pending(page, true)
+  expect(application.context.automations.listRevisions(id)).toHaveLength(0)
   // No preliminary Tab or save: Publish must first commit the focused valid field.
-  await page.getByRole('button', { name: 'Publish', exact: true }).click()
+  await publish.click()
   await expect.poll(() => application.context.automations.listRevisions(id).length).toBe(1)
   await pending(page, false)
   expect(capability(id, 'request').policy).toEqual({ timeoutMs: 1200 })
