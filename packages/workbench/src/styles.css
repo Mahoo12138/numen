@@ -1174,6 +1174,9 @@ button.command-center > span { min-width: 0; flex: 1; padding: 0 8px; overflow: 
 .plugin-editor textarea { font-family: var(--font-mono, monospace); resize: vertical; }
 .plugin-preview { margin-top: 16px; }
 .plugin-preview pre { max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.plugin-baseline { padding: 12px; border: 1px solid var(--wb-border); border-radius: 5px; }
+.plugin-baseline p, .plugin-baseline summary { overflow-wrap: anywhere; }
+.plugin-baseline pre { max-height: 200px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
 .runs-filters { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin-bottom: 20px; }
 .runs-filters label { min-width: 180px; }
 .runs-filters code { overflow-wrap: anywhere; }

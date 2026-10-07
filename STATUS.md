@@ -1,6 +1,6 @@
 # Numen Development Status
 
-> Last updated: 2026-09-29
+> Last updated: 2026-10-08
 >
 > Architecture baseline: V1 Draft in [`docs/`](docs/README.md)
 
@@ -253,7 +253,36 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 
 ## Next
 
-The current development track is Console/Workbench product completion, following the 2026-09-28 r2 plan. Publication is deferred; historical release preparation below is retained as history.
+The current development track is Console/Workbench product completion, following the 2026-09-30 next-stage plan. Publication is deferred; historical release preparation below is retained as history.
+
+### N0 configuration editing — verified 2026-10-08
+
+On baseline `8b7cb56` plus the current working-tree changes, two real browser clients reproduced
+the pre-Preview overwrite: an editor kept its old JSON while background invalidation supplied a
+new fingerprint, allowing it to overwrite the other client's complete configuration. That failing
+run is recorded in the chat tool output; its original Playwright artifacts were overwritten by
+later runs and are not claimed as retained evidence.
+
+Plugin editing now captures content and fingerprint together and keeps that baseline through
+Preview/Apply. Remote changes show a safe before/after comparison and require explicit reload
+before a new editing session. Invalid JSON and other local fields survive operation changes,
+query failure/retry and cancelled navigation. Instance/group changes, closing, browser history,
+reload and applying an operation with other buffered input require explicit discard. An uncertain
+Apply response still causes only a read reconciliation, never an automatic write replay.
+
+Actual local validation of the final implementation: `pnpm typecheck`, `pnpm build`,
+`pnpm build:examples`, 102 unit/integration files / 500 tests, and all 31 production-browser cases
+passed. The two affected browser files separately passed 9 cases. Seven new browser cases
+check real Preview/Apply payload fingerprints and final temporary YAML, both concurrency
+windows, invalid/hidden input, navigation/history/refresh, query recovery and explicit discard.
+The existing lost-response case still confirms one write and the committed YAML.
+
+Browser validation used repository Playwright/Chromium because the Browser plugin is unavailable,
+with isolated runtime/configuration/database directories at temporary `127.0.0.1` ports.
+Desktop 1440×960, narrow 900×800 and Chinese mobile 390×844 comparison screenshots were viewed;
+no horizontal overflow or unexpected browser errors occurred. Final browser evidence is in
+`/tmp/numen-n0-browser-final`, with `/tmp/numen-n0-{unit,typecheck,build,examples,browser-final}.log`.
+This is local verification of uncommitted changes, not remote CI, other browser engines or release validation.
 
 M0/M1 foundation implemented and verified: independent Console/Workbench composition,
 v2 native groups and explicit migration, v1 compatibility, two sets of ten lifecycle cycles,

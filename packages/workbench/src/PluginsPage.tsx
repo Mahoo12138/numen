@@ -1,7 +1,7 @@
 import { Button, StatePanel } from '@numenjs/components'
 import type { HostConfigMutationRequest, HostConfigMutationResult, HostConfigOperation, HostConfigPreview, HostConfigSnapshot, HostPluginEntry } from '@numenjs/config'
 import { Boxes, RefreshCw } from '@lucide/vue'
-import { computed, nextTick, onScopeDispose, ref, watch } from 'vue'
+import { computed, nextTick, onScopeDispose, ref, shallowRef, watch } from 'vue'
 import { pluginReturnTarget } from './plugin-navigation.js'
 import { diagnosticText, t } from './i18n.js'
 import { workbenchPluginApplyRef, workbenchPluginPreviewRef, workbenchPluginsQueryRef } from './management-contracts.js'
@@ -10,13 +10,22 @@ import type { WorkbenchPageProps } from './types.js'
 import { useConsoleQuery } from './useConsoleQuery.js'
 import { defineSetupComponent } from './vue-component.js'
 
+interface PluginEditSession {
+  baseFingerprint: string
+  entry?: HostPluginEntry
+  initial: { label: string; groupId: string; parentId: string; config: string }
+}
+
 export const PluginsPage = defineSetupComponent<WorkbenchPageProps>('PluginsPage', ['consoleClient', 'navigation'], props => {
-  const [query, reload, refresh] = useConsoleQuery<Record<string, never>, HostConfigSnapshot>(() => props.consoleClient, workbenchPluginsQueryRef, {}, 'plugins')
+  const [query, , refresh] = useConsoleQuery<Record<string, never>, HostConfigSnapshot>(() => props.consoleClient, workbenchPluginsQueryRef, {}, 'plugins')
   const selected = ref(''), operation = ref<'setConfig' | 'setLabel' | 'move' | 'createGroup'>('setConfig')
   const label = ref(''), groupId = ref(''), parentId = ref(''), config = ref('')
   const editing = ref(false), busy = ref(false), error = ref(''), result = ref('')
   const preview = ref<HostConfigPreview>(), request = ref<HostConfigMutationRequest>()
-  const snapshot = computed(() => query.status === 'READY' ? query.data : undefined)
+  const session = shallowRef<PluginEditSession>()
+  // Keep the form mounted during a refresh failure; only a successful observation updates the remote state.
+  const snapshot = shallowRef<HostConfigSnapshot>()
+  watch(() => query.status === 'READY' ? query.data : undefined, value => { if (value) snapshot.value = value }, { immediate: true, flush: 'sync' })
   const targetId = computed(() => new URLSearchParams(props.navigation?.route.search ?? '').get('entryId'))
   const targetEntry = computed(() => snapshot.value?.entries.find(entry => entry.id === targetId.value))
   const returnTarget = computed(() => pluginReturnTarget(new URLSearchParams(props.navigation?.route.search ?? '').get('from')))
@@ -34,63 +43,111 @@ export const PluginsPage = defineSetupComponent<WorkbenchPageProps>('PluginsPage
     })
   }, { immediate: true, flush: 'post' })
   const selectedEntry = computed(() => snapshot.value?.entries.find(entry => entry.id === selected.value))
+  const dirty = computed(() => !!session.value && (label.value !== session.value.initial.label || groupId.value !== session.value.initial.groupId || parentId.value !== session.value.initial.parentId || config.value !== session.value.initial.config))
+  const hasOtherEdits = computed(() => {
+    const initial = session.value?.initial
+    if (!initial) return false
+    return (operation.value !== 'setConfig' && config.value !== initial.config)
+      || (!['setLabel', 'createGroup'].includes(operation.value) && label.value !== initial.label)
+      || (!['move', 'createGroup'].includes(operation.value) && parentId.value !== initial.parentId)
+  })
+  const needsProtection = computed(() => dirty.value || !!preview.value || busy.value)
+  const stale = computed(() => !!session.value && !!snapshot.value && session.value.baseFingerprint !== snapshot.value.fingerprint)
+  const allowDiscard = () => !needsProtection.value || globalThis.confirm(t('workbench.management.discardEdits'))
+  watch(() => props.navigation, (navigation, _previous, cleanup) => {
+    const dispose = navigation?.beforeLeave?.(() => allowDiscard())
+    if (dispose) cleanup(dispose)
+  }, { immediate: true })
+  watch(needsProtection, (protect, _previous, cleanup) => {
+    if (!protect || typeof window === 'undefined') return
+    const beforeUnload = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = '' }
+    window.addEventListener('beforeunload', beforeUnload)
+    cleanup(() => window.removeEventListener('beforeunload', beforeUnload))
+  }, { immediate: true, flush: 'sync' })
   let controller: AbortController | undefined
   onScopeDispose(() => controller?.abort())
-  const writable = computed(() => !!snapshot.value?.writable && !snapshot.value.restartRequired && !busy.value)
-  const openEditor = (entry?: HostPluginEntry) => {
-    if (busy.value) return
+  const writable = computed(() => query.status === 'READY' && !!snapshot.value?.writable && !snapshot.value.restartRequired && !busy.value)
+  const clearPreview = () => { preview.value = undefined; request.value = undefined }
+  const closeEditor = () => { editing.value = false; session.value = undefined; clearPreview() }
+  const loadEditor = (entry?: HostPluginEntry) => {
+    if (!snapshot.value) return
+    // Resolve the clicked ID against this observation so content and fingerprint are captured together.
+    if (entry) {
+      entry = snapshot.value.entries.find(current => current.id === entry!.id)
+      if (!entry) return
+    }
     selected.value = entry?.id ?? ''; operation.value = entry ? 'setLabel' : 'createGroup'
     label.value = entry?.label ?? ''; parentId.value = entry?.parentId ?? ''; groupId.value = ''
     config.value = JSON.stringify(entry?.config ?? {}, null, 2)
-    editing.value = true; preview.value = undefined; request.value = undefined; error.value = ''; result.value = ''
+    session.value = { baseFingerprint: snapshot.value.fingerprint, ...(entry ? { entry: structuredClone(entry) } : {}), initial: { label: label.value, parentId: parentId.value, groupId: groupId.value, config: config.value } }
+    editing.value = true; clearPreview(); error.value = ''; result.value = ''
     void nextTick(() => { const panel = document.querySelector<HTMLElement>('.plugin-editor'); panel?.scrollIntoView({ block: 'nearest' }); panel?.querySelector<HTMLElement>('input, select, textarea')?.focus() })
   }
-  const prepare = async (next: HostConfigOperation) => {
+  const openEditor = (entry?: HostPluginEntry) => {
+    if (!writable.value || !allowDiscard()) return
+    loadEditor(entry)
+  }
+  const reloadEditor = () => {
+    if (!writable.value || (selected.value && !selectedEntry.value) || !allowDiscard()) return
+    const previousOperation = operation.value
+    loadEditor(selectedEntry.value)
+    if (previousOperation !== 'setConfig' || (selectedEntry.value?.configEditable && !selectedEntry.value.protected)) operation.value = previousOperation
+  }
+  const prepare = async (next: HostConfigOperation, fingerprint: string) => {
     if (!props.consoleClient || !writable.value || !snapshot.value) return
-    controller?.abort(); controller = new AbortController()
-    busy.value = true; error.value = ''; result.value = ''; preview.value = undefined; request.value = undefined
-    const proposed = { fingerprint: snapshot.value.fingerprint, operation: next }
+    controller?.abort(); const pending = controller = new AbortController()
+    busy.value = true; error.value = ''; result.value = ''; clearPreview()
+    const proposed = { fingerprint, operation: next }
     try {
-      const value = await props.consoleClient.query<HostConfigMutationRequest, HostConfigPreview>(workbenchPluginPreviewRef, proposed, controller.signal)
-      if (controller.signal.aborted) return
+      const value = await props.consoleClient.query<HostConfigMutationRequest, HostConfigPreview>(workbenchPluginPreviewRef, proposed, pending.signal)
+      if (pending.signal.aborted) return
       preview.value = value; request.value = proposed
       void nextTick(() => document.querySelector<HTMLElement>('.plugin-preview')?.scrollIntoView({ block: 'nearest' }))
     } catch (cause) {
-      if (!controller.signal.aborted) { error.value = message(cause); refresh() }
+      if (!pending.signal.aborted) { error.value = message(cause); refresh() }
     } finally { busy.value = false }
   }
+  const prepareQuick = (next: HostConfigOperation) => {
+    if (!writable.value || !snapshot.value || !allowDiscard()) return
+    const fingerprint = snapshot.value.fingerprint
+    closeEditor()
+    void prepare(next, fingerprint)
+  }
   const prepareForm = () => {
+    if (!session.value) return
+    const fingerprint = session.value.baseFingerprint
     error.value = ''
-    if (operation.value === 'createGroup') void prepare({ kind: 'createGroup', id: groupId.value.trim(), ...(label.value.trim() ? { label: label.value.trim() } : {}), ...(parentId.value ? { parentId: parentId.value } : {}) })
-    else if (operation.value === 'setLabel') void prepare({ kind: 'setLabel', id: selected.value, label: label.value.trim() })
-    else if (operation.value === 'move') void prepare({ kind: 'move', id: selected.value, ...(parentId.value ? { parentId: parentId.value } : {}) })
+    if (operation.value === 'createGroup') void prepare({ kind: 'createGroup', id: groupId.value.trim(), ...(label.value.trim() ? { label: label.value.trim() } : {}), ...(parentId.value ? { parentId: parentId.value } : {}) }, fingerprint)
+    else if (operation.value === 'setLabel') void prepare({ kind: 'setLabel', id: selected.value, label: label.value.trim() }, fingerprint)
+    else if (operation.value === 'move') void prepare({ kind: 'move', id: selected.value, ...(parentId.value ? { parentId: parentId.value } : {}) }, fingerprint)
     else {
       try {
         const value: unknown = JSON.parse(config.value)
         if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error()
-        void prepare({ kind: 'setConfig', id: selected.value, config: value as Record<string, unknown> })
+        void prepare({ kind: 'setConfig', id: selected.value, config: value as Record<string, unknown> }, fingerprint)
       } catch { error.value = t('workbench.management.invalidJson') }
     }
   }
   const apply = async () => {
     if (!props.consoleClient || !request.value || !preview.value || preview.value.blockedReason || busy.value) return
+    if (hasOtherEdits.value && !globalThis.confirm(t('workbench.management.discardOtherEdits'))) return
     const approved = request.value
-    controller?.abort(); controller = new AbortController(); busy.value = true; error.value = ''
+    controller?.abort(); const pending = controller = new AbortController(); busy.value = true; error.value = ''
     try {
-      const value = await props.consoleClient.action<HostConfigMutationRequest, HostConfigMutationResult>(workbenchPluginApplyRef, approved, controller.signal)
-      if (controller.signal.aborted) return
+      const value = await props.consoleClient.action<HostConfigMutationRequest, HostConfigMutationResult>(workbenchPluginApplyRef, approved, pending.signal)
+      if (pending.signal.aborted) return
       result.value = t(value.saved ? value.runtimeApplied ? 'workbench.management.applied' : 'workbench.management.savedOnly' : 'workbench.management.notSaved')
       if (value.error) error.value = value.error.message
-      if (value.saved) editing.value = false
+      if (value.saved) closeEditor()
     } catch (cause) {
-      if (!controller.signal.aborted) {
+      if (!pending.signal.aborted) {
         // A failed transport does not establish whether the host committed. Never invert or replay the mutation.
         const conflict = !!cause && typeof cause === 'object' && 'code' in cause && cause.code === 'CONFIG_CONFLICT'
         result.value = t(conflict ? 'workbench.management.notSaved' : 'workbench.management.uncertain')
         error.value = message(cause)
       }
     } finally {
-      preview.value = undefined; request.value = undefined; busy.value = false; refresh()
+      clearPreview(); busy.value = false; refresh()
     }
   }
   const visible = computed(() => {
@@ -103,11 +160,11 @@ export const PluginsPage = defineSetupComponent<WorkbenchPageProps>('PluginsPage
   })
   return () => <main class="main-workbench core-page plugins-page">
     <header class="core-page-header"><Boxes size={22} /><div><h1>{t('workbench.plugins')}</h1><p>{t('workbench.management.description')}</p></div>
-      <Button variant="secondary" disabled={busy.value} onClick={reload} type="button" aria-label={t('workbench.management.refresh')}><RefreshCw size={16} /></Button>
+      <Button variant="secondary" disabled={busy.value} onClick={refresh} type="button" aria-label={t('workbench.management.refresh')}><RefreshCw size={16} /></Button>
       <Button variant="secondary" disabled={!writable.value} onClick={() => openEditor()} type="button">{t('workbench.management.createGroup')}</Button>
     </header>
     {returnTarget.value ? <Button type="button" onClick={() => props.navigation?.navigate(...returnTarget.value!)}>{t('workbench.ownership.back')}</Button> : null}
-    {query.status === 'ERROR' ? <StatePanel title={t('workbench.management.unavailable')} message={diagnosticText(query)} action={t('workbench.tryAgain')} onAction={reload} tone="error" /> : null}
+    {query.status === 'ERROR' ? <StatePanel title={t('workbench.management.unavailable')} message={diagnosticText(query)} action={t('workbench.tryAgain')} onAction={refresh} tone="error" /> : null}
     {query.status === 'DISABLED' ? <StatePanel title={t('workbench.runtimePreview')} message={t('workbench.management.unavailable')} /> : null}
     {query.status === 'LOADING' ? <StatePanel message="" busy title={t('workbench.management.loading')} /> : null}
     {snapshot.value ? <>
@@ -126,19 +183,30 @@ export const PluginsPage = defineSetupComponent<WorkbenchPageProps>('PluginsPage
             <p>{t(entry.selfEnabled ? 'workbench.management.desiredOn' : 'workbench.management.desiredOff')} · {t(entry.effectiveEnabled ? 'workbench.management.effectiveOn' : entry.selfEnabled && entry.parentId ? 'workbench.management.parentDisabled' : 'workbench.management.effectiveOff')}</p>
             {entry.protected ? <p class="plugin-protected">{t('workbench.management.protected')}</p> : null}
             <div class="plugin-actions">
-              <Button variant="secondary" disabled={!writable.value || entry.protected} type="button" onClick={() => prepare({ kind: 'setEnabled', id: entry.id, enabled: !entry.selfEnabled })}>{t(entry.selfEnabled ? 'workbench.disable' : 'workbench.enable')}</Button>
+              <Button variant="secondary" disabled={!writable.value || entry.protected} type="button" onClick={() => prepareQuick({ kind: 'setEnabled', id: entry.id, enabled: !entry.selfEnabled })}>{t(entry.selfEnabled ? 'workbench.disable' : 'workbench.enable')}</Button>
               <Button variant="secondary" disabled={!writable.value} type="button" onClick={() => openEditor(entry)}>{t('workbench.management.edit')}</Button>
               {entry.group ? <>
-                <Button variant="secondary" disabled={!writable.value} type="button" onClick={() => prepare({ kind: 'setCollapsed', id: entry.id, collapsed: !entry.collapsed })}>{t(entry.collapsed ? 'workbench.management.expand' : 'workbench.management.collapse')}</Button>
-                <Button variant="secondary" disabled={!writable.value || entry.protected || !!entry.children?.length} type="button" onClick={() => prepare({ kind: 'removeGroup', id: entry.id })}>{t('workbench.management.removeGroup')}</Button>
+                <Button variant="secondary" disabled={!writable.value} type="button" onClick={() => prepareQuick({ kind: 'setCollapsed', id: entry.id, collapsed: !entry.collapsed })}>{t(entry.collapsed ? 'workbench.management.expand' : 'workbench.management.collapse')}</Button>
+                <Button variant="secondary" disabled={!writable.value || entry.protected || !!entry.children?.length} type="button" onClick={() => prepareQuick({ kind: 'removeGroup', id: entry.id })}>{t('workbench.management.removeGroup')}</Button>
               </> : null}
             </div>
             {entry.internal.length ? <details><summary>{t('workbench.management.internal', { count: entry.internal.length })}</summary><ul>{entry.internal.map(child => <li key={child.diagnosticId}><strong>{child.name}</strong> · {t(`workbench.management.state.${child.state}`)}<small>{child.dependencies.join(', ')}</small></li>)}</ul></details> : null}
           </article>)}
         </section>
         {editing.value ? <section class="core-page-section plugin-editor" aria-label={t('workbench.management.edit')}>
-          <h2>{selectedEntry.value?.label || selectedEntry.value?.id || t('workbench.management.createGroup')}</h2>
-          <form onInput={() => { preview.value = undefined; request.value = undefined }} onChange={() => { preview.value = undefined; request.value = undefined }} onSubmit={event => { event.preventDefault(); prepareForm() }}>
+          <h2>{session.value?.entry?.label || session.value?.entry?.id || t('workbench.management.createGroup')}</h2>
+          {stale.value ? <div class="plugin-baseline" role="status">
+            <p>{t('workbench.management.changedElsewhere')}</p>
+            <details><summary>{t('workbench.management.compareLatest')}</summary>
+              {selected.value ? <>
+                <p>{t('workbench.management.openedConfiguration')}</p><pre>{JSON.stringify(editableValues(session.value?.entry), null, 2)}</pre>
+                <p>{t('workbench.management.latestConfiguration')}</p><pre>{selectedEntry.value ? JSON.stringify(editableValues(selectedEntry.value), null, 2) : t('workbench.management.entryMissing')}</pre>
+              </> : <p>{t('workbench.management.groupBaselineChanged')}</p>}
+              <p>{t('workbench.management.reloadExplanation')}</p>
+              <Button disabled={!writable.value || (!!selected.value && !selectedEntry.value)} type="button" onClick={reloadEditor}>{t('workbench.management.reloadLatest')}</Button>
+            </details>
+          </div> : null}
+          <form onInput={clearPreview} onChange={clearPreview} onSubmit={event => { event.preventDefault(); prepareForm() }}>
             {operation.value !== 'createGroup' ? <label>{t('workbench.management.operation')}<select aria-label={t('workbench.management.operation')} disabled={busy.value} value={operation.value} onChange={event => { operation.value = (event.target as HTMLSelectElement).value as typeof operation.value; preview.value = undefined; request.value = undefined }}>
               <option value="setLabel">{t('workbench.management.rename')}</option><option value="move" disabled={selectedEntry.value?.protected}>{t('workbench.management.move')}</option><option value="setConfig" disabled={!selectedEntry.value?.configEditable || selectedEntry.value?.protected}>{t('workbench.management.config')}</option>
             </select></label> : <label>{t('workbench.management.id')}<input required maxlength={80} disabled={busy.value} value={groupId.value} onInput={event => { groupId.value = (event.target as HTMLInputElement).value }} /></label>}
@@ -146,7 +214,7 @@ export const PluginsPage = defineSetupComponent<WorkbenchPageProps>('PluginsPage
             {operation.value === 'createGroup' || operation.value === 'move' ? <label>{t('workbench.management.parent')}<select aria-label={t('workbench.management.parent')} disabled={busy.value} value={parentId.value} onChange={event => { parentId.value = (event.target as HTMLSelectElement).value }}><option value="">{t('workbench.management.root')}</option>{snapshot.value.entries.filter(entry => entry.group && entry.id !== selected.value).map(entry => <option value={entry.id}>{entry.label || entry.id}</option>)}</select></label> : null}
             {operation.value === 'setConfig' ? <label>{t('workbench.management.config')}<textarea rows={12} disabled={busy.value} spellcheck={false} value={config.value} onInput={event => { config.value = (event.target as HTMLTextAreaElement).value }} /></label> : null}
             {selectedEntry.value?.configReadOnlyReason ? <p>{selectedEntry.value.configReadOnlyReason}</p> : null}
-            <div class="plugin-actions"><Button variant="primary" disabled={!writable.value} type="submit">{t('workbench.management.preview')}</Button><Button disabled={busy.value} type="button" onClick={() => { editing.value = false; preview.value = undefined; request.value = undefined }}>{t('workbench.cancel')}</Button></div>
+            <div class="plugin-actions"><Button variant="primary" disabled={!writable.value} type="submit">{t('workbench.management.preview')}</Button><Button disabled={busy.value} type="button" onClick={() => { if (allowDiscard()) closeEditor() }}>{t('workbench.cancel')}</Button></div>
           </form>
         </section> : null}
       </div>
@@ -167,4 +235,8 @@ export const PluginsPage = defineSetupComponent<WorkbenchPageProps>('PluginsPage
 
 function message(error: unknown): string {
   return error instanceof Error ? error.message : t('workbench.management.failed')
+}
+
+function editableValues(entry?: HostPluginEntry) {
+  return { label: entry?.label ?? '', parentId: entry?.parentId ?? '', config: entry?.config ?? {} }
 }
