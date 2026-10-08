@@ -7,7 +7,7 @@ import { Context, type Plugin } from 'cordis'
 import z from 'schemastery'
 const stringify = (value: unknown) => JSON.stringify(value, null, 2)
 import { afterEach, describe, expect, it } from 'vitest'
-import { HostConfigError, readManagedConfig, writeConfig, type HostConfigOperation } from '@numenjs/config'
+import { HostConfigError, readManagedConfig, writeConfig, type HostConfigMutationRequest, type HostConfigOperation } from '@numenjs/config'
 import { startRuntime } from '../src/app.js'
 import { HostConfigurationService, toCordisEntry } from '../src/config-management.js'
 
@@ -31,15 +31,19 @@ async function fixture(plugins: Record<string, unknown>, builtins: Record<string
   await writeFile(filename, `# keep document comment\n${stringify({ version, dataDir: '.numen', plugins })}`, { mode: 0o600 })
   return { filename, ctx: await start(filename, builtins) }
 }
-const change = async (ctx: Context, operation: HostConfigOperation) => ctx.hostConfig.apply({ fingerprint: (await ctx.hostConfig.read()).fingerprint, operation })
+const applyFresh = async (ctx: Context, input: HostConfigMutationRequest) => {
+  const preview = await ctx.hostConfig.preview(input)
+  return ctx.hostConfig.apply({ ...input, previewToken: preview.previewToken ?? '' })
+}
+const change = async (ctx: Context, operation: HostConfigOperation) => applyFresh(ctx, { fingerprint: (await ctx.hostConfig.read()).fingerprint, operation })
 
 describe('host configuration management', () => {
   it('serializes two clients with CAS, preserves comments, and reconciles a lost response', async () => {
     const { filename, ctx } = await fixture({ 'probe:a': { custom: 'retained' }, 'probe:b': {} })
     const snapshot = await ctx.hostConfig.read()
     const results = await Promise.allSettled([
-      ctx.hostConfig.apply({ fingerprint: snapshot.fingerprint, operation: { kind: 'setEnabled', id: 'probe-a', enabled: false } }),
-      ctx.hostConfig.apply({ fingerprint: snapshot.fingerprint, operation: { kind: 'setLabel', id: 'probe-b', label: 'Stale edit' } }),
+      applyFresh(ctx, { fingerprint: snapshot.fingerprint, operation: { kind: 'setEnabled', id: 'probe-a', enabled: false } }),
+      applyFresh(ctx, { fingerprint: snapshot.fingerprint, operation: { kind: 'setLabel', id: 'probe-b', label: 'Stale edit' } }),
     ])
     expect(results[0].status).toBe('fulfilled')
     expect(results[1]).toMatchObject({ status: 'rejected', reason: { code: 'CONFIG_CONFLICT' } })
@@ -90,7 +94,7 @@ describe('host configuration management', () => {
       for (const operation of [{ kind: 'setEnabled', id, enabled: false }, { kind: 'move', id, parentId: 'group-off' }, { kind: 'setConfig', id, config: {} }] as HostConfigOperation[]) {
         const request = { fingerprint: (await ctx.hostConfig.read()).fingerprint, operation }
         expect((await ctx.hostConfig.preview(request)).blockedReason).toContain('management channel')
-        await expect(ctx.hostConfig.apply(request)).rejects.toMatchObject({ code: 'MANAGEMENT_CHANNEL_PROTECTED' })
+        await expect(applyFresh(ctx, request)).rejects.toMatchObject({ code: 'MANAGEMENT_CHANNEL_PROTECTED' })
       }
     }
     expect((await change(ctx, { kind: 'setLabel', id: 'group-management', label: 'Management' })).runtimeApplied).toBe(true)
@@ -130,7 +134,7 @@ describe('host configuration management', () => {
     const preview = await ctx.hostConfig.preview(request)
     expect(JSON.stringify(preview)).not.toContain('new-private-value')
     expect(preview.impact).toMatchObject({ status: 'unknown' })
-    await expect(ctx.hostConfig.apply(request)).rejects.toMatchObject({ code: 'SECRET_CONFIG_READ_ONLY' })
+    await expect(applyFresh(ctx, request)).rejects.toMatchObject({ code: 'SECRET_CONFIG_READ_ONLY' })
   })
 
   it('redacts schema-declared secrets and credentials embedded in URLs', async () => {
@@ -176,13 +180,13 @@ describe('host configuration management', () => {
     const config = { ...initial, title: 'Second', section: { ...initial.section, tags: ['two', 'three'] } }
     const request = { fingerprint: before.fingerprint, operation: { kind: 'setConfig' as const, id: 'probe', config } }
     expect((await ctx.hostConfig.preview(request)).blockedReason).toBeUndefined()
-    expect((await ctx.hostConfig.apply(request)).runtimeApplied).toBe(true)
+    expect((await applyFresh(ctx, request)).runtimeApplied).toBe(true)
     expect(config).not.toHaveProperty('count')
     expect((await readManagedConfig(filename, builtinNames)).config.plugins.probe).toEqual(config)
     await ctx.fiber.dispose()
     const restarted = await start(filename, { probe })
     expect((await restarted.hostConfig.read()).entries[0]).toMatchObject({ config, configEditable: true })
-    await expect(restarted.hostConfig.apply(request)).rejects.toMatchObject({ code: 'CONFIG_CONFLICT' })
+    await expect(applyFresh(restarted, request)).rejects.toMatchObject({ code: 'CONFIG_CONFLICT' })
   })
 
   it('keeps absent schema, absent secret values, uninspectable schema, unloaded plugins and management entries read-only', async () => {
@@ -204,7 +208,7 @@ describe('host configuration management', () => {
     expect(JSON.stringify(snapshot)).not.toContain('private')
     const request = { fingerprint: snapshot.fingerprint, operation: { kind: 'setConfig' as const, id: 'probe-plain', config: { anything: 'unclassified-secret-input' } } }
     expect((await ctx.hostConfig.preview(request)).operation).toMatchObject({ config: {} })
-    await expect(ctx.hostConfig.apply(request)).rejects.toMatchObject({ code: 'PLUGIN_SCHEMA_UNAVAILABLE' })
+    await expect(applyFresh(ctx, request)).rejects.toMatchObject({ code: 'PLUGIN_SCHEMA_UNAVAILABLE' })
     await expect(change(ctx, { kind: 'setConfig', id: 'probe-off', config: {} })).rejects.toMatchObject({ code: 'PLUGIN_UNAVAILABLE' })
     await expect(change(ctx, { kind: 'setConfig', id: 'workbench', config: {} })).rejects.toMatchObject({ code: 'MANAGEMENT_CHANNEL_PROTECTED' })
     runtime.Config = secret.Config
@@ -231,16 +235,16 @@ describe('host configuration management', () => {
     const invalid = { fingerprint: before.fingerprint, operation: { kind: 'setConfig' as const, id: 'probe', config: { mode: 'careful', attempts: 1, custom: { preserved: true } } } }
     const originalDisk = await readFile(filename, 'utf8')
     expect(await ctx.hostConfig.preview(invalid)).toMatchObject({ blockedReason: 'Plugin configuration does not match its schema. Values are omitted.', operation: invalid.operation })
-    await expect(ctx.hostConfig.apply(invalid)).rejects.toMatchObject({ code: 'PLUGIN_CONFIG_INVALID', message: expect.not.stringContaining('private-validation-fragment') })
+    await expect(applyFresh(ctx, invalid)).rejects.toMatchObject({ code: 'PLUGIN_CONFIG_INVALID', message: expect.not.stringContaining('private-validation-fragment') })
     expect(await readFile(filename, 'utf8')).toBe(originalDisk)
     const valid = { ...invalid, operation: { ...invalid.operation, config: { ...invalid.operation.config, attempts: 2 } } }
     expect((await ctx.hostConfig.preview(valid)).blockedReason).toBeUndefined()
-    const saved = await ctx.hostConfig.apply(valid)
+    const saved = await applyFresh(ctx, valid)
     expect(saved.runtimeApplied).toBe(true)
     expect(saved.snapshot.entries[0]?.config).toEqual(valid.operation.config)
     expect(valid.operation.config).not.toHaveProperty('injectedDefault')
     expect((await readManagedConfig(filename, builtinNames)).config.plugins.probe).toEqual(valid.operation.config)
-    await expect(ctx.hostConfig.apply(invalid)).rejects.toMatchObject({ code: 'CONFIG_CONFLICT' })
+    await expect(applyFresh(ctx, invalid)).rejects.toMatchObject({ code: 'CONFIG_CONFLICT' })
   })
 
   it('does not execute Schema accessors or overridden list helpers during Host reads and previews', async () => {
@@ -252,7 +256,7 @@ describe('host configuration management', () => {
     expect(current.entries[0]).toMatchObject({ configEditable: true, configSchema: { type: 'json', fallbackReason: 'unsupported' } })
     const input = { fingerprint: current.fingerprint, operation: { kind: 'setConfig' as const, id: 'probe', config: { value: 'updated' } } }
     expect((await ctx.hostConfig.preview(input)).blockedReason).toBeUndefined()
-    expect((await ctx.hostConfig.apply(input)).runtimeApplied).toBe(true)
+    expect((await applyFresh(ctx, input)).runtimeApplied).toBe(true)
     expect(calls).toBe(0)
 
     const unsafeSchema = z.object({})
@@ -276,7 +280,7 @@ describe('host configuration management', () => {
     expect(JSON.stringify(snapshot)).not.toContain('private-nonenumerable-value')
     const input = { fingerprint: snapshot.fingerprint, operation: { kind: 'setConfig' as const, id: 'probe', config: { phrase: 'new-private-value' } } }
     expect((await ctx.hostConfig.preview(input)).operation).toMatchObject({ config: {} })
-    await expect(ctx.hostConfig.apply(input)).rejects.toMatchObject({ code: 'SECRET_CONFIG_READ_ONLY' })
+    await expect(applyFresh(ctx, input)).rejects.toMatchObject({ code: 'SECRET_CONFIG_READ_ONLY' })
   })
 
   it('keeps non-finite YAML values read-only instead of serializing unknown fields as null', async () => {
@@ -290,7 +294,7 @@ describe('host configuration management', () => {
     const before = await readFile(filename, 'utf8')
     const input = { fingerprint: current.fingerprint, operation: { kind: 'setConfig' as const, id: 'probe', config: { title: 'changed', future: null } } }
     expect(await ctx.hostConfig.preview(input)).toMatchObject({ operation: { config: {} }, blockedReason: expect.stringContaining('represented losslessly as JSON') })
-    await expect(ctx.hostConfig.apply(input)).rejects.toMatchObject({ code: 'PLUGIN_CONFIG_NOT_JSON' })
+    await expect(applyFresh(ctx, input)).rejects.toMatchObject({ code: 'PLUGIN_CONFIG_NOT_JSON' })
     expect(await readFile(filename, 'utf8')).toBe(before)
     expect((await readManagedConfig(filename, builtinNames)).config.plugins.probe?.future).toBe(Infinity)
   })
@@ -306,7 +310,7 @@ describe('host configuration management', () => {
     for (const future of [Infinity, -Infinity, NaN, new Date(), Buffer.from('private-buffer-value'), cyclic, accessor, hidden, toJSON, [undefined], new Array(1)]) {
       const input = { fingerprint: snapshot.fingerprint, operation: { kind: 'setConfig' as const, id: 'probe', config: { title: 'changed', future } } }
       expect(await ctx.hostConfig.preview(input)).toMatchObject({ operation: { config: {} }, blockedReason: expect.stringContaining('represented losslessly as JSON') })
-      await expect(ctx.hostConfig.apply(input)).rejects.toMatchObject({ code: 'PLUGIN_CONFIG_NOT_JSON' })
+      await expect(applyFresh(ctx, input)).rejects.toMatchObject({ code: 'PLUGIN_CONFIG_NOT_JSON' })
     }
     expect(calls).toBe(0)
     expect(await readFile(filename, 'utf8')).toBe(before)
@@ -342,7 +346,7 @@ it('previews against real optional domain services and remains usable when they 
   expect(preview.impact.nodes).toContainEqual(expect.objectContaining({ kind: 'registration', id: 'demo:echo', version: 1, role: 'provider' }))
   expect(JSON.stringify(preview)).not.toContain('fixture-secret-token')
   expect((await app.context.hostConfig.read()).entries.find(entry => entry.id === 'workbench')?.internal.some(child => child.name.includes('workbench'))).toBe(true)
-  expect((await app.context.hostConfig.apply(input)).runtimeApplied).toBe(true)
+  expect((await applyFresh(app.context, input)).runtimeApplied).toBe(true)
   await change(app.context, { kind: 'setEnabled', id: 'database', enabled: false })
   const withoutDatabase = await app.context.hostConfig.preview({ fingerprint: (await app.context.hostConfig.read()).fingerprint, operation: { kind: 'setEnabled', id: 'demo', enabled: true } })
   expect(withoutDatabase.impact).toMatchObject({ status: 'unknown' })

@@ -1,3 +1,4 @@
+import { applyFreshHostConfig } from './helpers/host-config.js'
 import { expect, test, type Page } from '@playwright/test'
 import { loadConfig, writeConfig, type HostConfigMutationRequest, type HostConfigSnapshot } from '../packages/config/dist/index.js'
 import { startRuntime, type NumenApplication } from '../packages/runtime/dist/index.js'
@@ -147,7 +148,7 @@ test('keeps one exact configuration across schema and JSON edits, Preview and Ap
   expect(await readFile(configPath, 'utf8')).toBe(before)
   expect(calls[0]?.input).toEqual({ fingerprint: base.fingerprint, operation: { kind: 'setConfig', id: 'form-a', config: finalConfig } })
   await save(page)
-  expect(calls[1]?.input).toEqual(calls[0]?.input)
+  expect(calls[1]?.input).toEqual({ ...calls[0]?.input, previewToken: expect.any(String) })
   expect(await diskConfig()).toEqual(finalConfig)
   expect(await diskConfig('form:b')).toEqual({ ...original, title: 'Beta title' })
   await testInfo.attach('exact-preview-apply-payloads', { body: JSON.stringify(calls, null, 2), contentType: 'application/json' })
@@ -257,7 +258,7 @@ test('keeps the form fingerprint and local fields when another client changes co
   await editor.getByRole('button', { name: 'Preview change', exact: true }).click()
   await expect(page.locator('.plugin-preview')).toBeVisible()
   const remote = { ...original, title: 'Second client title', remoteFuture: ['retain the other client'] }
-  await application.context.hostConfig.apply({ fingerprint: base.fingerprint, operation: { kind: 'setConfig', id: 'form-a', config: remote } })
+  await applyFreshHostConfig(application.context.hostConfig, { fingerprint: base.fingerprint, operation: { kind: 'setConfig', id: 'form-a', config: remote } })
   await expect(page.getByText(/^Configuration changed elsewhere\. Your local input has been kept\./)).toBeVisible()
   await expect(editor.getByRole('textbox', { name: 'title', exact: true })).toHaveValue('First client local title')
   expectNetworkError('Failed to load resource: the server responded with a status of 409 (Conflict)')
@@ -360,13 +361,13 @@ test('keeps a local field buffer across external disable and enable operations w
   const editor = await form(page), title = editor.getByRole('textbox', { name: 'title', exact: true }), calls = recordMutations(page)
   await title.fill('Keep this during state changes')
   const base = await application.context.hostConfig.read()
-  await application.context.hostConfig.apply({ fingerprint: base.fingerprint, operation: { kind: 'setEnabled', id: 'form-a', enabled: false } })
+  await applyFreshHostConfig(application.context.hostConfig, { fingerprint: base.fingerprint, operation: { kind: 'setEnabled', id: 'form-a', enabled: false } })
   await expect(page.locator('[data-entry-id="form-a"] .plugin-state')).toHaveAttribute('data-state', 'DISABLED')
   await expect(title).toHaveValue('Keep this during state changes')
   const disabled = await application.context.hostConfig.read()
   // DISABLED retains the already loaded public Schema; the never-loaded case above is readonly.
   expect(disabled.entries.find(entry => entry.id === 'form-a')).toMatchObject({ configEditable: true, actualState: 'DISABLED' })
-  await application.context.hostConfig.apply({ fingerprint: disabled.fingerprint, operation: { kind: 'setEnabled', id: 'form-a', enabled: true } })
+  await applyFreshHostConfig(application.context.hostConfig, { fingerprint: disabled.fingerprint, operation: { kind: 'setEnabled', id: 'form-a', enabled: true } })
   await expect(title).toBeEnabled()
   await expect(title).toHaveValue('Keep this during state changes')
   await editor.getByRole('button', { name: 'Preview change', exact: true }).click()

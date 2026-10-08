@@ -1,4 +1,5 @@
-import { chmod, chown, lstat, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { lstatSync, readFileSync, renameSync } from 'node:fs'
+import { chmod, chown, lstat, readFile, rm, writeFile } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import { resolve } from 'node:path'
 import { isAlias, isMap, isNode, isScalar, isSeq, parseDocument, visit, type Pair, type YAMLMap } from 'yaml'
@@ -155,8 +156,8 @@ export function mutateManagedConfig(current: ManagedConfigDocument, operation: H
   return parseManagedConfig(String(doc), builtins, safeMode)
 }
 
-/** Serialized CAS across Config's writers; preserves ownership and mode before rename. */
-export async function commitManagedConfig(filename: string, expectedFingerprint: string, prepare: (current: ManagedConfigDocument) => Promise<ManagedConfigDocument>, builtins: ReadonlySet<string>, safeMode = false): Promise<ManagedConfigDocument> {
+/** Serialized CAS across Config's writers; the final guard and replacement share one event-loop turn. */
+export async function commitManagedConfig(filename: string, expectedFingerprint: string, prepare: (current: ManagedConfigDocument) => ManagedConfigDocument | Promise<ManagedConfigDocument>, builtins: ReadonlySet<string>, safeMode = false, beforeRename?: (current: ManagedConfigDocument) => void): Promise<ManagedConfigDocument> {
   const absolute = resolve(filename)
   return withConfigFileLock(absolute, async () => {
     const before = await lstat(absolute)
@@ -164,16 +165,27 @@ export async function commitManagedConfig(filename: string, expectedFingerprint:
     const current = await readManagedConfig(absolute, builtins, safeMode)
     if (current.fingerprint !== expectedFingerprint) throw new HostConfigError('CONFIG_CONFLICT', 'Configuration changed. Refresh the current state and review your pending edits.')
     const next = await prepare(current)
-    if (next.source === current.source) return current
+    const verifyDisk = () => {
+      const latest = lstatSync(absolute)
+      if (latest.ino !== before.ino || latest.dev !== before.dev || latest.mode !== before.mode || latest.uid !== before.uid || latest.gid !== before.gid || configFingerprint(readFileSync(absolute, 'utf8')) !== expectedFingerprint) throw new HostConfigError('CONFIG_CONFLICT', 'Configuration changed during the write. Your edits were not saved.')
+    }
+    const checkCurrent = () => {
+      verifyDisk()
+      beforeRename?.(current)
+      // The guard may run plugin validators. They can synchronously edit the
+      // source, so the last disk CAS must follow every callback as well.
+      verifyDisk()
+    }
+    if (next.source === current.source) { checkCurrent(); return current }
     const temporary = `${absolute}.${randomUUID()}.tmp`
     try {
       await writeFile(temporary, next.source, { encoding: 'utf8', flag: 'wx', mode: 0o600 })
       const created = await lstat(temporary)
       if (created.uid !== before.uid || created.gid !== before.gid) await chown(temporary, before.uid, before.gid)
       await chmod(temporary, before.mode & 0o777)
-      const latest = await lstat(absolute)
-      if (latest.ino !== before.ino || latest.dev !== before.dev || latest.mode !== before.mode || latest.uid !== before.uid || latest.gid !== before.gid || configFingerprint(await readFile(absolute, 'utf8')) !== expectedFingerprint) throw new HostConfigError('CONFIG_CONFLICT', 'Configuration changed during the write. Your edits were not saved.')
-      await rename(temporary, absolute)
+      // Do not yield between the last runtime observation and the file replacement.
+      checkCurrent()
+      renameSync(temporary, absolute)
       return next
     } finally { await rm(temporary, { force: true }) }
   })

@@ -1,12 +1,19 @@
-import { chmod, lstat, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { chmod, lstat, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
-import { commitManagedConfig, mutateManagedConfig, parseManagedConfig, readManagedConfig } from '../src/index.js'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { commitManagedConfig, HostConfigError, mutateManagedConfig, parseManagedConfig, readManagedConfig } from '../src/index.js'
+
+vi.mock('node:fs/promises', async importOriginal => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>()
+  return { ...actual, chmod: vi.fn(actual.chmod) }
+})
+const actualFs = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises')
 
 const builtins = new Set(['example'])
 const directories: string[] = []
-afterEach(async () => { await Promise.all(directories.splice(0).map(path => rm(path, { recursive: true, force: true }))) })
+afterEach(async () => { vi.mocked(chmod).mockImplementation(actualFs.chmod); await Promise.all(directories.splice(0).map(path => rm(path, { recursive: true, force: true }))) })
 async function fixture(source: string) {
   const directory = await mkdtemp(join(tmpdir(), 'numen-managed-yaml-')); directories.push(directory)
   const filename = join(directory, 'config.yml'); await writeFile(filename, source, { mode: 0o600 })
@@ -52,6 +59,68 @@ describe('managed configuration persistence', () => {
       return next
     }, builtins)).rejects.toMatchObject({ code: 'CONFIG_CONFLICT' })
     expect(await readFile(filename, 'utf8')).toBe(`${source}# external update\n`)
+  })
+
+  it('rejects a changed runtime observation after preparing the temporary file and cleans it up', async () => {
+    const { filename, directory, document } = await fixture(source)
+    let observation = 'previewed'
+    vi.mocked(chmod).mockImplementationOnce(async (...args) => {
+      await actualFs.chmod(...args)
+      observation = 'provider-replaced'
+    })
+    const guard = vi.fn(current => {
+      expect(current.fingerprint).toBe(document.fingerprint)
+      expect(readdirSync(directory).some(name => name.endsWith('.tmp'))).toBe(true)
+      if (observation !== 'previewed') throw new HostConfigError('PREVIEW_STALE', 'Preview observations changed.')
+    })
+    await expect(commitManagedConfig(filename, document.fingerprint, current => mutateManagedConfig(current, { kind: 'setEnabled', id: 'example', enabled: false }, builtins), builtins, false, guard)).rejects.toMatchObject({ code: 'PREVIEW_STALE' })
+    expect(guard).toHaveBeenCalledTimes(1)
+    expect(await readFile(filename, 'utf8')).toBe(source)
+    expect(await readdir(directory)).toEqual(['config.yml'])
+  })
+
+  it('runs the last guard for a no-op without creating a temporary file', async () => {
+    const { filename, directory, document } = await fixture(source)
+    const guard = vi.fn(() => {
+      expect(readdirSync(directory).some(name => name.endsWith('.tmp'))).toBe(false)
+      throw new HostConfigError('PREVIEW_STALE', 'Preview observations changed.')
+    })
+    await expect(commitManagedConfig(filename, document.fingerprint, current => current, builtins, false, guard)).rejects.toMatchObject({ code: 'PREVIEW_STALE' })
+    expect(guard).toHaveBeenCalledTimes(1)
+    expect(await readFile(filename, 'utf8')).toBe(source)
+    expect(await readdir(directory)).toEqual(['config.yml'])
+  })
+
+  it('keeps an external edit made while preparing the temporary file and skips the runtime guard', async () => {
+    const { filename, directory, document } = await fixture(source)
+    vi.mocked(chmod).mockImplementationOnce(async (...args) => {
+      await actualFs.chmod(...args)
+      await writeFile(filename, `${source}# concurrent disk edit\n`)
+    })
+    const guard = vi.fn()
+    await expect(commitManagedConfig(filename, document.fingerprint, current => mutateManagedConfig(current, { kind: 'setEnabled', id: 'example', enabled: false }, builtins), builtins, false, guard)).rejects.toMatchObject({ code: 'CONFIG_CONFLICT' })
+    expect(guard).not.toHaveBeenCalled()
+    expect(await readFile(filename, 'utf8')).toBe(`${source}# concurrent disk edit\n`)
+    expect(await readdir(directory)).toEqual(['config.yml'])
+  })
+
+  it('does not yield between the last guard and replacing the file', async () => {
+    const { filename, document } = await fixture(source)
+    let fingerprintAtMicrotask: string | undefined
+    const next = await commitManagedConfig(filename, document.fingerprint, current => mutateManagedConfig(current, { kind: 'setEnabled', id: 'example', enabled: false }, builtins), builtins, false, () => {
+      queueMicrotask(() => { fingerprintAtMicrotask = parseManagedConfig(readFileSync(filename, 'utf8'), builtins).fingerprint })
+    })
+    expect(next.fingerprint).not.toBe(document.fingerprint)
+    expect(fingerprintAtMicrotask).toBe(next.fingerprint)
+  })
+
+  it('does not overwrite a synchronous disk edit made by a validator in the final guard', async () => {
+    const { filename, directory, document } = await fixture(source)
+    const guard = vi.fn(() => { writeFileSync(filename, `${source}# validator changed disk\n`) })
+    await expect(commitManagedConfig(filename, document.fingerprint, current => mutateManagedConfig(current, { kind: 'setEnabled', id: 'example', enabled: false }, builtins), builtins, false, guard)).rejects.toMatchObject({ code: 'CONFIG_CONFLICT' })
+    expect(guard).toHaveBeenCalledTimes(1)
+    expect(await readFile(filename, 'utf8')).toBe(`${source}# validator changed disk\n`)
+    expect(await readdir(directory)).toEqual(['config.yml'])
   })
 
   it('blocks aliases, nonempty removal, missing targets, cycles and colliding group IDs', () => {

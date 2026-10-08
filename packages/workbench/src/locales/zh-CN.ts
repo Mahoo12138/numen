@@ -1042,6 +1042,8 @@ export const zhCN = {
   "workbench.management.applied": "配置已保存，运行时已应用。",
   "workbench.management.savedOnly": "配置已保存，但运行时未完全应用。请先检查实际状态和日志。",
   "workbench.management.notSaved": "配置未保存。",
+  "workbench.management.previewExpired": "此预览已过期：相关运行观察发生变化，或当前 Host 已无法验证此预览。配置未保存，本地输入已保留，请重新预览并核对后再应用。",
+  "workbench.management.repreview": "重新预览并核对",
   "workbench.management.uncertain": "响应未能确认操作结果，正在重新读取当前状态。请核对后按需预览新的明确操作。",
   "workbench.management.invalidJson": "请输入有效的 JSON 对象。",
   "workbench.management.discardEdits": "丢弃本地插件输入和已生成的预览？Host 已接受的操作仍可能完成。",

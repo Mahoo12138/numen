@@ -1,3 +1,4 @@
+import { applyFreshHostConfig } from './helpers/host-config.js'
 import { expect, test, type Page } from '@playwright/test'
 import { loadConfig, writeConfig, type HostConfigMutationRequest } from '../packages/config/dist/index.js'
 import { startRuntime, type NumenApplication } from '../packages/runtime/dist/index.js'
@@ -160,6 +161,7 @@ for (const timing of ['before Preview', 'after Preview'] as const) {
       if (timing === 'after Preview') {
         expect(applyCall, 'The post-Preview conflict must be checked by an actual Apply request').toBeDefined()
         expect.soft(applyCall!.input.fingerprint, 'Apply must use the same frozen baseline as Preview').toBe(base.fingerprint)
+        expect(applyCall!.input).toMatchObject({ previewToken: expect.any(String) })
       } else expect(applyCall, 'The blocked pre-Preview conflict must not issue an Apply request').toBeUndefined()
       const disk = await loadConfig(configPath)
       const yaml = await readFile(configPath, 'utf8')
@@ -346,7 +348,7 @@ test('keeps the input element and invalid text through a failed refresh and reco
   // A Host write while the query remains unavailable must be observed on retry without replacing local input.
   expectNetworkError(page, 'Failed to load resource: net::ERR_FAILED')
   const base = await application.context.hostConfig.read()
-  await application.context.hostConfig.apply({ fingerprint: base.fingerprint, operation: { kind: 'setLabel', id: 'demo', label: 'Updated while Query was unavailable' } })
+  await applyFreshHostConfig(application.context.hostConfig, { fingerprint: base.fingerprint, operation: { kind: 'setLabel', id: 'demo', label: 'Updated while Query was unavailable' } })
   await expect.poll(() => browserErrors.get(page)!.expected.reduce((count, expected) => count + expected.count, 0)).toBe(2)
   await page.unroute('**/api/console/call')
   await page.getByRole('button', { name: 'Try again', exact: true }).click()
@@ -388,7 +390,7 @@ test('applies one operation only after explicitly discarding buffered input for 
   await expect(page.getByText('Configuration saved; runtime application completed.', { exact: true })).toBeVisible()
   await expect(editor).not.toBeVisible()
   expect(calls.filter(call => call.procedure === 'numen:plugin-apply@1')).toEqual([
-    expect.objectContaining({ input: { fingerprint: base.fingerprint, operation: { kind: 'setLabel', id: 'demo', label: 'Reviewed local label' } } }),
+    expect.objectContaining({ input: { fingerprint: base.fingerprint, operation: { kind: 'setLabel', id: 'demo', label: 'Reviewed local label' }, previewToken: expect.any(String) } }),
   ])
   expect((await loadConfig(configPath)).config.plugins.demo).toEqual({ ...originalConfig, $label: 'Reviewed local label' })
 })

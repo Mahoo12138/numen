@@ -1,3 +1,4 @@
+import { applyFreshHostConfig } from './helpers/host-config.js'
 import { expect, test, type Page } from '@playwright/test'
 import { writeConfig, type HostConfigPreview, type HostConfigImpact, type HostConfigOperation } from '../packages/config/dist/index.js'
 import type { AutomationSource } from '../packages/core/dist/index.js'
@@ -147,7 +148,7 @@ async function apply(page: Page) {
   await expect(page.getByText('Configuration saved; runtime application completed.', { exact: true })).toBeVisible()
 }
 async function hostChange(operation: HostConfigOperation) {
-  const result = await application.context.hostConfig.apply({ fingerprint: (await application.context.hostConfig.read()).fingerprint, operation })
+  const result = await applyFreshHostConfig(application.context.hostConfig, { fingerprint: (await application.context.hostConfig.read()).fingerprint, operation })
   expect(result.runtimeApplied).toBe(true)
 }
 function publish(name: string, input: AutomationSource) {

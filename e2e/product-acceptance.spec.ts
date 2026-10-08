@@ -1,3 +1,4 @@
+import { applyFreshHostConfig } from './helpers/host-config.js'
 import { expect, test, type Page } from '@playwright/test'
 import { writeConfig } from '../packages/config/dist/index.js'
 import { startRuntime, type NumenApplication } from '../packages/runtime/dist/index.js'
@@ -183,7 +184,7 @@ test('recovers grouped dependencies while a disconnected editor has an in-flight
     await admin.screenshot({ path: testInfo.outputPath('located-instance-desktop.png'), fullPage: true })
     const commandCenter = admin.getByRole('button', { name: 'Command center', exact: true })
     await commandCenter.focus()
-    await ctx.hostConfig.apply({ fingerprint: (await ctx.hostConfig.read()).fingerprint,
+    await applyFreshHostConfig(ctx.hostConfig, { fingerprint: (await ctx.hostConfig.read()).fingerprint,
       operation: { kind: 'setLabel', id: 'group-destination', label: 'Destination renamed' } })
     await expect(admin.locator('[data-entry-id="group-destination"]')).toContainText('Destination renamed')
     await expect(commandCenter).toBeFocused()
@@ -236,7 +237,7 @@ test('recovers grouped dependencies while a disconnected editor has an in-flight
     await admin.getByRole('button', { name: 'Connections', exact: true }).click()
     await admin.locator('.plugin-ownership > summary').click()
     await expect(admin.locator('.plugin-ownership-content')).toContainText('Currently registered')
-    const setAdapterEnabled = async (enabled: boolean) => ctx.hostConfig.apply({
+    const setAdapterEnabled = async (enabled: boolean) => applyFreshHostConfig(ctx.hostConfig, {
       fingerprint: (await ctx.hostConfig.read()).fingerprint,
       operation: { kind: 'setEnabled', id: 'fixture-adapter', enabled },
     })
@@ -265,7 +266,7 @@ test('recovers grouped dependencies while a disconnected editor has an in-flight
     await page.screenshot({ path: testInfo.outputPath('protected-conflict-mobile.png'), fullPage: true })
 
     const fingerprint = (await ctx.hostConfig.read()).fingerprint
-    const moved = await ctx.hostConfig.apply({ fingerprint, operation: { kind: 'move', id: 'fixture-adapter', parentId: 'group-destination' } })
+    const moved = await applyFreshHostConfig(ctx.hostConfig, { fingerprint, operation: { kind: 'move', id: 'fixture-adapter', parentId: 'group-destination' } })
     expect(moved.runtimeApplied).toBe(true)
     await expect.poll(() => observations.active).toBe(1)
     expect(ctx.connections.get(connection.id)).toMatchObject({ id: connection.id, generation: connection.generation, enabled: true })

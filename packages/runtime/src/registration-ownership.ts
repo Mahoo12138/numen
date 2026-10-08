@@ -15,6 +15,7 @@ interface Observation {
   token: symbol
   active: boolean
   observedAt: string
+  generation: number
   entryId?: string
   source?: string
 }
@@ -25,23 +26,37 @@ export class RegistrationOwnership {
   private readonly observations = new Map<string, Observation>()
   private evicted = false
   private invalid = false
+  private generation = 0
 
   observe(registration: RuntimeRegistration, active: boolean, source: (id: string) => string | undefined): void {
-    if (typeof registration.id !== 'string' || registration.id.length < 1 || registration.id.length > 256 || !Number.isSafeInteger(registration.version) || registration.version < 1 || !['capability', 'connection-adapter', 'connection-type'].includes(registration.kind) || !['definition', 'provider'].includes(registration.role)) { this.invalid = true; return }
+    if (typeof registration.id !== 'string' || registration.id.length < 1 || registration.id.length > 256 || !Number.isSafeInteger(registration.version) || registration.version < 1 || !['capability', 'connection-adapter', 'connection-type'].includes(registration.kind) || !['definition', 'provider'].includes(registration.role)) { this.invalid = true; this.generation++; return }
     const id = key(registration, registration.role)
     const previous = this.observations.get(id)
     if (!active) {
-      if (previous?.token === registration.token) previous.active = false
+      if (previous?.token === registration.token && previous.active) { previous.active = false; previous.generation = ++this.generation }
       return
     }
     const entryId = owningEntry(registration.owner.fiber)
     const name = entryId ? source(entryId) : undefined
     this.observations.delete(id)
-    this.observations.set(id, { ref: { kind: registration.kind, id: registration.id, version: registration.version }, token: registration.token, active, observedAt: new Date().toISOString(),
+    this.observations.set(id, { ref: { kind: registration.kind, id: registration.id, version: registration.version }, token: registration.token, active, generation: ++this.generation, observedAt: new Date().toISOString(),
       ...(entryId ? { entryId } : {}), ...(name ? { source: name } : {}),
     })
     // Eviction means unknown, never attribution to an unrelated or older instance.
     if (this.observations.size > 4096) { this.observations.delete(this.observations.keys().next().value!); this.evicted = true }
+  }
+
+  /** Internal freshness evidence: include both roles of every scoped reference. */
+  freshness(entryIds: ReadonlySet<string>): unknown {
+    const scoped = new Set([...this.observations.values()].filter(item => item.entryId && entryIds.has(item.entryId)).map(item => JSON.stringify(item.ref)))
+    return {
+      observations: [...this.observations.entries()].filter(([, item]) => scoped.has(JSON.stringify(item.ref)))
+        .map(([key, item]) => ({ key, generation: item.generation, active: item.active, entryId: item.entryId, source: item.source }))
+        .sort((a, b) => a.key.localeCompare(b.key)),
+      // Once bounded history was lost, any new observation might belong to the
+      // omitted scope. Require a fresh preview after such a change.
+      incompleteGeneration: this.evicted || this.invalid ? this.generation : undefined,
+    }
   }
 
   /** Reverse lookup uses observed owner identities, never registration names. */

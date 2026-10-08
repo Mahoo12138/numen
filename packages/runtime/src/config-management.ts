@@ -4,12 +4,13 @@ import type { Entry, EntryOptions } from '@cordisjs/plugin-loader'
 import {
   commitManagedConfig, flattenRuntimeEntries, HostConfigError, inspectHostConfigSchema, mutateManagedConfig, readManagedConfig, sensitiveConfigKey,
   type HostConfigService, type HostConfigSnapshot, type HostConfigPreview, type HostConfigMutationResult,
-  type HostConfigMutationRequest, type HostConfigOperation, type HostPluginState, type ManagedConfigDocument, type RuntimeEntry,
+  type HostConfigMutationRequest, type HostConfigApplyRequest, type HostConfigOperation, type HostPluginState, type ManagedConfigDocument, type RuntimeEntry,
   type HostRegistrationRef, type HostRegistrationDiagnosis,
 } from '@numenjs/config'
 import { owningEntry, RegistrationOwnership } from './registration-ownership.js'
 import { buildConfigImpact, isMetadataOperation } from './config-impact.js'
 import { collectRuntimeImpactEvidence } from './config-impact-evidence.js'
+import { ConfigPreviewGuard, persistedPreviewEvidence } from './config-preview-guard.js'
 
 export function toCordisEntry(entry: RuntimeEntry): EntryOptions {
   return { id: entry.id, name: entry.name, config: entry.children ? entry.children.map(toCordisEntry) : entry.config, disabled: entry.disabled, ...(entry.children ? { group: true } : {}) }
@@ -89,6 +90,7 @@ export class HostConfigurationService extends Service implements HostConfigServi
   private queue: Promise<unknown> = Promise.resolve()
   private attemptedFingerprint: string
   private readonly ownership = new RegistrationOwnership()
+  private readonly previewGuard = new ConfigPreviewGuard()
 
   constructor(ctx: Context, private readonly options: HostConfigurationOptions) {
     super(ctx, 'hostConfig')
@@ -111,8 +113,9 @@ export class HostConfigurationService extends Service implements HostConfigServi
     const result = new Set(all.filter(entry => ['cordis:console', 'cordis:workbench', 'cordis:server'].includes(entry.name)).map(entry => entry.id))
     // Protect real alternative providers of the current management channel as well.
     for (const name of ['console', 'consoleAuth', 'consoleSession', 'consoleEntries', 'server', 'workbench']) {
-      const provider = this.ctx.get(name) as { ctx?: Context } | undefined
-      const owner = provider?.ctx && owningEntry(provider.ctx.fiber)
+      // Service.ctx is traceable and reflects the caller, not the provider.
+      const implementation = this.ctx.reflect._getImpl(name, false)
+      const owner = implementation && owningEntry(implementation.fiber)
       if (owner) result.add(owner)
     }
     for (const id of [...result]) {
@@ -167,7 +170,7 @@ export class HostConfigurationService extends Service implements HostConfigServi
 
   async read(): Promise<HostConfigSnapshot> { return this.snapshot(await this.document()) }
 
-  private async prepare(document: ManagedConfigDocument, input: HostConfigMutationRequest): Promise<ManagedConfigDocument> {
+  private prepare(document: ManagedConfigDocument, input: HostConfigMutationRequest): ManagedConfigDocument {
     if (document.fingerprint !== input.fingerprint) throw new HostConfigError('CONFIG_CONFLICT', 'Configuration changed. Refresh the state and keep your local edits for review.')
     if (document.fingerprint !== this.attemptedFingerprint) throw new HostConfigError('RESTART_REQUIRED', 'Configuration was edited outside this host. Restart to reconcile it before editing.')
     const operation = input.operation
@@ -197,50 +200,102 @@ export class HostConfigurationService extends Service implements HostConfigServi
     return next
   }
 
-  async preview(input: HostConfigMutationRequest): Promise<HostConfigPreview> {
-    const document = await this.document()
+  /** Detach before any async read/queue boundary; never execute unsafe config getters. */
+  private capture<T extends HostConfigMutationRequest>(input: T): T {
+    if (input?.operation?.kind === 'setConfig' && safeConfig(input.operation.config).unsafe) {
+      throw new HostConfigError('PLUGIN_CONFIG_NOT_JSON', 'Configuration contains values that cannot be represented losslessly as JSON. Edit it locally.')
+    }
+    try { return structuredClone(input) } catch { throw new HostConfigError('OPERATION_INVALID', 'The operation must be representable as detached configuration data.') }
+  }
+
+  private inspect(document: ManagedConfigDocument, input: HostConfigMutationRequest) {
     const all = flattenRuntimeEntries(document.entries)
     const target = all.find(entry => entry.id === input.operation.id)
-    let blockedReason: string | undefined
-    try { await this.prepare(document, input) } catch (error) { if (error instanceof HostConfigError) blockedReason = error.message; else throw error }
     const snapshot = this.snapshot(document)
     const affectedEntryIds = target ? flattenRuntimeEntries([target]).map(entry => entry.id) : []
     const metadataOnly = isMetadataOperation(input.operation)
+    const affectedIds = new Set(affectedEntryIds)
     const ownership = metadataOnly
       ? { diagnoses: [], scanned: 0, limit: 256, truncated: false, evicted: false }
-      : this.ownership.inspect(new Set(affectedEntryIds), snapshot)
+      : this.ownership.inspect(affectedIds, snapshot)
     const evidence = metadataOnly ? { connections: [], snapshots: [], runs: [], coverage: [] } : collectRuntimeImpactEvidence(this.ctx)
+    const impact = buildConfigImpact(input.operation, affectedEntryIds, snapshot, ownership, evidence)
+    const { computedAt: _computedAt, coverage: _coverage, ...graph } = impact
+    // A move also depends on the current destination and its ancestor states.
+    if (input.operation.kind === 'move') {
+      let parent = input.operation.parentId
+      while (parent) { affectedIds.add(parent); parent = all.find(entry => entry.id === parent)?.parentId }
+    }
+    let databaseIdentity: number | null = null
+    if (!metadataOnly) try { databaseIdentity = this.previewGuard.identity(this.ctx.get('database')?.db) } catch { /* Not ready is unavailable evidence. */ }
+    const observation = metadataOnly ? { effect: 'metadata-only' } : {
+      graph,
+      entries: snapshot.entries.filter(entry => affectedIds.has(entry.id)).map(entry => ({
+        id: entry.id, actualState: entry.actualState, protected: entry.protected, internal: entry.internal,
+        fiber: this.previewGuard.identity(this.ctx.loader.store[entry.id]?.fiber),
+        runtime: this.previewGuard.identity(this.ctx.loader.store[entry.id]?.fiber?.runtime),
+      })),
+      ownership: this.ownership.freshness(new Set(affectedEntryIds)),
+      database: databaseIdentity,
+      persisted: persistedPreviewEvidence(this.ctx, impact, evidence),
+    }
+    return { snapshot, target, affectedEntryIds, impact, observation }
+  }
+
+  async preview(request: HostConfigMutationRequest): Promise<HostConfigPreview> {
+    let input: HostConfigMutationRequest, blockedReason: string | undefined
+    try { input = this.capture(request) } catch (error) {
+      if (!(error instanceof HostConfigError) || request?.operation?.kind !== 'setConfig') throw error
+      blockedReason = error.message
+      input = { fingerprint: request.fingerprint, operation: { kind: 'setConfig', id: request.operation.id, config: {} } }
+    }
+    const document = await this.document()
+    if (!blockedReason) try { this.prepare(document, input) } catch (error) { if (error instanceof HostConfigError) blockedReason = error.message; else throw error }
+    const { snapshot, target, affectedEntryIds, impact, observation } = this.inspect(document, input)
     return {
       fingerprint: document.fingerprint,
       operation: input.operation.kind === 'setConfig' ? { ...input.operation, config: snapshot.entries.find(entry => entry.id === target?.id)?.configEditable ? safeConfig(input.operation.config).value as Record<string, unknown> : {} } : input.operation,
-      affectedEntryIds,
-      impact: buildConfigImpact(input.operation, affectedEntryIds, snapshot, ownership, evidence),
-      ...(blockedReason ? { blockedReason } : {}),
+      affectedEntryIds, impact,
+      ...(blockedReason ? { blockedReason } : { previewToken: this.previewGuard.token(input, observation) }),
     }
   }
 
-  apply(input: HostConfigMutationRequest): Promise<HostConfigMutationResult> {
+  apply(request: HostConfigApplyRequest): Promise<HostConfigMutationResult> {
+    let input: HostConfigApplyRequest
+    try { input = this.capture(request) } catch (error) { return Promise.reject(error) }
     const task = this.queue.then(() => this.applySerialized(input))
     this.queue = task.catch(() => undefined)
     return task
   }
 
-  private async applySerialized(input: HostConfigMutationRequest): Promise<HostConfigMutationResult> {
-    const next = await commitManagedConfig(this.options.filename, input.fingerprint, current => this.prepare(current, input), this.options.builtins, this.options.safeMode)
-    this.attemptedFingerprint = next.fingerprint
-    this.options.onSaved?.(next)
-    let runtimeApplied = true
+  private async applySerialized(input: HostConfigApplyRequest): Promise<HostConfigMutationResult> {
+    const validate = (current: ManagedConfigDocument) => {
+      const next = this.prepare(current, input)
+      this.previewGuard.verify(input, this.inspect(current, input).observation)
+      return next
+    }
+    const next = await commitManagedConfig(this.options.filename, input.fingerprint, async current => validate(current), this.options.builtins, this.options.safeMode,
+      current => { validate(current) })
     try {
-      await this.applyRuntime(input.operation, next.entries)
-      const rows = this.snapshot(next).entries
-      const target = rows.find(entry => entry.id === input.operation.id)
-      const affected = target ? new Set(flattenRuntimeEntries(flattenRuntimeEntries(next.entries).filter(entry => entry.id === target.id)).map(entry => entry.id)) : new Set<string>()
-      runtimeApplied = !rows.some(entry => affected.has(entry.id) && (entry.actualState === 'FAILED' || entry.actualState === 'UNLOADED' || entry.internal.some(child => child.state === 'FAILED')))
-    } catch { runtimeApplied = false }
-    const snapshot = this.snapshot(next)
-    this.ctx.emit('numen/host-config-change')
-    return { saved: true, runtimeApplied, fingerprint: next.fingerprint, restartRequired: false, snapshot,
-      ...(!runtimeApplied ? { error: { code: 'RUNTIME_APPLY_FAILED', message: 'Configuration was saved, but the runtime did not apply it successfully. Inspect plugin status and correct its configuration; the host will not retry automatically.' } } : {}),
+      this.attemptedFingerprint = next.fingerprint
+      this.options.onSaved?.(next)
+      let runtimeApplied = true
+      try {
+        await this.applyRuntime(input.operation, next.entries)
+        const rows = this.snapshot(next).entries
+        const target = rows.find(entry => entry.id === input.operation.id)
+        const affected = target ? new Set(flattenRuntimeEntries(flattenRuntimeEntries(next.entries).filter(entry => entry.id === target.id)).map(entry => entry.id)) : new Set<string>()
+        runtimeApplied = !rows.some(entry => affected.has(entry.id) && (entry.actualState === 'FAILED' || entry.actualState === 'UNLOADED' || entry.internal.some(child => child.state === 'FAILED')))
+      } catch { runtimeApplied = false }
+      const snapshot = this.snapshot(next)
+      this.ctx.emit('numen/host-config-change')
+      return { saved: true, runtimeApplied, fingerprint: next.fingerprint, restartRequired: false, snapshot,
+        ...(!runtimeApplied ? { error: { code: 'RUNTIME_APPLY_FAILED', message: 'Configuration was saved, but the runtime did not apply it successfully. Inspect plugin status and correct its configuration; the host will not retry automatically.' } } : {}),
+      }
+    } catch {
+      // The file is already committed. A plugin/observer error must not cross
+      // the transport as a pre-save HostConfigError and claim saved:false.
+      throw new Error('Configuration was saved, but runtime status could not be determined. Refresh the current state before any further operation.')
     }
   }
 

@@ -1,3 +1,4 @@
+import { applyFreshHostConfig } from './helpers/host-config.js'
 import { expect, test, type Page } from '@playwright/test'
 import { writeConfig } from '../packages/config/dist/index.js'
 import { startRuntime, type NumenApplication } from '../packages/runtime/dist/index.js'
@@ -70,7 +71,7 @@ test('edits group state with preview, protects management, and reconciles one lo
   await editor.getByLabel('Display label', { exact: true }).fill('Recovered response group')
   await editor.getByRole('button', { name: 'Preview change', exact: true }).click()
   const state = await application.context.hostConfig.read()
-  await application.context.hostConfig.apply({ fingerprint: state.fingerprint, operation: { kind: 'setLabel', id: 'group-acceptance', label: 'Changed in another session' } })
+  await applyFreshHostConfig(application.context.hostConfig, { fingerprint: state.fingerprint, operation: { kind: 'setLabel', id: 'group-acceptance', label: 'Changed in another session' } })
   await page.getByRole('button', { name: 'Save and apply this change', exact: true }).click()
   await expect(page.getByText(/Configuration changed\. Refresh/)).toBeVisible()
   await expect(editor.getByLabel('Display label', { exact: true })).toHaveValue('Recovered response group')

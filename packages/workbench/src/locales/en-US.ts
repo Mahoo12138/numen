@@ -1039,6 +1039,8 @@ export const enUS = {
   "workbench.management.applied": "Configuration saved; runtime application completed.",
   "workbench.management.savedOnly": "Configuration saved, but runtime application did not complete. Inspect the actual state and logs before making another change.",
   "workbench.management.notSaved": "Configuration was not saved.",
+  "workbench.management.previewExpired": "This preview is out of date. Related runtime observations have changed or this Host can no longer validate the preview. Nothing was saved. Review a new preview before applying; your local input is preserved.",
+  "workbench.management.repreview": "Review updated preview",
   "workbench.management.uncertain": "The response did not confirm the outcome. Current state is being re-read. Review it and preview a new explicit change if necessary.",
   "workbench.management.invalidJson": "Enter a valid JSON object.",
   "workbench.management.discardEdits": "Discard local plugin input and the prepared preview? A change already accepted by the Host may still finish.",

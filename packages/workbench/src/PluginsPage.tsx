@@ -1,5 +1,5 @@
 import { Button, StatePanel } from '@numenjs/components'
-import type { HostConfigMutationRequest, HostConfigMutationResult, HostConfigOperation, HostConfigPreview, HostConfigSnapshot, HostPluginEntry } from '@numenjs/config'
+import type { HostConfigApplyRequest, HostConfigMutationRequest, HostConfigMutationResult, HostConfigOperation, HostConfigPreview, HostConfigSnapshot, HostPluginEntry } from '@numenjs/config'
 import { Boxes, RefreshCw } from '@lucide/vue'
 import { computed, nextTick, onScopeDispose, ref, shallowRef, watch } from 'vue'
 import { pluginReturnTarget } from './plugin-navigation.js'
@@ -26,6 +26,7 @@ export const PluginsPage = defineSetupComponent<WorkbenchPageProps>('PluginsPage
   const label = ref(''), groupId = ref(''), parentId = ref(''), config = ref('')
   const editing = ref(false), busy = ref(false), error = ref(''), result = ref('')
   const preview = ref<HostConfigPreview>(), request = ref<HostConfigMutationRequest>()
+  const previewExpired = ref(false)
   const session = shallowRef<PluginEditSession>()
   const sessionEpoch = ref(0)
   const configMode = ref<'form' | 'json'>('form')
@@ -78,7 +79,7 @@ export const PluginsPage = defineSetupComponent<WorkbenchPageProps>('PluginsPage
   let controller: AbortController | undefined
   onScopeDispose(() => controller?.abort())
   const writable = computed(() => query.status === 'READY' && !!snapshot.value?.writable && !snapshot.value.restartRequired && !busy.value)
-  const clearPreview = () => { preview.value = undefined; request.value = undefined }
+  const clearPreview = () => { preview.value = undefined; request.value = undefined; previewExpired.value = false }
   const closeEditor = () => { editing.value = false; session.value = undefined; configFields.value = { dirty: false, invalid: false }; clearPreview() }
   const blurConfigInput = () => { if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) document.activeElement.blur() }
   const configAllowed = computed(() => !!session.value?.entry?.configEditable && !!selectedEntry.value?.configEditable && !selectedEntry.value.protected)
@@ -122,8 +123,9 @@ export const PluginsPage = defineSetupComponent<WorkbenchPageProps>('PluginsPage
     if (previousOperation !== 'setConfig' || (selectedEntry.value?.configEditable && !selectedEntry.value.protected)) operation.value = previousOperation
     if (previousMode === 'json') configMode.value = 'json'
   }
-  const prepare = async (next: HostConfigOperation, fingerprint: string) => {
+  const prepare = async (next: HostConfigOperation, fingerprint: string, retainExpired = false) => {
     if (!props.consoleClient || !writable.value || !snapshot.value) return
+    const previous = retainExpired ? { preview: preview.value, request: request.value } : undefined
     controller?.abort(); const pending = controller = new AbortController()
     busy.value = true; error.value = ''; result.value = ''; clearPreview()
     const proposed = { fingerprint, operation: next }
@@ -133,7 +135,10 @@ export const PluginsPage = defineSetupComponent<WorkbenchPageProps>('PluginsPage
       preview.value = value; request.value = proposed
       void nextTick(() => document.querySelector<HTMLElement>('.plugin-preview')?.scrollIntoView({ block: 'nearest' }))
     } catch (cause) {
-      if (!pending.signal.aborted) { error.value = message(cause); refresh() }
+      if (!pending.signal.aborted) {
+        if (previous) { preview.value = previous.preview; request.value = previous.request; previewExpired.value = true }
+        error.value = message(cause); refresh()
+      }
     } finally { busy.value = false }
   }
   const prepareQuick = (next: HostConfigOperation) => {
@@ -159,26 +164,35 @@ export const PluginsPage = defineSetupComponent<WorkbenchPageProps>('PluginsPage
     }
   }
   const apply = async () => {
-    if (!props.consoleClient || !request.value || !preview.value || preview.value.blockedReason || busy.value) return
+    if (!props.consoleClient || !request.value || !preview.value?.previewToken || preview.value.blockedReason || previewExpired.value || busy.value) return
     if (hasOtherEdits.value && !globalThis.confirm(t('workbench.management.discardOtherEdits'))) return
-    const approved = request.value
+    const approved: HostConfigApplyRequest = { ...request.value, previewToken: preview.value.previewToken }
     controller?.abort(); const pending = controller = new AbortController(); busy.value = true; error.value = ''
     try {
-      const value = await props.consoleClient.action<HostConfigMutationRequest, HostConfigMutationResult>(workbenchPluginApplyRef, approved, pending.signal)
+      const value = await props.consoleClient.action<HostConfigApplyRequest, HostConfigMutationResult>(workbenchPluginApplyRef, approved, pending.signal)
       if (pending.signal.aborted) return
       result.value = t(value.saved ? value.runtimeApplied ? 'workbench.management.applied' : 'workbench.management.savedOnly' : 'workbench.management.notSaved')
       if (value.error) error.value = value.error.message
       if (value.saved) closeEditor()
     } catch (cause) {
       if (!pending.signal.aborted) {
-        // A failed transport does not establish whether the host committed. Never invert or replay the mutation.
-        const conflict = !!cause && typeof cause === 'object' && 'code' in cause && cause.code === 'CONFIG_CONFLICT'
-        result.value = t(conflict ? 'workbench.management.notSaved' : 'workbench.management.uncertain')
-        error.value = message(cause)
+        // Only an explicit Host rejection proves no write. Transport failure remains uncertain.
+        const code = !!cause && typeof cause === 'object' && 'code' in cause ? cause.code : undefined
+        const details = !!cause && typeof cause === 'object' && 'details' in cause ? cause.details : undefined
+        const rejected = code === 'CONFIG_CONFLICT' || !!details && typeof details === 'object' && 'saved' in details && details.saved === false
+        previewExpired.value = code === 'PREVIEW_STALE' || code === 'PREVIEW_REQUIRED'
+        result.value = t(rejected || previewExpired.value ? 'workbench.management.notSaved' : 'workbench.management.uncertain')
+        error.value = previewExpired.value ? '' : message(cause)
       }
     } finally {
-      clearPreview(); busy.value = false; refresh()
+      if (!previewExpired.value) clearPreview()
+      busy.value = false; refresh()
     }
+  }
+  const repreview = () => {
+    if (!request.value || !previewExpired.value || !writable.value) return
+    // Review the same pending operation against new observations; never silently apply it.
+    void prepare(request.value.operation, request.value.fingerprint, true)
   }
   const visible = computed(() => {
     const entries = snapshot.value?.entries ?? [], byId = new Map(entries.map(entry => [entry.id, entry]))
@@ -263,11 +277,12 @@ export const PluginsPage = defineSetupComponent<WorkbenchPageProps>('PluginsPage
         </div> : null}
       </div>
     </> : null}
-    {preview.value ? <section class="core-page-section plugin-preview" aria-label={t('workbench.management.preview')}>
+    {preview.value ? <section class="core-page-section plugin-preview" aria-label={t('workbench.management.preview')} data-preview-expired={previewExpired.value}>
       <h2>{t('workbench.management.preview')}</h2><p>{t('workbench.management.affected')}: {preview.value.affectedEntryIds.join(', ')}</p>
+      {previewExpired.value ? <p role="alert">{t('workbench.management.previewExpired')}</p> : null}
       <pre>{JSON.stringify(preview.value.operation, null, 2)}</pre>
       <PluginImpactPreview impact={preview.value.impact} {...(props.navigation ? { navigation: props.navigation } : {})} />
-      <div class="plugin-actions"><Button disabled={busy.value || !!preview.value.blockedReason} variant="primary" type="button" onClick={apply}>{t('workbench.management.apply')}</Button><Button disabled={busy.value} type="button" onClick={() => { preview.value = undefined; request.value = undefined }}>{t('workbench.cancel')}</Button><Button type="button" onClick={() => props.navigation?.navigate(coreWorkbenchRoutes.connections)}>{t('workbench.connections')}</Button></div>
+      <div class="plugin-actions"><Button disabled={busy.value || !!preview.value.blockedReason || !preview.value.previewToken || previewExpired.value} variant="primary" type="button" onClick={apply}>{t('workbench.management.apply')}</Button>{previewExpired.value ? <Button disabled={!writable.value} type="button" onClick={repreview}>{t('workbench.management.repreview')}</Button> : null}<Button disabled={busy.value} type="button" onClick={clearPreview}>{t('workbench.cancel')}</Button><Button type="button" onClick={() => props.navigation?.navigate(coreWorkbenchRoutes.connections)}>{t('workbench.connections')}</Button></div>
       {preview.value.blockedReason ? <p role="alert">{preview.value.blockedReason}</p> : null}
     </section> : null}
     {busy.value ? <p role="status">{t('workbench.management.working')}</p> : null}

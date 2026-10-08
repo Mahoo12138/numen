@@ -1,7 +1,7 @@
 import { Context, type Plugin } from 'cordis'
 import Loader, { Group } from '@cordisjs/plugin-loader'
 import { CapabilityRegistry, type RuntimeRegistration } from '@numenjs/core'
-import { readManagedConfig, writeConfig, type HostConfigOperation, type HostRegistrationRef } from '@numenjs/config'
+import { readManagedConfig, writeConfig, type HostConfigMutationRequest, type HostConfigOperation, type HostRegistrationRef } from '@numenjs/config'
 import { mkdtemp, rm, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -41,7 +41,11 @@ async function fixture() {
   }
   return { ctx: await create(), create, filename }
 }
-const change = async (ctx: Context, operation: HostConfigOperation) => ctx.hostConfig.apply({ fingerprint: (await ctx.hostConfig.read()).fingerprint, operation })
+const applyFresh = async (ctx: Context, input: HostConfigMutationRequest) => {
+  const preview = await ctx.hostConfig.preview(input)
+  return ctx.hostConfig.apply({ ...input, previewToken: preview.previewToken ?? '' })
+}
+const change = async (ctx: Context, operation: HostConfigOperation) => applyFresh(ctx, { fingerprint: (await ctx.hostConfig.read()).fingerprint, operation })
 
 it('finds separate definition and nested provider owners, preserves evidence while disabled, and recomputes moved ancestry', async () => {
   const { ctx, create } = await fixture()

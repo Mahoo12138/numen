@@ -464,10 +464,40 @@ impact assertions were preserved.
 privacy and corruption regressions, complex Run state checks and browser evidence.
 All test data is temporary; no migration, dependency upgrade, deployment or release.
 
-Next: N3-03 binds Preview to relevant runtime observations and revalidates material
-ownership/impact changes before Apply, while preserving management-channel protection.
-This runtime-observation expiry gate is not part of N3-02; current configuration CAS
-continues to protect writes.
+### N3-03 preview expiry and management protection — verified 2026-10-08
+
+Apply now requires an opaque Host preview proof bound to its process, configuration
+fingerprint, exact operation and scoped runtime observations. Same-millisecond ownership
+replacement, relevant Connection/Revision/Run changes and Host restart invalidate old
+proofs. Complete scoped evidence ignores unrelated changes; incomplete sources use
+conservative database change tracking. Metadata-only operations skip business reads.
+
+The Host copies requests before asynchronous boundaries and rechecks protection and
+observations after preparing the temporary file. Synchronous disk CAS both before and
+after the final runtime guard prevents validator-side writes from being overwritten;
+the last check and rename share one event-loop turn. This is not a cross-process
+transaction between SQLite and the filesystem. Real management providers are now located
+through Cordis implementation Fibers rather than the caller-bound service Context, so
+nonstandard providers and their ancestor groups receive the same protection.
+
+Workbench keeps local input and marks old evidence expired after a known rejection,
+disables Apply and requires an explicit updated Preview and a separate Apply. Failed
+re-preview requests retain the pending intent. Known pre-save rejections report unsaved;
+lost responses and post-commit observer failures remain uncertain and never auto-replay.
+
+Verification: 121 Vitest files / 782 tests, typecheck, production and example builds,
+28 related Chromium scenarios and all 79 final Chromium scenarios passed. Tests include
+forged and mismatched proofs, restart, asynchronous file preparation, synchronous validator
+writes, management takeover, external database commits, input mutation, stale recovery,
+two-client CAS and response loss. Final 1440px/390px screenshots were viewed without
+horizontal overflow or clipped controls.
+
+[N3-03 verification](docs/verification/plugin-preview-expiry-2026-10-08.md) records the
+scope, limits and evidence. All test data is temporary; no migration, dependency upgrade,
+deployment or release.
+
+Next: N4-01 adds direct structural movement and node-location search through existing
+Source commands, with explicit drop targets, cancellation and one-step undo.
 
 M0/M1 foundation implemented and verified: independent Console/Workbench composition,
 v2 native groups and explicit migration, v1 compatibility, two sets of ten lifecycle cycles,

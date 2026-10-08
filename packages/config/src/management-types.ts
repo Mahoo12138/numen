@@ -77,6 +77,11 @@ export interface HostConfigMutationRequest {
   operation: HostConfigOperation
 }
 
+export interface HostConfigApplyRequest extends HostConfigMutationRequest {
+  /** Opaque Host proof binding this exact operation to its inspected runtime observations. */
+  previewToken: string
+}
+
 export type HostConfigImpactSource = 'ownership' | 'configuration' | 'connections' | 'active-revisions' | 'nonterminal-runs' | 'run-executions' | 'run-snapshots' | 'drafts' | 'dynamic-references' | 'external-effects'
 
 export interface HostConfigImpactCoverage {
@@ -128,6 +133,8 @@ export interface HostConfigPreview {
   affectedEntryIds: string[]
   impact: HostConfigImpact
   blockedReason?: string
+  /** Absent when Host validation blocks the operation. */
+  previewToken?: string
 }
 
 export interface HostConfigMutationResult {
@@ -142,7 +149,7 @@ export interface HostConfigMutationResult {
 export interface HostConfigService {
   read(): Promise<HostConfigSnapshot>
   preview(input: HostConfigMutationRequest): Promise<HostConfigPreview>
-  apply(input: HostConfigMutationRequest): Promise<HostConfigMutationResult>
+  apply(input: HostConfigApplyRequest): Promise<HostConfigMutationResult>
   diagnose(refs: HostRegistrationRef[]): Promise<HostRegistrationDiagnosis[]>
 }
 
