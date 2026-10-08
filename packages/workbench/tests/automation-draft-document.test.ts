@@ -1,13 +1,15 @@
 import type { AutomationSource } from '@numenjs/core'
-import { describe, expect, it } from 'vitest'
-import { effectScope, nextTick, ref } from 'vue'
+import { describe, expect, it, vi } from 'vitest'
+import { effectScope, nextTick, ref, shallowRef } from 'vue'
 import type {
   WorkbenchAutomationControlKind,
   WorkbenchAutomationDetail,
   WorkbenchAutomationDraft,
   WorkbenchAutomationInsertItem,
+  WorkbenchSaveAutomationDraftInput,
 } from '../src/contracts.js'
 import { applyAutomationSourceCommand } from '../src/automation-source-editing.js'
+import type { WorkbenchConsoleClient } from '../src/types.js'
 import {
   canPublishAutomationDraft,
   useAutomationDraftDocument,
@@ -738,4 +740,201 @@ it('keeps Copy immutable, makes Cut atomic at paste, and clears clipboard on Aut
     expect(model.clipboard).toBeUndefined()
     expect(model.document).toBeUndefined()
   } finally { scope.stop() }
+})
+
+describe('full-document snapshot restoration', () => {
+  const original: AutomationSource = { triggers: [], flow: { type: 'block', id: 'root', steps: [
+    { type: 'wait', id: 'selected', durationMs: { type: 'literal', value: 10 } },
+  ] } }
+  const restored: AutomationSource = { triggers: [{ id: 'trigger', capability: { id: 'unavailable:trigger', version: 9 }, config: { opaque: { retained: true } } }],
+    inputs: { message: { type: 'string', default: { $resource: 'opaque-resource' } } },
+    flow: { type: 'block', id: 'root', steps: [{ type: 'extension', id: 'control', control: { id: 'unavailable:control', version: 4 }, input: { future: { type: 'call', function: 'unavailable:function', arguments: [{ type: 'literal', value: { untouched: 'snapshot' } }] } } }] },
+  }
+  const originalPresentation = { collapsedNodes: ['original-stale-id'], opaque: { nested: ['original'] } }
+  const restoredPresentation = { collapsedNodes: ['root', 'snapshot-stale-id'], future: { nested: ['snapshot'] } }
+
+  function prepared() {
+    const state = reduceAutomationDraftDocument(loadedState(), { type: 'SERVER', automationId: 'automation-1', draft: {
+      ...draft(3, original), presentation: originalPresentation, baseRevisionId: 'rev-current-base',
+    } })
+    return reduceAutomationDraftDocument(state, { type: 'SELECT_NODE', nodeId: 'selected', reveal: false })
+  }
+  function restore(state: AutomationDraftDocumentState, overrides: Partial<{ automationId: string; expectedVersion: number; source: AutomationSource; presentation: typeof restoredPresentation }> = {}) {
+    return reduceAutomationDraftDocument(state, { type: 'REPLACE_FROM_SNAPSHOT', automationId: 'automation-1', expectedVersion: 3,
+      source: restored, presentation: restoredPresentation, expectedDocument: state.document!, ...overrides })
+  }
+
+  it('replaces opaque Source and Presentation in one history entry without changing saved identity or lineage', () => {
+    const before = prepared()
+    const incomingSource = structuredClone(restored) as AutomationSource & { unknownSource?: unknown }
+    incomingSource.unknownSource = { future: { private: ['keep', null, 9] } }
+    const incomingPresentation = structuredClone(restoredPresentation)
+    let state = restore(before, { source: incomingSource, presentation: incomingPresentation })
+    expect(state).toMatchObject({ savePhase: 'DIRTY', editRevision: before.editRevision + 1, selectedNodeId: undefined,
+      document: { version: 3, updatedAt: before.document!.updatedAt, baseRevisionId: 'rev-current-base', source: incomingSource, presentation: incomingPresentation } })
+    expect(state.undoStack).toEqual([{ source: before.document!.source, presentation: before.document!.presentation, selectedNodeId: 'selected' }])
+    expect(state.redoStack).toEqual([])
+    expect(state.document!.source).not.toBe(incomingSource)
+    expect(state.document!.presentation).not.toBe(incomingPresentation)
+    incomingSource.unknownSource = 'mutated after apply'
+    incomingPresentation.future.nested.push('mutated after apply')
+    expect((state.document!.source as typeof incomingSource).unknownSource).toEqual({ future: { private: ['keep', null, 9] } })
+    expect(state.document!.presentation).toEqual(restoredPresentation)
+    const replacement = state.document!
+    state = reduceAutomationDraftDocument(state, { type: 'UNDO' })
+    expect(state.document).toEqual(before.document)
+    expect(state.selectedNodeId).toBe('selected')
+    state = reduceAutomationDraftDocument(state, { type: 'REDO' })
+    expect(state.document).toEqual(replacement)
+    expect(state.selectedNodeId).toBeUndefined()
+  })
+
+  it('retains a surviving selected node without revealing it or reconciling historical Presentation', () => {
+    const before = prepared()
+    const incoming = structuredClone(original)
+    const state = restore(before, { source: incoming, presentation: restoredPresentation })
+    expect(state.selectedNodeId).toBe('selected')
+    expect(state.document!.presentation.collapsedNodes).toEqual(['root', 'snapshot-stale-id'])
+    expect(state.document!.presentation).toEqual(restoredPresentation)
+    expect(state.undoStack).toHaveLength(1)
+  })
+
+  it('records an accepted same-content restoration as one explicit operation, preserves older Undo and clears Redo', () => {
+    // Build redo through a normal edit and Undo, then complete its existing CAS save.
+    let state = reduceAutomationDraftDocument(prepared(), { type: 'EDIT', command: { type: 'INSERT', item: waitItem, target: { kind: 'block', blockId: 'root' } } })
+    state = reduceAutomationDraftDocument(state, { type: 'EDIT', command: { type: 'SET_WAIT_EXPRESSION', nodeId: 'selected', field: 'durationMs', expression: { type: 'literal', value: 99 } } })
+    state = reduceAutomationDraftDocument(state, { type: 'UNDO' })
+    state = reduceAutomationDraftDocument(state, { type: 'SAVE_REQUEST' })
+    state = reduceAutomationDraftDocument(state, { type: 'SAVE_SUCCESS', result: { draft: { ...draft(4, state.document!.source), presentation: state.document!.presentation, baseRevisionId: 'rev-current-base' } } })
+    expect(state.redoStack).toHaveLength(1)
+    const undoCount = state.undoStack.length, current = state.document!
+    state = reduceAutomationDraftDocument(state, { type: 'REPLACE_FROM_SNAPSHOT', automationId: 'automation-1', expectedVersion: 4, expectedDocument: current, source: current.source, presentation: current.presentation })
+    expect(state.undoStack).toHaveLength(undoCount + 1)
+    expect(state.redoStack).toEqual([])
+    expect(state.savePhase).toBe('DIRTY')
+    expect(state.document).toEqual(current)
+    expect(state.document).not.toBe(current)
+  })
+
+  it.each(['UNAVAILABLE', 'DIRTY', 'SAVING', 'CONFLICT', 'ERROR', 'RELOADING'] as const)('rejects a restore in %s without changing any state', savePhase => {
+    const state = { ...prepared(), savePhase }
+    expect(restore(state)).toBe(state)
+  })
+
+  it('rejects foreign, stale, switched, publishing and replaced same-version documents without changing history', () => {
+    const state = prepared()
+    expect(restore(state, { automationId: 'automation-other' })).toBe(state)
+    expect(restore(state, { expectedVersion: 2 })).toBe(state)
+    expect(restore(state, { expectedVersion: 4 })).toBe(state)
+    const switched = { ...state, selectedAutomationId: 'automation-other' }
+    expect(restore(switched)).toBe(switched)
+    for (const blocked of [
+      { ...state, publishPending: true },
+      { ...state, pendingPublish: { automationId: 'automation-1', expectedVersion: 3 } },
+      { ...state, pendingSave: { automationId: 'automation-1', expectedVersion: 3, source: original, presentation: originalPresentation, editRevision: 0 } },
+    ]) expect(restore(blocked)).toBe(blocked)
+    const reloaded = reduceAutomationDraftDocument(state, { type: 'SERVER', automationId: 'automation-1', draft: { ...draft(3, original), presentation: originalPresentation, baseRevisionId: 'rev-new-base' } })
+    expect(reloaded.document).not.toBe(state.document)
+    expect(reduceAutomationDraftDocument(reloaded, { type: 'REPLACE_FROM_SNAPSHOT', automationId: 'automation-1', expectedVersion: 3, expectedDocument: state.document!, source: restored, presentation: restoredPresentation })).toBe(reloaded)
+  })
+
+  it('preserves the restored edit against stale SERVER updates and saves Undo as a later CAS version', () => {
+    const before = prepared()
+    let state = restore(before)
+    expect(reduceAutomationDraftDocument(state, { type: 'SERVER', automationId: 'automation-1', draft: { ...draft(4, original), presentation: originalPresentation } })).toBe(state)
+    state = reduceAutomationDraftDocument(state, { type: 'SAVE_REQUEST' })
+    expect(state.pendingSave).toMatchObject({ expectedVersion: 3, source: restored, presentation: restoredPresentation })
+    state = reduceAutomationDraftDocument(state, { type: 'SAVE_SUCCESS', result: { draft: { ...draft(4, restored), presentation: restoredPresentation, baseRevisionId: 'rev-current-base' } } })
+    expect(state.savePhase).toBe('CLEAN')
+    state = reduceAutomationDraftDocument(state, { type: 'UNDO' })
+    expect(state.document).toMatchObject({ version: 4, baseRevisionId: 'rev-current-base', source: original, presentation: originalPresentation })
+    state = reduceAutomationDraftDocument(state, { type: 'SAVE_REQUEST' })
+    expect(state.pendingSave).toMatchObject({ expectedVersion: 4, source: original, presentation: originalPresentation })
+    state = reduceAutomationDraftDocument(state, { type: 'SAVE_SUCCESS', result: { draft: { ...draft(5, original), presentation: originalPresentation, baseRevisionId: 'rev-current-base' } } })
+    expect(state).toMatchObject({ savePhase: 'CLEAN', document: { version: 5, baseRevisionId: 'rev-current-base' }, selectedNodeId: 'selected' })
+    state = reduceAutomationDraftDocument(state, { type: 'REDO' })
+    expect(state.document).toMatchObject({ version: 5, source: restored, presentation: restoredPresentation })
+  })
+
+  it('clears a pending Cut on an accepted restore and leaves clipboard untouched on rejection', () => {
+    const scope = effectScope()
+    const model = scope.run(() => useAutomationDraftDocument({
+      automationId: 'automation-1', detail: () => ({ automation: { id: 'automation-1' }, draft: { ...draft(3, original), presentation: originalPresentation } }) as WorkbenchAutomationDetail,
+      reloadDetail() {}, autosaveDelayMs: 60_000,
+    }))!
+    try {
+      model.cutStep('selected')
+      expect(model.clipboard).toEqual({ mode: 'cut', nodeId: 'selected' })
+      expect(model.replaceFromSnapshot({ automationId: 'automation-1', expectedVersion: 2, source: restored, presentation: restoredPresentation })).toBe(false)
+      expect(model.clipboard).toEqual({ mode: 'cut', nodeId: 'selected' })
+      expect(model.replaceFromSnapshot({ automationId: 'automation-1', expectedVersion: 3, source: original, presentation: originalPresentation })).toBe(true)
+      expect(model.clipboard).toBeUndefined()
+    } finally { scope.stop() }
+  })
+
+  it('keeps the existing bounded history when applying repeated full-document operations', () => {
+    let state = prepared()
+    for (let index = 0; index < 55; index++) {
+      const version = state.document!.version
+      state = reduceAutomationDraftDocument(state, { type: 'REPLACE_FROM_SNAPSHOT', automationId: 'automation-1', expectedVersion: version, source: restored, presentation: { iteration: index } })
+      state = reduceAutomationDraftDocument(state, { type: 'SAVE_REQUEST' })
+      state = reduceAutomationDraftDocument(state, { type: 'SAVE_SUCCESS', result: { draft: { ...draft(version + 1, state.document!.source), presentation: state.document!.presentation, baseRevisionId: 'rev-current-base' } } })
+    }
+    expect(state.undoStack).toHaveLength(50)
+    expect(state.document).toMatchObject({ version: 58, baseRevisionId: 'rev-current-base' })
+    expect(state.undoStack[0]!.presentation).toEqual({ iteration: 4 })
+  })
+
+  it('runs restore, autosave, Undo and Redo through the same authoring model and CAS action', async () => {
+    vi.useFakeTimers()
+    const id = ref('automation-1'), scope = effectScope(), writes: WorkbenchSaveAutomationDraftInput[] = []
+    let savedVersion = 3
+    const client = {
+      action: vi.fn(async (_ref, input: WorkbenchSaveAutomationDraftInput) => {
+        expect(input.automationId).toBe('automation-1')
+        expect(input.expectedVersion).toBe(savedVersion)
+        writes.push(structuredClone(input))
+        savedVersion++
+        return { draft: { ...draft(savedVersion, structuredClone(input.source)), presentation: structuredClone(input.presentation), baseRevisionId: 'rev-current-base' } }
+      }),
+      query: vi.fn(), subscribe: vi.fn(),
+    } as unknown as WorkbenchConsoleClient
+    const detail = shallowRef({ automation: { id: 'automation-1' }, draft: { ...draft(3, original), presentation: originalPresentation, baseRevisionId: 'rev-current-base' } } as WorkbenchAutomationDetail)
+    const model = scope.run(() => useAutomationDraftDocument({ client, automationId: id, detail, reloadDetail() {}, autosaveDelayMs: 10 }))!
+    try {
+      model.selectNode('selected', false)
+      model.copyStep('selected')
+      expect(model.clipboard?.mode).toBe('copy')
+      const baseline = model.document!
+      expect(model.canReplaceFromSnapshot).toBe(true)
+      expect(model.replaceFromSnapshot({ automationId: id.value, expectedVersion: 3, expectedDocument: baseline, source: restored, presentation: restoredPresentation })).toBe(true)
+      expect(model.clipboard).toBeUndefined()
+      expect(model.canReplaceFromSnapshot).toBe(false)
+      expect(model.replaceFromSnapshot({ automationId: id.value, expectedVersion: 3, source: original, presentation: originalPresentation })).toBe(false)
+      detail.value = { ...detail.value, draft: { ...draft(4, original), presentation: originalPresentation, baseRevisionId: 'rev-current-base' } }
+      await nextTick()
+      expect(model.document!.source).toEqual(restored)
+      await vi.advanceTimersByTimeAsync(10)
+      await nextTick()
+      expect(model).toMatchObject({ savePhase: 'CLEAN', document: { version: 4, baseRevisionId: 'rev-current-base' } })
+      expect(writes[0]).toMatchObject({ expectedVersion: 3, source: restored, presentation: restoredPresentation })
+      model.undo()
+      expect(model.selectedNodeId).toBe('selected')
+      expect(await model.flushDraft()).toBe(true)
+      expect(model.document).toMatchObject({ version: 5, source: original, presentation: originalPresentation, baseRevisionId: 'rev-current-base' })
+      model.redo()
+      expect(await model.flushDraft()).toBe(true)
+      expect(model.document).toMatchObject({ version: 6, source: restored, presentation: restoredPresentation, baseRevisionId: 'rev-current-base' })
+      expect(writes.map(input => input.expectedVersion)).toEqual([3, 4, 5])
+      model.cutStep('control')
+      expect(model.clipboard?.mode).toBe('cut')
+      id.value = 'automation-other'
+      expect(model.canReplaceFromSnapshot).toBe(false)
+      expect(model.replaceFromSnapshot({ automationId: 'automation-1', expectedVersion: 6, source: original, presentation: originalPresentation })).toBe(false)
+      expect(model.clipboard?.mode).toBe('cut')
+      await nextTick()
+      expect(model.document).toBeUndefined()
+      expect(model.clipboard).toBeUndefined()
+    } finally { scope.stop(); vi.useRealTimers() }
+  })
 })

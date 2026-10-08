@@ -152,6 +152,8 @@ export const AutomationComparisonPage = defineSetupComponent<WorkbenchPageProps>
           {[comparison.data.left, comparison.data.right].map((identity, index) => <article key={index}>
             <span>{t(index ? 'workbench.comparison.right' : 'workbench.comparison.left')}</span><strong>{identityTitle(identity)}</strong>
             {identity.kind === 'snapshot' ? <code>{identity.snapshotId}</code> : null}
+            {identity.kind === 'snapshot' ? <Button type="button" variant="secondary" aria-label={t('workbench.restoration.identity', { identity: identityTitle(identity) })}
+              onClick={() => props.navigation?.navigate(coreWorkbenchRoutes.automations, { query: { automation: comparison.data.automationId, tab: 'Revisions', restoreSnapshot: identity.snapshotId } })}>{t('workbench.restoration.title')}</Button> : null}
           </article>)}
         </div>
         <p>{t('workbench.comparison.hidden')}</p>

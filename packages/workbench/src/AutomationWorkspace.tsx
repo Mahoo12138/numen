@@ -1,4 +1,6 @@
 import { AutomationInputs } from './AutomationInputs.js'
+import { AutomationRestorationPanel } from './AutomationRestorationPanel.js'
+import { useAutomationRestoration } from './useAutomationRestoration.js'
 import { localizeCatalogItem, useWorkbenchI18n } from './i18n.js'
 import { AutomationRuns } from './AutomationRuns.js'
 import { ManualRunForm } from './ManualRunForm.js'
@@ -319,7 +321,37 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
     return { status: 'READY', data: effectiveDetail.value }
   })
   const archived = computed(() => !!effectiveDetail.value?.automation.archivedAt)
-  const editable = computed(() => !archived.value && !lifecyclePending.value && !creatingAutomation.value)
+  const baseEditable = computed(() => !archived.value && !lifecyclePending.value && !creatingAutomation.value)
+  const restoration = useAutomationRestoration({
+    client: () => props.consoleClient,
+    automationId: () => automationId.value,
+    authoring,
+    canPrepare: () => baseEditable.value && authoring.canPublish && !draftTestProtection.value,
+    commitInputs: () => {
+      blurCurrentInput()
+      if (inputs.hasUncommitted) { inputBlocked.value = true; return false }
+      return true
+    },
+    refreshDetail,
+    onApplied: () => { activeTab.value = 'Editor'; fieldFocus.value = undefined; props.onInspectorOpenChange(false) },
+  })
+  const editable = computed(() => baseEditable.value && !restoration.locked)
+  const openRestoration = (snapshotId: string) => {
+    void restoration.open(snapshotId)
+    if (restoration.locked) props.onInspectorOpenChange(false)
+  }
+  // A bookmark expresses a preparation intent. Confirmation is always a separate edit.
+  let consumedRestoreIntent: string | undefined
+  watch(() => props.navigation?.route.search, () => { restoration.close(); consumedRestoreIntent = undefined }, { flush: 'sync' })
+  watch(() => [props.navigation?.route.search, authoring.document?.automationId] as const, ([search, documentId]) => {
+    const query = new URLSearchParams(search ?? '')
+    const snapshotId = query.get('restoreSnapshot')
+    const requested = query.get('automation')
+    const key = `${requested}:${snapshotId}`
+    if (!snapshotId || requested !== documentId || documentId !== automationId.value || consumedRestoreIntent === key) return
+    consumedRestoreIntent = key
+    openRestoration(snapshotId)
+  }, { immediate: true })
   const capabilityTitles = computed(() => new Map(
     localizedCatalogState.value.status === 'READY'
       ? localizedCatalogState.value.data.items.flatMap(item => item.kind === 'capability' || item.kind === 'trigger'
@@ -351,6 +383,12 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
       onAutomationChange: switchAutomation,
     } : {}),
     ...(props.consoleClient ? {
+      canRestoreSnapshot: baseEditable.value && authoring.canPublish && !draftTestProtection.value && !restoration.locked,
+      onRestoreSnapshot: openRestoration,
+      ...(restoration.state ? { restorationPanel: h(AutomationRestorationPanel, {
+        state: restoration.state, stale: restoration.stale, onApply: restoration.apply,
+        onCancel: restoration.close, onPrepareAgain: restoration.prepareAgain,
+      }) } : {}),
       authoring: {
         canEdit: editable.value && authoring.canEdit,
         canPublish: editable.value && authoring.canPublish,
@@ -412,7 +450,7 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
         },
       }),
     } : {}),
-    ...(props.consoleClient && effectiveDetail.value && !archived.value && !lifecyclePending.value ? {
+    ...(props.consoleClient && effectiveDetail.value && !archived.value && !lifecyclePending.value && !restoration.locked ? {
       activation: activation.view(effectiveDetail.value.automation),
       onActivateRevision: (revisionId: string) => {
         if (effectiveDetail.value) activation.activate(effectiveDetail.value.automation, revisionId)
@@ -522,7 +560,7 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
         onArchive={archiveAutomation}
         onRestore={restoreAutomation}
         onRemoveArchived={removeArchivedAutomation}
-        mutationPending={lifecyclePending.value}
+        mutationPending={lifecyclePending.value || restoration.locked}
         {...(lifecycleError.value ? { mutationError: lifecycleError.value } : {})}
       />
       {h(PageComponent, {

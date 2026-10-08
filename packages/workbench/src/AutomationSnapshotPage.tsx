@@ -39,6 +39,7 @@ export const AutomationSnapshotPage = defineSetupComponent<WorkbenchPageProps>('
         <p>{t('workbench.snapshots.readonly')}</p>
       </div>
       <div class="snapshot-actions">
+        {state.status === 'READY' && state.data && state.data.compatibility !== 'unsupported-protocol' ? <Button type="button" variant="secondary" onClick={() => props.navigation?.navigate(coreWorkbenchRoutes.automations, { query: { automation: input.value.automationId, tab: 'Revisions', restoreSnapshot: input.value.snapshotId } })}>{t('workbench.restoration.title')}</Button> : null}
         {fromRun.value ? <Button type="button" variant="secondary" onClick={() => props.navigation?.navigate(coreWorkbenchRunFlowRoute, { parameters: { id: fromRun.value! } })}>{t('workbench.snapshots.returnRun')}</Button> : null}
         <Button type="button" variant="secondary" onClick={openAutomation}>{t('workbench.navigation.openAutomation')}</Button>
         <Button type="button" variant="secondary" onClick={reload} disabled={state.status === 'LOADING' || state.status === 'DISABLED'}>{t('workbench.management.refresh')}</Button>

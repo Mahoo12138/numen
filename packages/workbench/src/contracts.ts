@@ -779,6 +779,16 @@ export const workbenchAutomationSnapshotQueryRef = { id: 'numen:automation-snaps
 
 export interface WorkbenchAutomationSnapshotQueryInput { automationId: string; snapshotId: string }
 
+export const workbenchAutomationRestoreContentQueryRef = { id: 'numen:automation-restore-content', version: 1 } as const satisfies ConsoleProcedureRef
+export interface WorkbenchAutomationRestoreContentQueryInput { automationId: string; snapshotId: string; expectedDraftVersion: number }
+export interface WorkbenchAutomationRestoreContent {
+  automationId: string
+  identity: WorkbenchAutomationSnapshotDetail['identity']
+  expectedDraftVersion: number
+  source: AutomationSource
+  presentation: Record<string, NumenValue>
+}
+
 export type WorkbenchAutomationComparisonTarget = { kind: 'draft'; version: number } | { kind: 'snapshot'; snapshotId: string }
 export const workbenchAutomationComparisonQueryRef = { id: 'numen:automation-comparison', version: 1 } as const satisfies ConsoleProcedureRef
 export const workbenchAutomationComparisonStateQueryRef = { id: 'numen:automation-comparison-state', version: 1 } as const satisfies ConsoleProcedureRef

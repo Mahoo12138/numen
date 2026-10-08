@@ -347,7 +347,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .automation-state[data-tone="error"] { border-color: #ebcccc; background: #fffafa; }
 .automation-revisions { flex: 1; min-height: 0; overflow: auto; padding: 24px 28px; }
 .revision-list { max-width: 900px; border: 1px solid var(--wb-border); border-radius: 6px; background: white; }
-.revision-list article { display: grid; grid-template-columns: minmax(70px, 1fr) minmax(60px, 1fr) auto auto auto auto; align-items: center; gap: 10px; min-height: 58px; padding: 8px 14px; border-bottom: 1px solid var(--wb-border); }
+.revision-list article { display: grid; grid-template-columns: minmax(70px, 1fr) minmax(60px, 1fr) auto; align-items: center; gap: 10px; min-height: 58px; padding: 8px 14px; border-bottom: 1px solid var(--wb-border); }
 .revision-list article:last-child { border-bottom: 0; }
 .revision-list article[data-active="true"] { background: #f7fbf8; }
 .revision-list article > div { display: flex; align-items: center; gap: 7px; }
@@ -1260,3 +1260,15 @@ button.command-center > span { min-width: 0; flex: 1; padding: 0 8px; overflow: 
 .plugin-owner > span, .plugin-owner-cause { flex-basis: 100%; }
 .plugin-owner-cause { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
 .plugin-row[data-selected="true"] { outline: 2px solid var(--wb-accent); outline-offset: 2px; scroll-margin-block: 1rem; }
+
+.revision-list .revision-actions { grid-column: 1 / -1; flex-wrap: wrap; justify-content: flex-end; padding-top: 2px; }
+.automation-restoration-panel { margin: 16px 24px; padding: 18px; border: 1px solid var(--wb-border); border-radius: 6px; background: var(--wb-surface, white); }
+.automation-restoration-panel h2 { margin: 0 0 10px; font-size: 16px; }
+.automation-restoration-panel p { font-size: 12px; line-height: 1.6; }
+.restoration-snapshot-id { display: block; color: var(--wb-muted); font-size: 10px; overflow-wrap: anywhere; }
+.restoration-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.automation-restoration-panel [role="alert"] { color: var(--wb-danger, #a12727); }
+@media (max-width: 640px) {
+  .automation-restoration-panel { margin: 12px; padding: 14px; }
+  .revision-list .revision-actions { justify-content: flex-start; }
+}

@@ -57,6 +57,8 @@ export interface AutomationEditorProps {
   inputSettings?: VNodeChild
   manualRunForm?: VNodeChild
   draftTestForm?: VNodeChild
+  restorationPanel?: VNodeChild
+  canRestoreSnapshot?: boolean
   draftTestSessionActive?: boolean
   conflictRecovery?: VNodeChild
   activation?: AutomationActivationView
@@ -65,6 +67,7 @@ export interface AutomationEditorProps {
   onActivateRevision?(revisionId: string): void
   onViewSnapshot?(snapshotId: string): void
   onCompareRevision?(revisionId: string): void
+  onRestoreSnapshot?(snapshotId: string): void
   onSetEnabled?(enabled: boolean): void
   onStepChange(id: string): void
   onTabChange(tab: string): void
@@ -123,10 +126,13 @@ export function AutomationEditor({
   inputSettings,
   manualRunForm,
   draftTestForm,
+  restorationPanel,
+  canRestoreSnapshot,
   draftTestSessionActive,
   onActivateRevision,
   onViewSnapshot,
   onCompareRevision,
+  onRestoreSnapshot,
   onSetEnabled,
   onStepChange,
   onTabChange,
@@ -236,6 +242,8 @@ export function AutomationEditor({
               class="context-tab"
               data-active={activeTab === tab}
               key={tab}
+              // Commit on click so a blur-induced status/layout update cannot lose the tab click.
+              onMousedown={event => { if (event.button === 0) event.preventDefault() }}
               onClick={() => onTabChange(tab)}
               role="tab"
               type="button"
@@ -243,6 +251,7 @@ export function AutomationEditor({
           ))}
         </nav>
       </header>
+      {restorationPanel}
       {draftTestForm}
       {authoring?.inputBlocked ? <section class="authoring-notice" data-tone="error" role="alert">{t('workbench.document.applyInputsFirst')}</section> : null}
       {authoring?.editError ? <section class="authoring-notice" data-tone="error" role="alert"><span>{t(`workbench.structure.errors.${authoring.editError}`) === `workbench.structure.errors.${authoring.editError}` ? authoring.editError : t(`workbench.structure.errors.${authoring.editError}`)}</span></section> : null}
@@ -350,10 +359,13 @@ export function AutomationEditor({
                   <div><strong>{t('workbench.revision')}{revision.number}</strong>{revision.active ? <em>{t('workbench.active')}</em> : null}</div>
                   <small>{revision.contentHash}</small>
                   <time datetime={revision.createdAt}>{revision.createdAt}</time>
+                  <div class="revision-actions">
                   {onViewSnapshot ? <Button variant="secondary" aria-label={t('workbench.snapshots.viewRevision', { number: revision.number })}
                     type="button" onClick={() => onViewSnapshot(revision.id)}>{t('workbench.snapshots.view')}</Button> : null}
                   {onCompareRevision ? <Button variant="secondary" aria-label={t('workbench.comparison.compareRevision', { number: revision.number })}
                     type="button" onClick={() => onCompareRevision(revision.id)}>{t('workbench.comparison.withDraft')}</Button> : null}
+                  {onRestoreSnapshot ? <Button variant="secondary" aria-label={t('workbench.restoration.revision', { number: revision.number })}
+                    type="button" disabled={!canRestoreSnapshot} onClick={() => onRestoreSnapshot(revision.id)}>{t('workbench.restoration.title')}</Button> : null}
                   {activation && onActivateRevision ? <Button
                     aria-label={t('workbench.activateRevisionValue0', { value0: revision.number })}
                     class="revision-activate-button"
@@ -361,6 +373,7 @@ export function AutomationEditor({
                     onClick={() => onActivateRevision(revision.id)}
                     type="button"
                   >{activation.activatingRevisionId === revision.id ? t('workbench.activating') : revision.active ? t('workbench.active') : t('workbench.activate')}</Button> : null}
+                  </div>
                 </article>
               ))}
             </div>

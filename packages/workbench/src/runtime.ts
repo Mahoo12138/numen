@@ -1,6 +1,8 @@
 import { workbenchConnectionUsageQuery } from './connection-usage-provider.js'
 import { workbenchAutomationSnapshotQuery } from './automation-snapshot-provider.js'
 import { workbenchAutomationComparisonQuery, workbenchAutomationComparisonStateQuery } from './automation-comparison-provider.js'
+import { workbenchAutomationRestoreContentQuery } from './automation-restoration-provider.js'
+export { workbenchAutomationRestoreContentQuery, workbenchAutomationRestorationProviderPlugin } from './automation-restoration-provider.js'
 export { workbenchAutomationComparisonQuery, workbenchAutomationComparisonStateQuery, workbenchAutomationComparisonProviderPlugin } from './automation-comparison-provider.js'
 export { workbenchAutomationSnapshotQuery, workbenchAutomationSnapshotProviderPlugin } from './automation-snapshot-provider.js'
 import { workbenchPluginsQuery, workbenchPluginPreview, workbenchPluginApply } from './management-provider.js'
@@ -122,6 +124,7 @@ export class WorkbenchRuntimeService extends Service {
     ctx.console.define(ctx, workbenchAutomationSnapshotQuery)
     ctx.console.define(ctx, workbenchAutomationComparisonQuery)
     ctx.console.define(ctx, workbenchAutomationComparisonStateQuery)
+    ctx.console.define(ctx, workbenchAutomationRestoreContentQuery)
     ctx.console.define(ctx, workbenchAutomationsIndexQuery)
     ctx.console.define(ctx, workbenchCreateAutomationAction)
     ctx.console.define(ctx, workbenchArchiveAutomationAction)

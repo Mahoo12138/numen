@@ -27,10 +27,13 @@ export function useConsoleQuery<Input, Output>(
   const reload = () => reloadCurrent()
   const refresh = () => refreshCurrent()
   const setState = (next: ConsoleQueryState<Output>) => {
-    delete (state as Partial<{ data: Output }>).data
-    delete (state as Partial<{ message: string }>).message
-    delete (state as Partial<{ code: string }>).code
-    Object.assign(state, next)
+    // Synchronous consumers must always see the payload required by the current discriminator.
+    // Install the next payload before switching status, then remove fields the next state omits.
+    for (const [key, value] of Object.entries(next)) if (key !== 'status') Object.assign(state, { [key]: value })
+    state.status = next.status
+    for (const key of ['data', 'message', 'code'] as const) {
+      if (!Object.hasOwn(next, key)) delete (state as unknown as Record<string, unknown>)[key]
+    }
   }
 
   watchEffect((onCleanup) => {

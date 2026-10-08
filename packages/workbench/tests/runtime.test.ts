@@ -21,6 +21,7 @@ import {
   workbenchAutomationSnapshotQueryRef,
   workbenchAutomationComparisonQueryRef,
   workbenchAutomationComparisonStateQueryRef,
+  workbenchAutomationRestoreContentQueryRef,
   workbenchActivateAutomationRevisionActionRef,
   workbenchSetAutomationEnabledActionRef,
   workbenchAutomationInsertCatalogQueryRef,
@@ -81,6 +82,7 @@ describe('Workbench Runtime plugin', () => {
     expect(root.console.get(workbenchAutomationSnapshotQueryRef)).toMatchObject({ providerAvailable: false })
     expect(root.console.get(workbenchAutomationComparisonQueryRef)).toMatchObject({ providerAvailable: false })
     expect(root.console.get(workbenchAutomationComparisonStateQueryRef)).toMatchObject({ providerAvailable: false })
+    expect(root.console.get(workbenchAutomationRestoreContentQueryRef)).toMatchObject({ definition: { ...workbenchAutomationRestoreContentQueryRef, kind: 'query' }, providerAvailable: false })
     expect(root.console.get(workbenchAutomationInsertCatalogQueryRef)).toMatchObject({ providerAvailable: false })
     expect(root.console.get(workbenchAutomationVariableCatalogQueryRef)).toMatchObject({ providerAvailable: false })
     expect(root.console.get(workbenchAutomationsIndexQueryRef)).toMatchObject({ providerAvailable: false })
@@ -127,6 +129,7 @@ describe('Workbench Runtime plugin', () => {
     expect(root.console.get(workbenchAutomationSnapshotQueryRef)).toBeUndefined()
     expect(root.console.get(workbenchAutomationComparisonQueryRef)).toBeUndefined()
     expect(root.console.get(workbenchAutomationComparisonStateQueryRef)).toBeUndefined()
+    expect(root.console.get(workbenchAutomationRestoreContentQueryRef)).toBeUndefined()
     expect(root.console.get(workbenchInvalidationSubscriptionRef)).toBeUndefined()
     expect(root.console.get(workbenchRunDetailQueryRef)).toBeUndefined()
     expect(root.console.get(workbenchCancelRunActionRef)).toBeUndefined()

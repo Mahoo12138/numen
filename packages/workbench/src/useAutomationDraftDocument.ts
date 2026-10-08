@@ -45,6 +45,15 @@ export interface AutomationDraftDocument {
   baseRevisionId?: string
 }
 
+export interface ReplaceAutomationDraftFromSnapshotInput {
+  automationId: string
+  expectedVersion: number
+  source: AutomationSource
+  presentation: Record<string, NumenValue>
+  /** Optional local identity fence captured when the restore preview started. */
+  expectedDocument?: AutomationDraftDocument
+}
+
 interface PendingSave {
   automationId: string
   expectedVersion: number
@@ -87,6 +96,7 @@ export type AutomationDraftDocumentAction =
   | { type: 'SERVER'; automationId: string; draft: WorkbenchAutomationDraft }
   | { type: 'SELECT_NODE'; nodeId?: string; reveal?: boolean }
   | { type: 'EDIT'; command: AutomationSourceCommand; copiedPresentation?: Record<string, NumenValue> }
+  | ({ type: 'REPLACE_FROM_SNAPSHOT' } & ReplaceAutomationDraftFromSnapshotInput)
   | { type: 'COLLAPSE'; nodeId: string; collapsed: boolean }
   | { type: 'EDIT_ERROR'; code: string }
   | { type: 'UNDO' }
@@ -142,6 +152,15 @@ function canChangeDocument(state: AutomationDraftDocumentState): boolean {
     && state.savePhase !== 'CONFLICT'
     && state.savePhase !== 'RELOADING'
     && !state.publishPending
+}
+
+function canReplaceFromSnapshot(state: AutomationDraftDocumentState): boolean {
+  return !!state.document
+    && state.selectedAutomationId === state.document.automationId
+    && state.savePhase === 'CLEAN'
+    && !state.pendingSave
+    && !state.publishPending
+    && !state.pendingPublish
 }
 
 function changedState(
@@ -251,6 +270,23 @@ export function reduceAutomationDraftDocument(
         [...state.undoStack.slice(-(historyLimit - 1)), snapshot(state.document, state.selectedNodeId)],
         [],
         Object.hasOwn(result, 'selectedNodeId') ? result.selectedNodeId : state.selectedNodeId,
+      )
+    }
+    case 'REPLACE_FROM_SNAPSHOT': {
+      if (!canReplaceFromSnapshot(state) || !state.document
+        || state.selectedAutomationId !== action.automationId
+        || state.document.automationId !== action.automationId
+        || state.document.version !== action.expectedVersion
+        || (action.expectedDocument && action.expectedDocument !== state.document)) return state
+      // This is one explicit document edit, including when the selected snapshot has identical content.
+      // Keep the saved Draft's identity and lineage; the existing save action owns the next version.
+      const restored = structuredClone({ source: action.source, presentation: action.presentation })
+      return changedState(
+        state,
+        { ...state.document, ...restored },
+        [...state.undoStack.slice(-(historyLimit - 1)), snapshot(state.document, state.selectedNodeId)],
+        [],
+        automationSourceHasNode(restored.source, state.selectedNodeId) ? state.selectedNodeId : undefined,
       )
     }
     case 'UNDO': {
@@ -438,12 +474,14 @@ export interface AutomationDraftDocumentModel {
   canPublish: boolean
   canUndo: boolean
   canRedo: boolean
+  canReplaceFromSnapshot: boolean
   deleteStep(nodeId: string): void
   moveStep(nodeId: string, direction: 'up' | 'down'): void
   editError?: string | undefined
   clipboard?: { mode: 'copy' | 'cut'; nodeId: string } | undefined
   collapsedNodes: string[]
   edit(command: AutomationSourceCommand): boolean
+  replaceFromSnapshot(input: ReplaceAutomationDraftFromSnapshotInput): boolean
   insert(item: WorkbenchAutomationInsertItem, target: AutomationInsertTarget): boolean
   copyStep(nodeId: string): void
   cutStep(nodeId: string): void
@@ -571,6 +609,15 @@ export function useAutomationDraftDocument({
     const before = state.value.document
     dispatch({ type: 'EDIT', command, ...(copiedPresentation ? { copiedPresentation } : {}) })
     return !!before && state.value.document !== before
+  }
+  const replaceFromSnapshot = (input: ReplaceAutomationDraftFromSnapshotInput): boolean => {
+    // Vue's selection watcher can run after a click; inspect the live selection as well as reducer state.
+    if (toValue(automationId) !== input.automationId) return false
+    const before = state.value
+    dispatch({ type: 'REPLACE_FROM_SNAPSHOT', ...input })
+    if (state.value === before) return false
+    clipboard.value = undefined
+    return true
   }
   const insert = (item: WorkbenchAutomationInsertItem, target: AutomationInsertTarget) => edit({ type: 'INSERT', item, target })
   const copyStep = (nodeId: string) => {
@@ -707,10 +754,14 @@ export function useAutomationDraftDocument({
         && !state.value.publishPending
         && !!state.value.redoStack.length
     },
+    get canReplaceFromSnapshot() {
+      return canReplaceFromSnapshot(state.value) && toValue(automationId) === state.value.document?.automationId
+    },
     deleteStep: nodeId => dispatch({ type: 'EDIT', command: { type: 'DELETE_STEP', nodeId } }),
     moveStep: (nodeId, direction) => dispatch({ type: 'EDIT', command: { type: 'MOVE_STEP', nodeId, direction } }),
     insert,
     edit,
+    replaceFromSnapshot,
     copyStep,
     cutStep,
     paste,

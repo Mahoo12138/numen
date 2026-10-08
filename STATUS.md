@@ -348,7 +348,7 @@ Evidence and limits are recorded in [N2-01 verification](docs/verification/versi
 and `/tmp/numen-n2-01-{typecheck-final,build-final,unit-final,browser-final}.log`.
 All Runtime/configuration/database/resource directories were temporary. Remote CI, other
 browser engines and deployment are not verified. These checks cover N2-01; the following
-section records N2-02. Undoable restoration to Draft remains N2-03.
+sections record N2-02 and undoable Draft restoration in N2-03.
 
 ### N2-02 fixed-version semantic comparison — verified 2026-10-08
 
@@ -382,8 +382,37 @@ There is no schema migration or new user configuration entry. V2 owns the Provid
 compatibility retains its prior leaf assembly. All Runtime/configuration/database/resource
 directories were temporary; remote CI, other browsers and deployment are not verified.
 
-Next: N2-03 restores snapshot Source/Presentation to Draft with CAS, input protection and
-one undoable document operation, while preserving historical revisions and formal Runs.
+### N2-03 undoable snapshot restoration to Draft — verified 2026-10-08
+
+Revisions, fixed snapshots and comparison results can prepare the exact Source/Presentation
+of a published Revision or Draft-test snapshot in the same Automation. Preparation first
+commits valid focused fields and flushes the Draft, then checks its exact saved version in
+an authenticated read-only authoring Query. Confirmation performs one full-document edit
+through the existing Draft model and CAS save Action. Undo/Redo after saving creates later
+Draft versions; the current baseRevisionId, historical snapshots, activation, enabled state,
+Trigger subscriptions and accepted Runs retain their existing semantics.
+
+Unknown fields are preserved without calling current compilers. Preview locks editing,
+marks newer Draft versions stale and requires explicit re-preparation. Cancel, navigation,
+Automation/client changes and disposal fence old requests. Final-save conflicts and lost
+responses use the existing error/recovery flow without automatic write replay. Ordinary
+snapshot and comparison reads retain their redacted projections; only explicit restoration
+preparation returns authoring content, which is not placed in URLs or browser storage.
+
+Verification: 114 Vitest files / 659 tests, typecheck, production and example builds, and
+all 61 Chromium browser scenarios passed. Browser regressions also cover valid focused
+field commits without losing a tab click, and synchronous Query consumers during
+READY/loading/error transitions. Final desktop and Chinese mobile screenshots were viewed.
+All test Runtime/configuration/database/resource directories were temporary.
+
+[N2-03 verification](docs/verification/draft-restoration-2026-10-08.md) records CAS races,
+saved Undo/Redo, compiler unload, invalid/corrupt/oversized data, old-response cancellation,
+the fixes discovered during verification, exact limits and logs. There is no migration or
+new user configuration. Cross-Automation cloning, other browsers and deployment remain outside
+this module.
+
+Next: N3-01 adds safe Schema-driven plugin configuration forms sharing the existing
+JSON session, fingerprint and Preview/Apply flow, with unknown-field and secret protection.
 
 M0/M1 foundation implemented and verified: independent Console/Workbench composition,
 v2 native groups and explicit migration, v1 compatibility, two sets of ten lifecycle cycles,

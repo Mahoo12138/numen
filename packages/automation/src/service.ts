@@ -100,6 +100,12 @@ export interface AutomationComparisonState {
   revisionsTruncated: boolean
 }
 
+/** Authoring content, independent of compiled plans and frozen contracts. */
+export type AutomationSnapshotContent = Pick<AutomationSnapshotFields, 'id' | 'automationId' | 'protocolVersion' | 'irVersion' | 'contentHash' | 'createdAt' | 'source' | 'presentation'> & (
+  | { purpose: 'published'; number: number; sourceDraftVersion?: number }
+  | { purpose: 'draft-test'; sourceDraftVersion: number }
+)
+
 /** Compiled saved Draft data; insertion still checks its exact source version. */
 export type PreparedDraftTestSnapshot = Omit<DraftTestAutomationSnapshot, 'id' | 'createdAt'>
 
@@ -345,6 +351,15 @@ export class AutomationService extends Service {
     return row ? mapDraft(row) : undefined
   }
 
+  /** The baseline can be checked without parsing or exposing the current Draft document. */
+  getDraftIdentity(automationId: string): { version: number; updatedAt: string; baseRevisionId?: string } | undefined {
+    const row = this.ctx.database.db.prepare('SELECT version, updated_at, base_revision_id FROM automation_drafts WHERE automation_id = ?')
+      .get(automationId) as Pick<DraftRow, 'version' | 'updated_at' | 'base_revision_id'> | undefined
+    if (!row) return
+    if (!Number.isSafeInteger(row.version) || row.version < 1) throw new Error('draft identity is unavailable')
+    return { version: row.version, updatedAt: row.updated_at, ...(row.base_revision_id ? { baseRevisionId: row.base_revision_id } : {}) }
+  }
+
   /** A single read fixes the Draft version and bounds UTF-8 bytes before JSON decoding. */
   getDraftForInspection(automationId: string, expectedVersion: number, maximumBytes = 8 * 1024 * 1024): AutomationDraft | undefined {
     if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1) throw new TypeError('invalid draft inspection version')
@@ -563,6 +578,37 @@ export class AutomationService extends Service {
     if (!row) return
     if (row.json_bytes > maximumBytes) throw new AutomationSnapshotInspectionLimitError('snapshot inspection exceeds its stored data limit')
     return this.getExecutionSnapshot(snapshotId)
+  }
+
+  /** Fixed Source and presentation only; unsupported protocols and excessive bytes never reach JSON decoding. */
+  getExecutionSnapshotContentForInspection(snapshotId: string, automationId: string, maximumBytes = 8 * 1024 * 1024): AutomationSnapshotContent | undefined {
+    if (!Number.isSafeInteger(maximumBytes) || maximumBytes < 1) throw new TypeError('invalid snapshot content byte limit')
+    const row = this.ctx.database.db.prepare(`
+      SELECT id, automation_id, number, purpose, source_draft_version, protocol_version, ir_version, content_hash, created_at,
+        length(CAST(source_json AS BLOB)) + length(CAST(presentation_json AS BLOB)) AS json_bytes,
+        CASE WHEN protocol_version = 1 AND length(CAST(source_json AS BLOB)) + length(CAST(presentation_json AS BLOB)) <= ?
+          THEN source_json END AS source_json,
+        CASE WHEN protocol_version = 1 AND length(CAST(source_json AS BLOB)) + length(CAST(presentation_json AS BLOB)) <= ?
+          THEN presentation_json END AS presentation_json
+      FROM automation_revisions WHERE id = ? AND automation_id = ?
+    `).get(maximumBytes, maximumBytes, snapshotId, automationId) as (Pick<RevisionRow, 'id' | 'automation_id' | 'number' | 'purpose' | 'source_draft_version' | 'protocol_version' | 'ir_version' | 'content_hash' | 'created_at'> & { source_json: string | null; presentation_json: string | null; json_bytes: number }) | undefined
+    if (!row) return
+    if (row.protocol_version !== 1) throw new Error('snapshot content protocol is unavailable')
+    if (row.json_bytes > maximumBytes) throw new AutomationSnapshotInspectionLimitError('snapshot content exceeds its stored data limit')
+    if (row.source_json === null || row.presentation_json === null) throw new Error('snapshot content is unavailable')
+    const fields = {
+      id: row.id, automationId: row.automation_id, protocolVersion: row.protocol_version,
+      irVersion: row.ir_version, contentHash: row.content_hash, createdAt: row.created_at,
+      source: parseJson<AutomationSource>(row.source_json), presentation: parseJson<Record<string, NumenValue>>(row.presentation_json),
+    }
+    if (row.purpose === 'published' && row.number !== null && Number.isSafeInteger(row.number) && row.number > 0
+      && (row.source_draft_version === null || (Number.isSafeInteger(row.source_draft_version) && row.source_draft_version > 0))) {
+      return { ...fields, purpose: 'published', number: row.number, ...(row.source_draft_version === null ? {} : { sourceDraftVersion: row.source_draft_version }) }
+    }
+    if (row.purpose === 'draft-test' && row.number === null && row.source_draft_version !== null && Number.isSafeInteger(row.source_draft_version) && row.source_draft_version > 0) {
+      return { ...fields, purpose: 'draft-test', sourceDraftVersion: row.source_draft_version }
+    }
+    throw new Error('snapshot content identity is unavailable')
   }
 
   /** Bounded list metadata without reading Source, IR, contracts or presentation JSON. */

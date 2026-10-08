@@ -116,6 +116,7 @@ describe('Numen runtime', () => {
         definition: expect.objectContaining({ id: 'numen:automation-remove-archived', version: 1, kind: 'action' }),
         providerAvailable: true,
       }),
+      expect.objectContaining({ definition: expect.objectContaining({ id: 'numen:automation-restore-content', version: 1, kind: 'query' }), providerAvailable: configVersion === 2 }),
       expect.objectContaining({
         definition: expect.objectContaining({ id: 'numen:automation-restore', version: 1, kind: 'action' }),
         providerAvailable: true,
