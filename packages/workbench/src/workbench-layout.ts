@@ -19,14 +19,14 @@ export function parseWorkbenchSizes(raw: string | null): WorkbenchSizes {
   return sizes
 }
 
-export function resolveWorkbenchSizes(preferred: WorkbenchSizes, width: number, height: number, inspectorOpen: boolean) {
+export function resolveWorkbenchSizes(preferred: WorkbenchSizes, width: number, height: number, inspectorOpen: boolean, sidebarOpen = true) {
   const mobile = width < 900
   const docked = width >= 1280
   const rail = mobile ? 0 : docked ? 76 : 68
-  const inspector = clamp(preferred.inspector, 260, Math.min(640, width - rail - (docked ? 180 + 320 : 64)))
-  const sidebarMax = Math.min(480, width - rail - 320 - (docked && inspectorOpen ? inspector : 0))
+  const inspector = clamp(preferred.inspector, 260, Math.min(640, width - rail - (docked ? (sidebarOpen ? 180 : 0) + 320 : 64)))
+  const sidebarMax = sidebarOpen ? Math.min(480, width - rail - 320 - (docked && inspectorOpen ? inspector : 0)) : 480
   const sidebar = clamp(preferred.sidebar, 180, sidebarMax)
-  const inspectorMax = Math.min(640, width - rail - (docked ? sidebar + 320 : 64))
+  const inspectorMax = Math.min(640, width - rail - (docked ? (sidebarOpen ? sidebar : 0) + 320 : 64))
   const panelMax = Math.max(46, height - 44 - 24 - (mobile ? 54 : 0) - (mobile ? 300 : 200))
   return {
     mobile, docked, sidebar, inspector, panel: clamp(preferred.panel, Math.min(120, panelMax), panelMax),
@@ -34,11 +34,12 @@ export function resolveWorkbenchSizes(preferred: WorkbenchSizes, width: number, 
   }
 }
 
-export function provideWorkbenchLayout(root: Ref<HTMLElement | undefined>, inspectorOpen: Ref<boolean>) {
+export function provideWorkbenchLayout(root: Ref<HTMLElement | undefined>, inspectorOpen: Ref<boolean>, sidebarAvailable: Ref<boolean> = ref(true), inspectorAvailable: Ref<boolean> = ref(true)) {
   const preferred = reactive({ ...defaultWorkbenchSizes })
   const viewport = reactive({ width: 1440, height: 900 })
   const panelOpen = ref(false)
-  const sizes = computed(() => resolveWorkbenchSizes(preferred, viewport.width, viewport.height, inspectorOpen.value))
+  const sidebarOpen = ref(true)
+  const sizes = computed(() => resolveWorkbenchSizes(preferred, viewport.width, viewport.height, inspectorAvailable.value && inspectorOpen.value, sidebarAvailable.value && sidebarOpen.value))
   let observer: ResizeObserver | undefined
   onMounted(() => {
     try { Object.assign(preferred, parseWorkbenchSizes(localStorage.getItem(workbenchLayoutStorageKey))) } catch { /* Storage can be unavailable in embedded/private contexts. */ }
@@ -51,20 +52,30 @@ export function provideWorkbenchLayout(root: Ref<HTMLElement | undefined>, inspe
     if (root.value) observer.observe(root.value)
   })
   onScopeDispose(() => observer?.disconnect())
-  let beforeResize: { sizes: WorkbenchSizes; panelOpen: boolean } | undefined
-  const snapshot = () => { beforeResize ??= { sizes: { ...preferred }, panelOpen: panelOpen.value } }
+  let beforeResize: { sizes: WorkbenchSizes; panelOpen: boolean; sidebarOpen: boolean; inspectorOpen: boolean } | undefined
+  const snapshot = () => { beforeResize ??= { sizes: { ...preferred }, panelOpen: panelOpen.value, sidebarOpen: sidebarOpen.value, inspectorOpen: inspectorOpen.value } }
   const save = () => {
     beforeResize = undefined
     try { localStorage.setItem(workbenchLayoutStorageKey, JSON.stringify(preferred)) } catch { /* Resizing still works when preferences cannot be stored. */ }
   }
   const layout = {
-    sizes, preferred, panelOpen, save,
+    sizes, preferred, sidebarOpen, inspectorOpen, panelOpen, save,
     resize(key: 'sidebar' | 'inspector', value: number) { snapshot(); preferred[key] = value },
     cancel() {
       if (!beforeResize) return
       Object.assign(preferred, beforeResize.sizes)
       panelOpen.value = beforeResize.panelOpen
+      sidebarOpen.value = beforeResize.sidebarOpen
+      inspectorOpen.value = beforeResize.inspectorOpen
       beforeResize = undefined
+    },
+    setCollapsed(key: keyof WorkbenchSizes, collapsed: boolean) {
+      const open = key === 'sidebar' ? sidebarOpen : key === 'inspector' ? inspectorOpen : panelOpen
+      if (open.value === !collapsed) return
+      snapshot()
+      open.value = !collapsed
+      // Collapsing is a visibility change, not a new expanded-size preference.
+      if (collapsed && beforeResize) preferred[key] = beforeResize.sizes[key]
     },
     setPanel(value: number) {
       snapshot()

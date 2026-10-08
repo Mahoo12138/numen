@@ -31,6 +31,7 @@ export const enUS = {
   "workbench.commands.openAutomation": "Open {name}",
   "workbench.commands.togglePanel": "Toggle bottom panel",
   "workbench.commands.toggleInspector": "Toggle Inspector",
+  "workbench.commands.toggleSidebar": "Toggle sidebar",
   "workbench.commands.showPanel": "Show {panel}",
   "workbench.commands.runtimeRequired": "Connect to a Runtime to use this command.",
   "workbench.commands.readOnly": "This Draft is currently read-only.",

@@ -114,4 +114,23 @@ describe('core Workbench Pages', () => {
     expect(markup).toMatch(/aria-current="page"[^>]*class="activity-button"[^>]*>.*?Connections/s)
   })
 
+  it.each([
+    ['', 'health'],
+    ['?view=logs', 'logs'],
+    ['?runId=run_fixture&from=status%3DFAILED', 'logs'],
+    ['?connectionId=connection_fixture', 'logs'],
+    ['?view=health&runId=run_fixture', 'health'],
+  ] as const)('selects the System panel from its scoped query %s', async (search, activeView) => {
+    const page = corePageForActivity('system')
+    const markup = await renderToMarkup(<WorkbenchShell router={routerFor({
+      status: 'READY', pathname: '/system/overview', search, parameters: {}, page,
+    })} />)
+    const inactiveView = activeView === 'health' ? 'logs' : 'health'
+    expect(markup).toMatch(new RegExp(`id="system-${activeView}-tab"[^>]*aria-selected="true"`))
+    expect(markup).toContain(`id="system-${activeView}" role="tabpanel"`)
+    expect(markup).not.toContain(`id="system-${inactiveView}"`)
+    expect(markup).not.toContain('primary-sidebar')
+    expect(markup).not.toContain('aria-label="Bottom panel"')
+  })
+
 })

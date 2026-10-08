@@ -6,6 +6,47 @@ import { useLogFeed } from '../src/useLogFeed.js'
 
 const snapshot = (message: string): LogSnapshot => ({ records: [{ id: message, timestamp: '2026-09-24T00:00:00Z', type: 'info', level: 2, namespace: 'test', message }], stream: 'epoch', revision: 1, reset: false, expired: false, retained: 1, evicted: 0, malformed: 0, persistence: 'disabled' })
 describe('logs browser lifecycle', () => {
+  it('suspends hidden feeds, retains the snapshot and resumes the original query without following when paused', async () => {
+    vi.useFakeTimers()
+    let event!: () => void
+    const unsubscribe = vi.fn()
+    const client = {
+      query: vi.fn(async () => snapshot('retained result')),
+      subscribe: vi.fn(async (_ref, _input, handlers) => { event = handlers.event; return unsubscribe }),
+    } as unknown as WorkbenchConsoleClient
+    const query = ref<LogQuery>({ namespace: 'retained', search: 'message', maxLevel: 3, before: { stream: 'epoch', sequence: 100 } })
+    const follow = ref(true), active = ref(true)
+    const scope = effectScope()
+    const feed = scope.run(() => useLogFeed(client, query, follow, active))!
+    try {
+      await nextTick()
+      await vi.advanceTimersByTimeAsync(200)
+      expect(feed.snapshot.value?.records[0]?.message).toBe('retained result')
+      event()
+      active.value = false
+      await nextTick()
+      expect(unsubscribe).toHaveBeenCalledTimes(1)
+      expect(feed.live.value).toBe(false)
+      expect(feed.loading.value).toBe(false)
+      const queriesBeforeHidden = vi.mocked(client.query).mock.calls.length
+      const subscriptionsBeforeHidden = vi.mocked(client.subscribe).mock.calls.length
+      event()
+      follow.value = false
+      feed.reload()
+      await nextTick()
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(client.query).toHaveBeenCalledTimes(queriesBeforeHidden)
+      expect(client.subscribe).toHaveBeenCalledTimes(subscriptionsBeforeHidden)
+      expect(feed.snapshot.value?.records[0]?.message).toBe('retained result')
+      active.value = true
+      await nextTick()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(client.query).toHaveBeenCalledTimes(queriesBeforeHidden + 1)
+      expect(vi.mocked(client.query).mock.calls.at(-1)?.[1]).toEqual(query.value)
+      expect(client.subscribe).toHaveBeenCalledTimes(subscriptionsBeforeHidden)
+    } finally { scope.stop(); vi.useRealTimers() }
+  })
+
   it('allows slow queries to finish during a continuous notification flood', async () => {
     vi.useFakeTimers()
     const pending: { resolve(value: LogSnapshot): void; signal?: AbortSignal }[] = []

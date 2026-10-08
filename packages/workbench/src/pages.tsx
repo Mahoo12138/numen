@@ -6,7 +6,7 @@ import { PluginOwnership } from './PluginOwnership.js'
 import { diagnosticText, t, metadataText, formatDateTime, statusLabel } from './i18n.js'
 import type { Context } from 'cordis'
 import { Activity, Cable, Home, Network, Pencil, Play, Plus } from '@lucide/vue'
-import { computed, ref } from 'vue'
+import { computed, ref, type VNodeChild } from 'vue'
 import { AutomationPageChrome, AutomationWorkspacePage } from './AutomationWorkspace.js'
 import { RunDetailPage } from './RunDetailPage.js'
 import { AutomationSnapshotPage } from './AutomationSnapshotPage.js'
@@ -166,14 +166,14 @@ const RunsPage = defineSetupComponent<WorkbenchPageProps>('RunsPage', ['consoleC
   return () => (
     <main class="main-workbench core-page overview-page">
       <header class="core-page-header core-page-header-with-actions"><Play size={22} /><div class="core-page-heading"><h1>{t('workbench.runs')}</h1><p>{t('workbench.inspectDurableAutomationExecutionsAndTheirOutcomes')}</p></div><div class="core-page-actions"><Button variant="secondary" type="button" onClick={reload}>{t('workbench.management.refresh')}</Button></div></header>
-      <section class="runs-filters" aria-label={t('workbench.navigation.runFilters')}>
-        <label>{t('workbench.status')}<select aria-label={t('workbench.status')} value={filters.value.get('status') ?? ''} onChange={event => { setFilters({ history: undefined, status: (event.target as HTMLSelectElement).value || undefined, cursor: undefined }) }}>
-          <option value="">{t('workbench.navigation.allStatuses')}</option>{(['QUEUED', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLING', 'CANCELLED'] as const).map(status => <option value={status}>{statusLabel(status)}</option>)}
-        </select></label>
-        <Button variant="secondary" type="button" onClick={() => { setFilters({ history: undefined, status: undefined, automationId: undefined, cursor: undefined }) }}>{t('workbench.navigation.clearFilters')}</Button>
-        {filters.value.get('automationId') ? <span class="runs-automation-filter">{t('workbench.automation')}: <code>{filters.value.get('automationId')}</code></span> : null}
-      </section>
       <RunsIndex
+        filters={<div class="runs-filters" aria-label={t('workbench.navigation.runFilters')}>
+          <label><span>{t('workbench.status')}</span><select aria-label={t('workbench.status')} value={filters.value.get('status') ?? ''} onChange={event => { setFilters({ history: undefined, status: (event.target as HTMLSelectElement).value || undefined, cursor: undefined }) }}>
+            <option value="">{t('workbench.navigation.allStatuses')}</option>{(['QUEUED', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLING', 'CANCELLED'] as const).map(status => <option value={status}>{statusLabel(status)}</option>)}
+          </select></label>
+          {filters.value.get('automationId') ? <span class="runs-automation-filter">{t('workbench.automation')}: <code>{filters.value.get('automationId')}</code></span> : null}
+          <Button variant="ghost" type="button" disabled={!filters.value.get('status') && !filters.value.get('automationId')} onClick={() => { setFilters({ history: undefined, status: undefined, automationId: undefined, cursor: undefined }) }}>{t('workbench.navigation.clearFilters')}</Button>
+        </div>}
         onNext={goNext}
         onPrevious={goPrevious}
         {...(props.navigation ? { onOpenRun: openRun } : {})}
@@ -185,39 +185,35 @@ const RunsPage = defineSetupComponent<WorkbenchPageProps>('RunsPage', ['consoleC
   )
 })
 
-function RunsIndex({ state, canGoPrevious, onNext, onPrevious, onReload, onOpenRun }: {
+function RunsIndex({ state, filters, canGoPrevious, onNext, onPrevious, onReload, onOpenRun }: {
   state: ConsoleQueryState<WorkbenchRunsIndex>
+  filters: VNodeChild
   canGoPrevious: boolean
   onNext(): void
   onPrevious(): void
   onReload(): void
   onOpenRun?(runId: string): void
 }) {
-  if (state.status === 'DISABLED') {
-    return <QueryStatePanel title={t('workbench.runtimePreview')} message={t('workbench.openWorkbenchFromARunningNumenRuntimeToInspectDurableRuns')} />
-  }
-  if (state.status === 'LOADING') {
-    return <QueryStatePanel busy title={t('workbench.loadingRuns')} message={t('workbench.readingTheLatestDurableExecutionState')} />
-  }
-  if (state.status === 'ERROR') {
-    return <QueryStatePanel action={t('workbench.tryAgain')} message={diagnosticText(state)} onAction={onReload} title={t('workbench.runsUnavailable')} tone="error" />
-  }
-  const { summary, items, nextCursor } = state.data
+  const summary = state.status === 'READY' ? state.data.summary : undefined
   return (
     <div class="runs-index">
-      <section aria-label={t('workbench.runSummary')} class="home-metrics runs-metrics">
-        <HomeMetric label={t('workbench.total2')} value={summary.total} detail={t('workbench.value0Completed', { value0: summary.completed })} />
-        <HomeMetric label={t('workbench.active')} value={summary.active} detail={t('workbench.value0Queued', { value0: summary.queued })} />
-        <HomeMetric label={t('workbench.failed3')} value={summary.failed} detail={t('workbench.value0Cancelled', { value0: summary.cancelled })} tone={summary.failed ? 'warning' : 'default'} />
-      </section>
+      {summary ? <dl aria-label={t('workbench.runSummary')} class="runs-metrics">
+        <div><dt>{t('workbench.total2')}</dt><dd><strong>{summary.total}</strong><span>{t('workbench.value0Completed', { value0: summary.completed })}</span></dd></div>
+        <div><dt>{t('workbench.active')}</dt><dd><strong>{summary.active}</strong><span>{t('workbench.value0Queued', { value0: summary.queued })}</span></dd></div>
+        <div data-tone={summary.failed ? 'warning' : undefined}><dt>{t('workbench.failed3')}</dt><dd><strong>{summary.failed}</strong><span>{t('workbench.value0Cancelled', { value0: summary.cancelled })}</span></dd></div>
+      </dl> : null}
       <section class="core-page-section runs-section">
         <div class="runs-section-heading"><h2>{t('workbench.durableRuns')}</h2><span>{t('workbench.newestFirstUpTo20PerPage')}</span></div>
-        {items.length ? (
+        {filters}
+        {state.status === 'DISABLED' ? <QueryStatePanel title={t('workbench.runtimePreview')} message={t('workbench.openWorkbenchFromARunningNumenRuntimeToInspectDurableRuns')} /> : null}
+        {state.status === 'LOADING' ? <QueryStatePanel busy title={t('workbench.loadingRuns')} message={t('workbench.readingTheLatestDurableExecutionState')} /> : null}
+        {state.status === 'ERROR' ? <QueryStatePanel action={t('workbench.tryAgain')} message={diagnosticText(state)} onAction={onReload} title={t('workbench.runsUnavailable')} tone="error" /> : null}
+        {state.status === 'READY' ? <>{state.data.items.length ? (
           <div class="runs-table-wrap">
             <table class="runs-table">
               <thead><tr><th>{t('workbench.automation')}</th><th>{t('workbench.status')}</th><th>{t('workbench.started')}</th><th>{t('workbench.duration')}</th><th>{t('workbench.work')}</th></tr></thead>
               <tbody>
-                {items.map(run => (
+                {state.data.items.map(run => (
                   <tr key={run.id}>
                     <td>
                       <button
@@ -240,8 +236,9 @@ function RunsIndex({ state, canGoPrevious, onNext, onPrevious, onReload, onOpenR
         ) : <p class="home-empty">{t('workbench.noRunsHaveBeenAcceptedYet')}</p>}
         <nav aria-label={t('workbench.runPages')} class="runs-pagination">
           <Button disabled={!canGoPrevious} onClick={onPrevious} type="button">{t('workbench.previous')}</Button>
-          <Button disabled={!nextCursor} onClick={onNext} type="button">{t('workbench.next')}</Button>
+          <Button disabled={!state.data.nextCursor} onClick={onNext} type="button">{t('workbench.next')}</Button>
         </nav>
+        </> : null}
       </section>
     </div>
   )
@@ -406,7 +403,7 @@ export const coreWorkbenchPageDefinitions: ReadonlyArray<WorkbenchPageDefinition
     path: '/automations',
     title: 'Automations', titleKey: 'workbench.pages.automations',
     component: AutomationWorkspacePage,
-    chrome: { component: AutomationPageChrome, hasInspector: true, ownsPanel: true, ownsStatus: true },
+    chrome: { component: AutomationPageChrome, hasSidebar: true, hasInspector: true, ownsPanel: true, ownsStatus: true },
   },
   { ...coreWorkbenchRoutes.runs, path: '/runs', title: 'Runs', titleKey: 'workbench.pages.runs', component: RunsPage },
   { ...coreWorkbenchAutomationSnapshotRoute, path: '/automations/:automationId/snapshots/:snapshotId', title: 'Snapshot', titleKey: 'workbench.snapshots.title', component: AutomationSnapshotPage },

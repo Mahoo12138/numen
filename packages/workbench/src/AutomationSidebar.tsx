@@ -1,6 +1,6 @@
 import { Button, Input } from '@numenjs/components'
 import { diagnosticText, useWorkbenchI18n } from './i18n.js'
-import { Filter, MoreVertical, Network, Plus } from '@lucide/vue'
+import { Filter, MoreVertical, Network, PanelLeftClose, Plus } from '@lucide/vue'
 import { computed, nextTick, onMounted, onScopeDispose, ref, watch } from 'vue'
 import type { WorkbenchAutomationsIndex } from './contracts.js'
 import { automations } from './model.js'
@@ -8,6 +8,7 @@ import { SelectMenu } from './SelectMenu.js'
 import type { ConsoleQueryState } from './useConsoleQuery.js'
 import { defineSetupComponent } from './vue-component.js'
 import { useCommandRegistration } from './commands.js'
+import { useWorkbenchLayout } from './workbench-layout.js'
 
 export interface AutomationSidebarProps {
   activeId?: string
@@ -47,6 +48,7 @@ export const AutomationSidebar = defineSetupComponent<AutomationSidebarProps>('A
   'onArchiveViewChange', 'onArchive', 'onRestore', 'onRemoveArchived', 'mutationPending', 'mutationError', 'createRequest',
 ], props => {
   const { t } = useWorkbenchI18n()
+  const layout = useWorkbenchLayout()
   const createOpen = ref(false)
   const filterOpen = ref(false)
   const filterQuery = ref('')
@@ -54,7 +56,7 @@ export const AutomationSidebar = defineSetupComponent<AutomationSidebarProps>('A
   const menuAutomationId = ref<string>()
   const name = ref('')
   const nameInput = ref<HTMLInputElement>()
-  const openCreate = () => { createOpen.value = true; props.onCreateDismiss?.(); void nextTick(() => nameInput.value?.focus()) }
+  const openCreate = () => { if (layout) layout.sidebarOpen.value = true; createOpen.value = true; props.onCreateDismiss?.(); void nextTick(() => nameInput.value?.focus()) }
   watch(() => props.createRequest, value => { if (value && props.onCreate) openCreate() }, { immediate: true })
   watch(createOpen, async open => {
     if (!open) return
@@ -252,7 +254,11 @@ export const AutomationSidebar = defineSetupComponent<AutomationSidebarProps>('A
           </div>
         }) : null}
       </div>
-      <button class="collapse-sidebar" type="button" aria-label={t('workbench.collapseSidebar')}>‹‹</button>
+      <button class="collapse-sidebar" type="button" aria-label={t('workbench.collapseSidebar')} onClick={() => {
+        if (!layout) return
+        layout.sidebarOpen.value = false
+        document.querySelector<HTMLElement>('.activity-button[data-active="true"]')?.focus({ preventScroll: true })
+      }}><PanelLeftClose size={16} aria-hidden="true" /></button>
     </aside>
   )
   }

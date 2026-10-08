@@ -42,8 +42,12 @@ export interface WorkbenchPageChromeProps {
 export type WorkbenchPageChromeComponent = Component<WorkbenchPageChromeProps>
 
 export interface WorkbenchPageChromeDefinition {
-  component: WorkbenchPageChromeComponent
+  component?: WorkbenchPageChromeComponent
+  /** Reserve a sidebar only when the page supplies meaningful navigation or controls. */
+  hasSidebar?: boolean
   hasInspector?: boolean
+  /** Opt into a diagnostic panel. Custom chrome retains its legacy default. */
+  hasPanel?: boolean
   ownsPanel?: boolean
   ownsStatus?: boolean
 }

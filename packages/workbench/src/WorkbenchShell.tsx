@@ -2,7 +2,7 @@ import { PanelResizeHandle } from './PanelResizeHandle.js'
 import { provideWorkbenchLayout } from './workbench-layout.js'
 import { Button, SelectMenu, ResizeHandle } from '@numenjs/components'
 import { LogsView } from './LogsView.js'
-import { t, provideWorkbenchI18n, pageTitle } from './i18n.js'
+import { t, provideWorkbenchI18n } from './i18n.js'
 import type { BrowserLocaleService } from '@numenjs/webui/i18n'
 import type { FrontendExtensionRef } from '@numenjs/webui/extensions'
 import type { SchemaUIResolver } from '@numenjs/webui/schema-ui'
@@ -49,34 +49,20 @@ export interface WorkbenchShellProps {
 
 function DefaultPageChrome({ page, consoleClient, schemaUI, navigation }: WorkbenchPageChromeProps) {
   const PageComponent = page.component
-  return (
-    <>
-      <aside class="primary-sidebar simple-sidebar">
-        <div class="sidebar-heading">{pageTitle(page)}</div>
-        <p>{t('workbench.browsePage', { page: pageTitle(page) })}</p>
-      </aside>
-      {h(PageComponent, {
-        ...(consoleClient ? { consoleClient } : {}),
-        ...(schemaUI ? { schemaUI } : {}),
-        ...(navigation ? { navigation } : {}),
-      })}
-    </>
-  )
+  return h(PageComponent, {
+    ...(consoleClient ? { consoleClient } : {}),
+    ...(schemaUI ? { schemaUI } : {}),
+    ...(navigation ? { navigation } : {}),
+  })
 }
 
 function NotFoundPageChrome({ pathname }: { pathname: string }) {
   return (
-    <>
-      <aside class="primary-sidebar simple-sidebar">
-        <div class="sidebar-heading">{t('workbench.notFound')}</div>
-        <p>{t('workbench.noPageMatchesTheCurrentUrl')}</p>
-      </aside>
-      <main class="main-workbench secondary-view activity-placeholder">
-        <Command size={24} />
-        <h1>{t('workbench.pageNotFound')}</h1>
-        <p>{t('workbench.noRegisteredPageMatches')}{pathname}.</p>
-      </main>
-    </>
+    <main class="main-workbench secondary-view activity-placeholder">
+      <Command size={24} />
+      <h1>{t('workbench.pageNotFound')}</h1>
+      <p>{t('workbench.noRegisteredPageMatches')}{pathname}.</p>
+    </main>
   )
 }
 
@@ -109,7 +95,13 @@ export const WorkbenchShell = defineSetupComponent<WorkbenchShellProps>('Workben
     navigate: props.router.navigate.bind(props.router),
     beforeLeave: props.router.beforeLeave.bind(props.router),
   } : undefined)
-  const layout = provideWorkbenchLayout(shell, computed(() => !!currentPage.value?.chrome?.hasInspector && inspectorOpen.value))
+  // Existing extension chrome keeps its sidebar unless it explicitly opts out.
+  const hasSidebar = computed(() => currentPage.value?.chrome?.hasSidebar ?? !!currentPage.value?.chrome?.component)
+  const hasPanel = computed(() => currentPage.value?.chrome?.hasPanel
+    ?? !!(currentPage.value?.chrome?.component || currentPage.value?.chrome?.ownsPanel))
+  const hasStatus = computed(() => !!(currentPage.value?.chrome?.component || currentPage.value?.chrome?.ownsStatus))
+  const layout = provideWorkbenchLayout(shell, inspectorOpen, hasSidebar, computed(() => !!currentPage.value?.chrome?.hasInspector))
+  const sidebarExpanded = computed(() => hasSidebar.value && layout.sidebarOpen.value)
   const { panelOpen } = layout
 
 
@@ -124,19 +116,31 @@ export const WorkbenchShell = defineSetupComponent<WorkbenchShellProps>('Workben
   })
 
   const onActivityChange = (nextActivityId: CoreWorkbenchActivityId) => {
+    const activeActivity = props.router ? activityIdForRoute(routeState.value.page) : standaloneActivityId.value
+    if (activeActivity === nextActivityId && hasSidebar.value && !layout.sidebarOpen.value) {
+      layout.sidebarOpen.value = true
+      return
+    }
+    if (nextActivityId === 'automations') layout.sidebarOpen.value = true
     if (props.router) {
       props.router.navigate(coreWorkbenchRoutes[nextActivityId])
     } else {
       standaloneActivityId.value = nextActivityId
     }
   }
+  const commitResize = (key: 'sidebar' | 'inspector') => {
+    layout.save()
+    const open = key === 'sidebar' ? layout.sidebarOpen.value : inspectorOpen.value
+    if (!open) shell.value?.querySelector<HTMLElement>(key === 'sidebar' ? '.activity-button[data-active="true"]' : '.mobile-inspector-button')?.focus({ preventScroll: true })
+  }
 
   const removeCommands = commands.register(() => [
     { id: 'workbench.commandCenter', label: t('workbench.commandCenter'), shortcut: { mod: true, key: 'k' }, allowInInput: true, execute: () => { commandCenterOpen.value = true } },
     ...Object.keys(coreWorkbenchRoutes).map(id => ({ id: `workbench.open.${id}`, label: t('workbench.commands.openPage', { page: t(`workbench.navigation.${id}`) }), execute: () => onActivityChange(id as CoreWorkbenchActivityId) })),
-    { id: 'workbench.panel', label: t('workbench.commands.togglePanel'), shortcut: { mod: true, key: 'j' }, execute: () => { panelOpen.value = !panelOpen.value } },
+    { id: 'workbench.panel', label: t('workbench.commands.togglePanel'), visible: hasPanel.value, shortcut: { mod: true, key: 'j' }, execute: () => { if (hasPanel.value) panelOpen.value = !panelOpen.value } },
+    { id: 'workbench.sidebar', label: t('workbench.commands.toggleSidebar'), visible: hasSidebar.value, shortcut: { mod: true, key: 'b' }, execute: () => { if (hasSidebar.value) layout.sidebarOpen.value = !layout.sidebarOpen.value } },
     { id: 'workbench.inspector', label: t('workbench.commands.toggleInspector'), visible: !!currentPage.value?.chrome?.hasInspector, execute: () => { inspectorOpen.value = !inspectorOpen.value } },
-    { id: 'automation.new', label: t('workbench.createAutomation'), shortcut: { mod: true, alt: true, key: 'n' }, ...(props.router && props.consoleClient ? {} : { disabledReason: t('workbench.commands.runtimeRequired') }), execute: () => { props.router?.navigate(coreWorkbenchRoutes.automations, { query: { create: 1 } }) } },
+    { id: 'automation.new', label: t('workbench.createAutomation'), shortcut: { mod: true, alt: true, key: 'n' }, ...(props.router && props.consoleClient ? {} : { disabledReason: t('workbench.commands.runtimeRequired') }), execute: () => { layout.sidebarOpen.value = true; props.router?.navigate(coreWorkbenchRoutes.automations, { query: { create: 1 } }) } },
   ])
   onScopeDispose(removeCommands)
 
@@ -148,8 +152,8 @@ export const WorkbenchShell = defineSetupComponent<WorkbenchShellProps>('Workben
     const hasInspector = !!activePage?.chrome?.hasInspector
     const ownsPanel = !!activePage?.chrome?.ownsPanel
     const ownsStatus = !!activePage?.chrome?.ownsStatus
-    return <div class="workbench-shell" ref={shell} data-inspector-open={hasInspector && inspectorOpen.value}
-      style={{ '--wb-sidebar-width': `${layout.sizes.value.sidebar}px`, '--wb-inspector-width': `${layout.sizes.value.inspector}px`, '--wb-panel-height': `${layout.sizes.value.panel}px` }}>
+    return <div class="workbench-shell" ref={shell} data-has-sidebar={sidebarExpanded.value} data-inspector-open={hasInspector && inspectorOpen.value}
+      style={{ '--wb-sidebar-width': `${layout.sizes.value.sidebar}px`, '--wb-inspector-width': `${layout.sizes.value.inspector}px`, '--wb-panel-height': `${layout.sizes.value.panel}px`, '--wb-status-height': hasStatus.value ? '24px' : '0px' }}>
       <header class="top-bar">
         <div class="brand"><span class="brand-mark">N</span><strong>Numen Workbench</strong></div>
         <button class="command-center" aria-label={t('workbench.commandCenter')} onClick={() => commands.execute('workbench.commandCenter')} type="button">
@@ -183,14 +187,16 @@ export const WorkbenchShell = defineSetupComponent<WorkbenchShellProps>('Workben
       ) : (
         <NotFoundPageChrome pathname={routeState.value.pathname} />
       )}
-      {!layout.sizes.value.mobile ? <ResizeHandle class="sidebar-resize-handle" ariaLabel={t('workbench.resize.sidebar')}
-        title={t('workbench.resize.hint')} axis="x" value={layout.sizes.value.sidebar} min={180} max={layout.sizes.value.sidebarMax}
-        onChange={value => layout.resize('sidebar', value)} onCommit={layout.save} onCancel={layout.cancel} onReset={() => layout.reset('sidebar')} /> : null}
-      {hasInspector && inspectorOpen.value && !layout.sizes.value.mobile ? <ResizeHandle class="inspector-resize-handle"
+      {hasSidebar.value && !layout.sizes.value.mobile ? <ResizeHandle class="sidebar-resize-handle" ariaLabel={t('workbench.resize.sidebar')}
+        title={t('workbench.resize.hint')} axis="x" value={layout.sidebarOpen.value ? layout.sizes.value.sidebar : 0} min={180} max={layout.sizes.value.sidebarMax}
+        collapsed={!layout.sidebarOpen.value} onCollapsedChange={collapsed => layout.setCollapsed('sidebar', collapsed)}
+        onChange={value => layout.resize('sidebar', value)} onCommit={() => commitResize('sidebar')} onCancel={layout.cancel} onReset={() => layout.reset('sidebar')} /> : null}
+      {hasInspector && !layout.sizes.value.mobile ? <ResizeHandle class="inspector-resize-handle"
         ariaLabel={t('workbench.resize.inspector')} title={t('workbench.resize.hint')} axis="x" direction={-1}
-        value={layout.sizes.value.inspector} min={260} max={layout.sizes.value.inspectorMax}
-        onChange={value => layout.resize('inspector', value)} onCommit={layout.save} onCancel={layout.cancel} onReset={() => layout.reset('inspector')} /> : null}
-      {ownsPanel ? null : <section class="bottom-panel" data-open={panelOpen.value} aria-label={t('workbench.bottomPanel')}>
+        value={inspectorOpen.value ? layout.sizes.value.inspector : 0} min={260} max={layout.sizes.value.inspectorMax}
+        collapsed={!inspectorOpen.value} onCollapsedChange={collapsed => layout.setCollapsed('inspector', collapsed)}
+        onChange={value => layout.resize('inspector', value)} onCommit={() => commitResize('inspector')} onCancel={layout.cancel} onReset={() => layout.reset('inspector')} /> : null}
+      {ownsPanel || !hasPanel.value ? null : <section class="bottom-panel" data-open={panelOpen.value} aria-label={t('workbench.bottomPanel')}>
         <PanelResizeHandle />
         <div class="panel-tablist" role="tablist">
           <button aria-selected="true" data-active="true" onClick={() => { panelOpen.value = true }} role="tab" type="button">{t('workbench.tabs.Logs')}</button>
@@ -203,7 +209,7 @@ export const WorkbenchShell = defineSetupComponent<WorkbenchShellProps>('Workben
         </div>
         {panelOpen.value ? <div class="panel-content logs-panel-content"><LogsView compact {...(props.consoleClient ? { consoleClient: props.consoleClient } : {})} /></div> : null}
       </section>}
-      {ownsStatus ? null : <footer class="status-bar"><span>{activePage ? activePage.titleKey ? t(activePage.titleKey) : activePage.title : t('workbench.notFound')}</span></footer>}
+      {ownsStatus || !hasStatus.value ? null : <footer class="status-bar"><span>{activePage ? activePage.titleKey ? t(activePage.titleKey) : activePage.title : t('workbench.notFound')}</span></footer>}
       <CommandCenter open={commandCenterOpen.value} registry={commands} onClose={() => { commandCenterOpen.value = false }} />
       <button
         aria-label={t('workbench.closeInspectorOverlay')}

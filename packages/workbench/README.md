@@ -48,6 +48,29 @@ Automation services keep their independent lifecycles.
 
 ## Exports and built assets
 
+Page layout follows the task rather than reserving every Workbench region.
+Management pages use one main content area without a generic sidebar, log
+panel, or page-name status footer. Runs keeps its compact summary and filters
+next to the table. System separates health and runtime logs with page tabs;
+links carrying `runId` or `connectionId` open scoped logs and preserve their
+return path. Switching back from health keeps log filters, pause state, and
+the historical cursor; hidden logs stop their live subscription. Plugins
+retains a compact object list beside its details; Home
+groups recent Automations and Runs side by side when space permits.
+
+`chrome.hasSidebar` reserves a sidebar supplied by a page. The automation
+editor keeps its explorer, inspector, diagnostic panel, and authoring status.
+Custom chrome retains its legacy sidebar and panel defaults unless it opts
+out. Removing these regions does not change their stored sizes or current
+panel-open state, so returning to the editor restores its workspace.
+
+Editor splitters collapse their region when dragged 24px beyond its expanded
+minimum. Reversing the same gesture reopens it; cancellation restores its
+original size and visibility. Collapsing preserves the gesture's initial
+expanded-size preference. Reopen the sidebar through its activity button or
+Mod+B, the inspector through its editor button, and the bottom panel through
+its toggle or Mod+J.
+
 The root export remains the existing browser-oriented API. The `/contracts`,
 `/server`, `/runtime`, and `/i18n` subpaths are preserved. In particular, `/runtime`
 still defaults to the legacy runtime service; its export does not silently become

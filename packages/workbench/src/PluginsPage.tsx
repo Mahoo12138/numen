@@ -203,9 +203,11 @@ export const PluginsPage = defineSetupComponent<WorkbenchPageProps>('PluginsPage
     })
   })
   return () => <main class="main-workbench core-page plugins-page">
-    <header class="core-page-header"><Boxes size={22} /><div><h1>{t('workbench.plugins')}</h1><p>{t('workbench.management.description')}</p></div>
+    <header class="core-page-header core-page-header-with-actions"><Boxes size={22} /><div class="core-page-heading"><h1>{t('workbench.plugins')}</h1><p>{t('workbench.management.description')}</p></div>
+      <div class="core-page-actions">
       <Button variant="secondary" disabled={busy.value} onClick={refresh} type="button" aria-label={t('workbench.management.refresh')}><RefreshCw size={16} /></Button>
       <Button variant="secondary" disabled={!writable.value} onClick={() => openEditor()} type="button">{t('workbench.management.createGroup')}</Button>
+      </div>
     </header>
     {returnTarget.value ? <Button type="button" onClick={() => props.navigation?.navigate(...returnTarget.value!)}>{t('workbench.ownership.back')}</Button> : null}
     {query.status === 'ERROR' ? <StatePanel title={t('workbench.management.unavailable')} message={diagnosticText(query)} action={t('workbench.tryAgain')} onAction={refresh} tone="error" /> : null}

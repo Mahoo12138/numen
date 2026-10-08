@@ -6,8 +6,8 @@ import type { WorkbenchConsoleClient } from './types.js'
 import { defineSetupComponent, useTextDraft } from './vue-component.js'
 import { useLogFeed } from './useLogFeed.js'
 
-export interface LogsViewProps { consoleClient?: WorkbenchConsoleClient; automationId?: string; runId?: string; connectionId?: string; compact?: boolean }
-export const LogsView = defineSetupComponent<LogsViewProps>('LogsView', ['consoleClient', 'automationId', 'runId', 'connectionId', 'compact'], props => {
+export interface LogsViewProps { consoleClient?: WorkbenchConsoleClient; automationId?: string; runId?: string; connectionId?: string; compact?: boolean; active?: boolean }
+export const LogsView = defineSetupComponent<LogsViewProps>('LogsView', ['consoleClient', 'automationId', 'runId', 'connectionId', 'compact', 'active'], props => {
   const { t, locale } = useWorkbenchI18n()
   const timestamp = computed(() => new Intl.DateTimeFormat(locale.value, {
     year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3,
@@ -23,12 +23,12 @@ export const LogsView = defineSetupComponent<LogsViewProps>('LogsView', ['consol
     ...(props.runId || correlation.value ? { runId: props.runId || correlation.value } : {}),
     ...(before.value ? { before: before.value } : {}),
   }))
-  const feed = useLogFeed(() => props.consoleClient, parameters, following)
+  const feed = useLogFeed(() => props.consoleClient, parameters, following, () => props.active !== false)
   const newest = () => { before.value = undefined; following.value = true; feed.reload() }
   const filter = () => { before.value = undefined }
   return () => <section class={['logs-view', props.compact ? 'logs-compact' : '']} aria-label={t('workbench.logs.title')}>
     <div class="logs-toolbar">
-      <label>{t('workbench.logs.level')}<SelectMenu ariaLabel={t('workbench.logs.level')} value={String(maxLevel.value)}
+      <label>{t('workbench.logs.level')}<SelectMenu ariaLabel={t('workbench.logs.level')} value={String(maxLevel.value)} disabled={props.active === false}
         onChange={value => { maxLevel.value = Number(value); filter() }}
         options={[0, 1, 2, 3].map(level => ({ value: String(level), label: t(`workbench.logs.level${level}`) }))} /></label>
       <label>{t('workbench.logs.namespace')}<Input aria-label={t('workbench.logs.namespace')} value={namespaceDraft.text.value} onInput={namespaceDraft.onInput} maxlength={200} onChange={event => { namespace.value = (event.target as HTMLInputElement).value.trim(); filter() }} placeholder="scheduler" /></label>

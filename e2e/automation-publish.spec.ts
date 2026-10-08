@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 import { writeConfig } from '../packages/config/dist/index.js'
 import { startRuntime, type NumenApplication } from '../packages/runtime/dist/index.js'
 import { mkdtemp, rm } from 'node:fs/promises'
@@ -363,7 +363,7 @@ test('resizes and restores Workbench regions without losing editor state', async
   await drag(inspector, -70, 0)
   await expect.poll(() => size('.inspector', 'width')).toBe(430)
   await page.locator('.inspector-close').click()
-  await expect(inspector).toHaveCount(0)
+  await expect(inspector).toBeHidden()
   await page.getByRole('button', { name: 'Open Inspector', exact: true }).click()
   await expect.poll(() => size('.inspector', 'width')).toBe(430)
   await drag(panel, 0, -254)
@@ -413,6 +413,8 @@ test('resizes and restores Workbench regions without losing editor state', async
   await expect.poll(() => size('.primary-sidebar', 'width')).toBe(350)
   await expect.poll(() => size('.bottom-panel', 'height')).toBe(300)
   await page.getByRole('button', { name: 'System', exact: true }).click()
+  await expect(page.locator('.primary-sidebar, .bottom-panel')).toHaveCount(0)
+  await page.getByRole('navigation', { name: 'Primary navigation', exact: true }).getByRole('button', { name: 'Automations', exact: true }).click()
   await expect.poll(() => size('.primary-sidebar', 'width')).toBe(350)
   await expect.poll(() => size('.bottom-panel', 'height')).toBe(300)
   await drag(panel, 0, -50)
@@ -437,7 +439,7 @@ test('resizing survives blocked storage and cancelled pointer input', async ({ p
     }
   })
   await page.goto(application.workbenchUrl!)
-  await page.getByRole('button', { name: 'System', exact: true }).click()
+  await page.getByRole('button', { name: 'Automations', exact: true }).click()
   const sidebar = page.getByRole('separator', { name: 'Resize sidebar', exact: true })
   await sidebar.press('ArrowRight')
   await expect(sidebar).toHaveAttribute('aria-valuenow', '268')
@@ -457,7 +459,10 @@ test('resizing survives blocked storage and cancelled pointer input', async ({ p
   await expect(sidebar).toHaveAttribute('aria-valuenow', '260')
   await page.getByRole('button', { name: 'Home', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Home', exact: true })).toBeVisible()
+  await expect(page.locator('.primary-sidebar, .bottom-panel')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Automations', exact: true }).click()
   await page.setViewportSize({ width: 390, height: 600 })
+  await page.getByRole('button', { name: 'Close inspector overlay', exact: true }).click({ position: { x: 5, y: 50 } })
   const panel = page.getByRole('separator', { name: 'Resize bottom panel', exact: true })
   await expect(panel).toHaveAttribute('aria-valuenow', '42')
   await panel.press('ArrowUp')
@@ -465,4 +470,213 @@ test('resizing survives blocked storage and cancelled pointer input', async ({ p
   await page.getByRole('button', { name: 'Collapse bottom panel', exact: true }).click()
   await expect(panel).toHaveAttribute('aria-valuenow', '42')
   expect(errors).toEqual([])
+})
+
+async function openReadonlyResizeWorkspace(page: Page, sizes = { sidebar: 320, inspector: 400, panel: 260 }, width = 1440) {
+  await page.setViewportSize({ width, height: 960 })
+  await page.addInitScript(preferred => {
+    const key = 'numen.workbench.layout.v1'
+    if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify(preferred))
+  }, sizes)
+  await page.goto(application.workbenchUrl!)
+  await page.getByRole('button', { name: 'Automations', exact: true }).click()
+  await expect(page.getByRole('separator', { name: 'Resize sidebar', exact: true })).toBeVisible()
+  await expect(page.getByRole('separator', { name: 'Resize inspector', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Expand bottom panel', exact: true }).click()
+  await expect(page.locator('.bottom-panel')).toHaveAttribute('data-open', 'true')
+}
+
+test('collapses splitters beyond their minimum and reverses or cancels the gesture without losing widths', async ({ page }) => {
+  test.setTimeout(90_000)
+  const actions: string[] = []
+  const errors: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
+  page.on('request', request => {
+    if (request.url().endsWith('/api/console/call') && request.postDataJSON()?.kind === 'action') actions.push(request.postDataJSON().procedure)
+  })
+  await openReadonlyResizeWorkspace(page)
+  const regions = [
+    { name: 'sidebar', label: 'Resize sidebar', selector: '.primary-sidebar', axis: 'width', direction: 1, min: 180, initial: 320 },
+    { name: 'inspector', label: 'Resize inspector', selector: '.inspector', axis: 'width', direction: -1, min: 260, initial: 400 },
+    { name: 'panel', label: 'Resize bottom panel', selector: '.bottom-panel', axis: 'height', direction: -1, min: 120, initial: 260 },
+  ] as const
+  for (const region of regions) {
+    const handle = page.getByRole('separator', { name: region.label, exact: true })
+    const view = page.locator(region.selector)
+    const size = async () => (await view.boundingBox())![region.axis]
+    const assertOpen = async (value?: number) => {
+      if (region.name === 'panel') await expect(view).toHaveAttribute('data-open', 'true')
+      else await expect(view).toBeVisible()
+      if (value !== undefined) await expect.poll(size).toBe(value)
+    }
+    const assertClosed = async () => {
+      if (region.name === 'panel') await expect(view).toHaveAttribute('data-open', 'false')
+      else {
+        await expect(view).toBeHidden()
+      }
+      await expect(handle).toHaveAttribute('data-collapsed', 'true')
+      await expect(handle).toHaveAttribute('data-dragging', 'true')
+      expect(await handle.evaluate(element => element.hasPointerCapture(Number(element.getAttribute('data-test-pointer'))))).toBe(true)
+    }
+    const start = async () => {
+      await handle.evaluate(element => element.addEventListener('pointerdown', event => {
+        element.setAttribute('data-test-pointer', String((event as PointerEvent).pointerId))
+      }, { once: true }))
+      const box = (await handle.boundingBox())!
+      const origin = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+      await page.mouse.move(origin.x, origin.y)
+      await page.mouse.down()
+      return async (raw: number) => {
+        const delta = (raw - region.initial) * region.direction
+        await page.mouse.move(origin.x + (region.axis === 'width' ? delta : 0), origin.y + (region.axis === 'height' ? delta : 0), { steps: 4 })
+      }
+    }
+    await assertOpen(region.initial)
+    let move = await start()
+    await move(region.min)
+    await assertOpen(region.min)
+    await move(region.min - 23)
+    await assertOpen(region.min)
+    await move(region.min - 24)
+    await assertClosed()
+    await expect(page.locator('.n-resize-shield')).toHaveCount(1)
+    await move(region.min + 32)
+    await assertOpen()
+    await page.keyboard.press('Escape')
+    await page.mouse.up()
+    await assertOpen(region.initial)
+    await expect(page.locator('.n-resize-shield')).toHaveCount(0)
+    for (const cancellation of ['Escape', 'pointercancel', 'blur'] as const) {
+      move = await start()
+      await move(region.min - 30)
+      await assertClosed()
+      if (cancellation === 'Escape') await page.keyboard.press('Escape')
+      else if (cancellation === 'blur') await page.evaluate(() => window.dispatchEvent(new Event('blur')))
+      else await handle.dispatchEvent('pointercancel', { pointerId: Number(await handle.getAttribute('data-test-pointer')) })
+      await page.mouse.up()
+      await assertOpen(region.initial)
+      await expect(page.locator('.n-resize-shield')).toHaveCount(0)
+    }
+    move = await start()
+    await move(region.min - 24)
+    await assertClosed()
+    await page.mouse.up()
+    await expect(page.locator('.n-resize-shield')).toHaveCount(0)
+    if (region.name !== 'panel') await expect(handle).toBeHidden()
+    if (region.name === 'sidebar') {
+      const route = page.url()
+      await page.getByRole('button', { name: 'Automations', exact: true }).click()
+      await expect(page).toHaveURL(route)
+    } else if (region.name === 'inspector') await page.getByRole('button', { name: 'Open Inspector', exact: true }).click()
+    else await page.getByRole('button', { name: 'Expand bottom panel', exact: true }).click()
+    await assertOpen(region.initial)
+  }
+  await page.getByRole('button', { name: 'Collapse sidebar', exact: true }).click()
+  await expect(page.locator('.primary-sidebar')).toBeHidden()
+  await expect(page.getByRole('separator', { name: 'Resize sidebar', exact: true })).toBeHidden()
+  await page.getByRole('button', { name: 'Automations', exact: true }).click()
+  await expect.poll(async () => (await page.locator('.primary-sidebar').boundingBox())!.width).toBe(320)
+  await page.getByRole('button', { name: 'System', exact: true }).click()
+  await expect(page.locator('.primary-sidebar, .bottom-panel')).toHaveCount(0)
+  await expect(page.locator('.n-resize-shield')).toHaveCount(0)
+  await page.getByRole('navigation', { name: 'Primary navigation', exact: true }).getByRole('button', { name: 'Automations', exact: true }).click()
+  await expect.poll(async () => (await page.locator('.primary-sidebar').boundingBox())!.width).toBe(320)
+  await expect.poll(async () => (await page.locator('.inspector').boundingBox())?.width).toBe(400)
+  await expect.poll(async () => (await page.locator('.bottom-panel').boundingBox())!.height).toBe(260)
+  await page.reload()
+  await expect.poll(async () => (await page.locator('.primary-sidebar').boundingBox())!.width).toBe(320)
+  await expect.poll(async () => (await page.locator('.inspector').boundingBox())?.width).toBe(400)
+  await page.keyboard.press('ControlOrMeta+j')
+  await expect.poll(async () => (await page.locator('.bottom-panel').boundingBox())!.height).toBe(260)
+  await expect(page.locator('.n-resize-shield')).toHaveCount(0)
+  expect(actions).toEqual([])
+  expect(errors).toEqual([])
+})
+
+test('opens a collapsed bottom panel by dragging and cancels back to its pre-gesture state', async ({ page }) => {
+  await openReadonlyResizeWorkspace(page)
+  const panel = page.locator('.bottom-panel')
+  const handle = page.getByRole('separator', { name: 'Resize bottom panel', exact: true })
+  await page.getByRole('button', { name: 'Collapse bottom panel', exact: true }).click()
+  await expect(panel).toHaveAttribute('data-open', 'false')
+  await handle.press('ArrowDown')
+  await expect(panel).toHaveAttribute('data-open', 'false')
+  await expect.poll(async () => (await panel.boundingBox())!.height).toBe(46)
+  await handle.press('ArrowUp')
+  await expect(panel).toHaveAttribute('data-open', 'true')
+  await expect.poll(async () => (await panel.boundingBox())!.height).toBe(120)
+  await page.getByRole('button', { name: 'Collapse bottom panel', exact: true }).click()
+  const start = async () => {
+    const box = (await handle.boundingBox())!
+    const origin = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+    await page.mouse.move(origin.x, origin.y)
+    await page.mouse.down()
+    await page.mouse.move(origin.x, origin.y - 134, { steps: 8 })
+    await expect(panel).toHaveAttribute('data-open', 'true')
+    await expect.poll(async () => (await panel.boundingBox())!.height).toBe(180)
+  }
+  await start()
+  await page.keyboard.press('Escape')
+  await page.mouse.up()
+  await expect(panel).toHaveAttribute('data-open', 'false')
+  await expect.poll(async () => (await panel.boundingBox())!.height).toBe(46)
+  await expect(page.locator('.n-resize-shield')).toHaveCount(0)
+  await start()
+  await page.mouse.up()
+  await page.keyboard.press('ControlOrMeta+j')
+  await expect(panel).toHaveAttribute('data-open', 'false')
+  await page.keyboard.press('ControlOrMeta+j')
+  await expect.poll(async () => (await panel.boundingBox())!.height).toBe(180)
+  await page.reload()
+  await page.keyboard.press('ControlOrMeta+j')
+  await expect.poll(async () => (await panel.boundingBox())!.height).toBe(180)
+  await expect(page.locator('.n-resize-shield')).toHaveCount(0)
+})
+
+test('keeps a splitter gesture maximum stable when collapsing changes competing sidebar space', async ({ page }) => {
+  await openReadonlyResizeWorkspace(page, { sidebar: 480, inspector: 640, panel: 260 }, 1280)
+  const inspector = page.locator('.inspector')
+  const handle = page.getByRole('separator', { name: 'Resize inspector', exact: true })
+  await expect.poll(async () => (await inspector.boundingBox())!.width).toBe(640)
+  const box = (await handle.boundingBox())!
+  const origin = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+  await page.mouse.move(origin.x, origin.y)
+  await page.mouse.down()
+  await page.mouse.move(origin.x + 404, origin.y, { steps: 8 })
+  await expect(inspector).toBeHidden()
+  await expect(handle).toHaveAttribute('data-collapsed', 'true')
+  await expect.poll(async () => (await page.locator('.primary-sidebar').boundingBox())!.width).toBe(480)
+  await page.mouse.move(origin.x + 140, origin.y, { steps: 8 })
+  await expect(inspector).toBeVisible()
+  await expect.poll(async () => (await inspector.boundingBox())!.width).toBe(500)
+  await page.mouse.up()
+  await expect.poll(async () => (await inspector.boundingBox())!.width).toBe(500)
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('numen.workbench.layout.v1')!).inspector)).toBe(500)
+  await expect(page.locator('.n-resize-shield')).toHaveCount(0)
+  await page.reload()
+  await expect.poll(async () => (await inspector.boundingBox())!.width).toBe(500)
+})
+
+test('reopens a collapsed sidebar for both creation entry points without submitting an action', async ({ page }) => {
+  const actions: string[] = []
+  page.on('request', request => {
+    if (request.url().endsWith('/api/console/call') && request.postDataJSON()?.kind === 'action') actions.push(request.postDataJSON().procedure)
+  })
+  await openReadonlyResizeWorkspace(page)
+  const sidebar = page.locator('.primary-sidebar')
+  const form = page.locator('form.automation-create-form')
+  for (const trigger of ['toolbar', 'keyboard'] as const) {
+    await page.getByRole('button', { name: 'Collapse sidebar', exact: true }).click()
+    await expect(sidebar).toBeHidden()
+    if (trigger === 'toolbar') await page.locator('.top-actions').getByRole('button', { name: 'Create', exact: true }).click()
+    else await page.keyboard.press('ControlOrMeta+Alt+n')
+    await expect(sidebar).toBeVisible()
+    await expect(form).toBeVisible()
+    await expect(form.getByLabel('Automation name', { exact: true })).toBeFocused()
+    await form.getByLabel('Automation name', { exact: true }).fill('Cancelled layout-only creation')
+    await form.getByRole('button', { name: 'Cancel', exact: true }).click()
+    await expect(form).toHaveCount(0)
+  }
+  expect(actions).toEqual([])
+  await expect(page.locator('.n-resize-shield')).toHaveCount(0)
 })

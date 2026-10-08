@@ -3,7 +3,7 @@ import { ref, shallowRef, toValue, watchEffect, type MaybeRefOrGetter } from 'vu
 import type { WorkbenchConsoleClient } from './types.js'
 
 /** Reconnects replace a bounded snapshot. Lifecycle fences protect against late Query results. */
-export function useLogFeed(client: MaybeRefOrGetter<WorkbenchConsoleClient | undefined>, query: MaybeRefOrGetter<LogQuery>, follow: MaybeRefOrGetter<boolean>) {
+export function useLogFeed(client: MaybeRefOrGetter<WorkbenchConsoleClient | undefined>, query: MaybeRefOrGetter<LogQuery>, follow: MaybeRefOrGetter<boolean>, active: MaybeRefOrGetter<boolean> = true) {
   const snapshot = shallowRef<LogSnapshot>()
   const loading = ref(false)
   const failed = ref(false)
@@ -18,9 +18,10 @@ export function useLogFeed(client: MaybeRefOrGetter<WorkbenchConsoleClient | und
     let timer: ReturnType<typeof setTimeout> | undefined
     let fetching = false
     let pendingRefresh = false
+    live.value = false
+    if (!toValue(active)) { loading.value = false; return }
     snapshot.value = undefined
     failed.value = false
-    live.value = false
     if (!currentClient) { loading.value = false; return }
     const fetch = () => {
       if (fetching) { pendingRefresh = true; return }

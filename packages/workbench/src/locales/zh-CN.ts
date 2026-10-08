@@ -33,6 +33,7 @@ export const zhCN = {
   "workbench.commands.openAutomation": "打开 {name}",
   "workbench.commands.togglePanel": "切换底部面板",
   "workbench.commands.toggleInspector": "切换检查器",
+  "workbench.commands.toggleSidebar": "切换侧栏",
   "workbench.commands.showPanel": "显示{panel}",
   "workbench.commands.runtimeRequired": "连接运行时后才能使用此命令。",
   "workbench.commands.readOnly": "当前草稿为只读状态。",
