@@ -547,8 +547,33 @@ passed scoped and full reruns; the verification record retains that limitation.
 seven new complex browser cases, reviewed 1440/780/390px screenshots, candidate
 isolation and parallel-work boundaries. No deployment or release.
 
-Next: N4-03 establishes measured 100/300-node and plugin capacity/performance
-baselines before making capacity claims or adding optimizations.
+### N4-03 capacity and interaction baseline — verified 2026-10-08
+
+An opt-in production Chromium harness now measures fixed 100/300/1000-node,
+six-level Automation fixtures and 100/300-entry plugin configuration trees. It
+records route readiness, event-to-render P50/P95, real save/Apply outcomes, DOM,
+long tasks and ten post-GC editor/Home lifecycle rounds. Raw samples and an
+allowlisted five-case summary are committed with local regression review budgets.
+The 1000-node case remains a pressure probe, not an official capacity promise.
+
+On Apple M4, Automation selection/field P95 is 101.3/102.6ms at 300 nodes and
+360.1/359.2ms at 1000. Home DOM/listener/subscription counts remain stable across
+all ten rounds; retained heap increases 288.5–402.1KiB across the five cases.
+These observations identify profiling candidates without asserting a root cause
+or the absence of every leak. No product optimization is included.
+
+An independent source archive of `2f44812` plus only this module passed typecheck,
+production/example builds, 128 Vitest files / 886 tests, all 93 existing browser
+cases and all five formal benchmark cases. Three additional Automation diagnostic
+cases validate the final mobile screenshot wait. Concurrent page-layout work is
+excluded from both the commit and these results.
+
+[N4-03 verification](docs/verification/workbench-capacity-2026-10-08.md) records
+measurement definitions, exact environment/build identity, retained numeric data,
+reviewed screenshots, budgets and limitations. No deployment or release.
+
+Next: profile 300/1000-node selection and field commits to establish the actual
+projection/render/layout bottleneck before choosing a targeted optimization.
 
 M0/M1 foundation implemented and verified: independent Console/Workbench composition,
 v2 native groups and explicit migration, v1 compatibility, two sets of ten lifecycle cycles,

@@ -24,6 +24,7 @@
     "dev": "pnpm numen start",
     "start": "node packages/cli/dist/bin.js start",
     "test:e2e": "pnpm build && pnpm build:examples && playwright test",
+    "bench:workbench": "pnpm build && tsc -p benchmarks/workbench/tsconfig.json && playwright test --config benchmarks/workbench/playwright.config.ts",
     "release:verify": "pnpm typecheck && pnpm test && pnpm test:e2e && pnpm numen config validate && pnpm numen doctor",
     "image:build": "node scripts/build-image.mjs",
     "image:smoke": "node scripts/smoke-image.mjs",
