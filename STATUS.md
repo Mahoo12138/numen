@@ -598,9 +598,34 @@ unchanged exact-width assertion; it passed three repeated checks and the full ru
 records profiles, raw numeric comparisons, exact candidate/build identities,
 cache boundaries and validation. No deployment or release.
 
-Next: isolate the per-node `automationStepEditOptions` copy-safety traversal in
-flow rendering, preserving Source command validation while avoiding redundant
-work. Parameterized translation remains a separate measured cost.
+### Flow move eligibility projection — verified 2026-10-08
+
+Drag handles now read a per-component computed set of movable IDs derived once
+from the complete Source, instead of invoking full copy-safety validation for
+every rendered node. Root/mandatory slots, empty and duplicate IDs, opaque
+extensions and focused views retain their existing semantics. Menus, drag-start
+checks and authoritative MOVE_TO/COPY_TO command validation are unchanged.
+
+A real render regression reproduced 72/200 copy-validation clones at 100/300
+nodes; the same renders now clone zero times with identical eligible handles.
+Against a fresh `30e0dfc` baseline, 300-node selection/field P95 falls from
+79.1/75.9ms to 74.1/69.5ms, and 1000-node P95 falls from 271.3/274.1ms to
+227.8/228.7ms. The 300-node locate P95 rises 0.9ms to 33.5ms; it is retained in
+the report. All five benchmark cases meet the unchanged local budgets, with stable
+Home resource counts and 333.3–393.6KiB retained heap growth over ten rounds.
+
+The isolated candidate passes production/example builds, typecheck, 131 Vitest
+files / 923 tests and all 103 browser cases. New browser coverage checks the same node moving between a
+required slot and sequence membership, focus, real move/save/Undo, and mobile
+navigation. The 1000-node case remains a pressure probe.
+
+[Move eligibility verification](docs/verification/workbench-move-eligibility-2026-10-08.md)
+records raw comparisons, regression evidence and exact candidate identities.
+No deployment or release.
+
+Next: consolidate N0–N4 acceptance against the plan and run local public-package
+consumer checks before proposing any further product scope. Remaining pressure
+costs, including parameterized translation, stay documented diagnostic candidates.
 
 M0/M1 foundation implemented and verified: independent Console/Workbench composition,
 v2 native groups and explicit migration, v1 compatibility, two sets of ten lifecycle cycles,

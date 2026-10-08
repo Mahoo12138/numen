@@ -83,3 +83,4 @@
 - [N4-02 长流程面板与容器上下文验收](verification/flow-context-2026-10-08.md)
 - [N4-03 Workbench 容量与交互性能基线](verification/workbench-capacity-2026-10-08.md)
 - [Workbench 文案解析性能优化与前后对照](verification/workbench-render-performance-2026-10-08.md)
+- [Workbench 拖拽资格计算优化与前后对照](verification/workbench-move-eligibility-2026-10-08.md)

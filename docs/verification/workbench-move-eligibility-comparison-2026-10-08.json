@@ -1,0 +1,350 @@
+{
+  "schemaVersion": 1,
+  "kind": "workbench-move-eligibility-comparison",
+  "productBase": "30e0dfcef7d23f7fab8111f7cb8a5c26e6d802b1",
+  "candidateProductFiles": {
+    "packages/workbench/src/StructuredAutomationFlow.tsx": {
+      "sha256": "67640ec4213d58dabd338d202b4c24840b6fad2ed9722fd4e2af46f2bceffc4e"
+    },
+    "packages/workbench/src/automation-source-editing.ts": {
+      "sha256": "36b2a6d02aa29a732851615f442fbadf9cb44a33f3162ce65608ee7738982eea"
+    }
+  },
+  "environment": {
+    "workbenchAssetSha256": "4594bf04cf27101dbb4b5b09276478bfc74e4aba171f27590ce24c7e465f63cc",
+    "sourceHead": "30e0dfcef7d23f7fab8111f7cb8a5c26e6d802b1",
+    "cpu": "Apple M4",
+    "os": "darwin",
+    "arch": "arm64",
+    "release": "25.6.0",
+    "node": "v22.14.0",
+    "chromiumVersion": "153.0.8010.12",
+    "logicalCpus": 10,
+    "memoryBytes": 25769803776,
+    "viewport": {
+      "width": 1440,
+      "height": 960
+    }
+  },
+  "before": [
+    {
+      "id": "automation-1000",
+      "measuredAt": "2026-10-08T13:38:30.291Z",
+      "reportedSourceHead": "30e0dfc",
+      "workbenchAssetSha256": "8fcfc9fa4e35070a6a612d90122a75733c782f5a5436c58b6906bd32d7095a92",
+      "fixtureSha256": "7a3310c29438b9d9b6a8e1c7fa68dc0b263e87a413a42cdd890eda84fb24d4ad",
+      "settings": {
+        "samples": 20,
+        "coldTrials": 3,
+        "lifecycleRounds": 10
+      },
+      "firstInteractive": {
+        "count": 3,
+        "samplesMs": [
+          498,
+          496.89999997615814,
+          499.69999998807907
+        ],
+        "p50Ms": 498,
+        "maxMs": 499.69999998807907
+      },
+      "latency": {
+        "nodeSelectionWarmup": {
+          "count": 1,
+          "samplesMs": [
+            268.4000000357628
+          ],
+          "p50Ms": 268.4000000357628,
+          "p95Ms": 268.4000000357628,
+          "maxMs": 268.4000000357628
+        },
+        "nodeSelection": {
+          "count": 20,
+          "samplesMs": [
+            267.89999997615814,
+            259.10000002384186,
+            263.4000000357628,
+            259.19999998807907,
+            260.80000001192093,
+            262,
+            274.89999997615814,
+            269.10000002384186,
+            269.5,
+            269.0999999642372,
+            271.30000001192093,
+            269.19999998807907,
+            266.4000000357628,
+            268.5,
+            270,
+            267.69999998807907,
+            269.60000002384186,
+            268.80000001192093,
+            270.69999998807907,
+            269.7999999523163
+          ],
+          "p50Ms": 268.80000001192093,
+          "p95Ms": 271.30000001192093,
+          "maxMs": 274.89999997615814
+        },
+        "fieldCommitRenderWarmup": {
+          "count": 1,
+          "samplesMs": [
+            270.89999997615814
+          ],
+          "p50Ms": 270.89999997615814,
+          "p95Ms": 270.89999997615814,
+          "maxMs": 270.89999997615814
+        },
+        "fieldCommitRender": {
+          "count": 20,
+          "samplesMs": [
+            271.5,
+            269.69999998807907,
+            274.0999999642372,
+            272.39999997615814,
+            268.2999999523163,
+            269.10000002384186,
+            269.60000002384186,
+            270.30000001192093,
+            272.89999997615814,
+            270.80000001192093,
+            269.60000002384186,
+            269.69999998807907,
+            271,
+            267.4000000357628,
+            275.39999997615814,
+            270.80000001192093,
+            272.39999997615814,
+            271.39999997615814,
+            270.39999997615814,
+            269.19999998807907
+          ],
+          "p50Ms": 270.39999997615814,
+          "p95Ms": 274.0999999642372,
+          "maxMs": 275.39999997615814
+        },
+        "hiddenNodeLocateWarmup": {
+          "count": 1,
+          "samplesMs": [
+            60.40000003576279
+          ],
+          "p50Ms": 60.40000003576279,
+          "p95Ms": 60.40000003576279,
+          "maxMs": 60.40000003576279
+        },
+        "hiddenNodeLocate": {
+          "count": 20,
+          "samplesMs": [
+            56.5,
+            56.59999996423721,
+            56.5,
+            56.69999998807907,
+            56.59999996423721,
+            56.40000003576279,
+            55.89999997615814,
+            55.5,
+            55.799999952316284,
+            55.89999997615814,
+            55.89999997615814,
+            55.90000003576279,
+            56,
+            58.30000001192093,
+            56.10000002384186,
+            55.69999998807907,
+            55.90000003576279,
+            56.19999998807907,
+            55.89999997615814,
+            56.40000003576279
+          ],
+          "p50Ms": 56,
+          "p95Ms": 56.69999998807907,
+          "maxMs": 58.30000001192093
+        }
+      }
+    },
+    {
+      "id": "automation-300",
+      "measuredAt": "2026-10-08T13:36:36.624Z",
+      "reportedSourceHead": "30e0dfc",
+      "workbenchAssetSha256": "8fcfc9fa4e35070a6a612d90122a75733c782f5a5436c58b6906bd32d7095a92",
+      "fixtureSha256": "69b717f0943fb74815198cd01138cd50f5c668ca7ccb116dc7519afc445fb78b",
+      "settings": {
+        "samples": 20,
+        "coldTrials": 3,
+        "lifecycleRounds": 10
+      },
+      "firstInteractive": {
+        "count": 3,
+        "samplesMs": [
+          308.89999997615814,
+          228.0999999642372,
+          234.20000004768372
+        ],
+        "p50Ms": 234.20000004768372,
+        "maxMs": 308.89999997615814
+      },
+      "latency": {
+        "nodeSelectionWarmup": {
+          "count": 1,
+          "samplesMs": [
+            83
+          ],
+          "p50Ms": 83,
+          "p95Ms": 83,
+          "maxMs": 83
+        },
+        "nodeSelection": {
+          "count": 20,
+          "samplesMs": [
+            77.30000001192093,
+            76.89999997615814,
+            78.39999997615814,
+            75.30000001192093,
+            76.69999998807907,
+            75,
+            76,
+            80.40000003576279,
+            78.19999998807907,
+            78.09999996423721,
+            75.89999997615814,
+            76.29999995231628,
+            75.39999997615814,
+            76.40000003576279,
+            75.80000001192093,
+            75.30000001192093,
+            78.60000002384186,
+            79.10000002384186,
+            76.70000004768372,
+            76.69999998807907
+          ],
+          "p50Ms": 76.69999998807907,
+          "p95Ms": 79.10000002384186,
+          "maxMs": 80.40000003576279
+        },
+        "fieldCommitRenderWarmup": {
+          "count": 1,
+          "samplesMs": [
+            78.39999997615814
+          ],
+          "p50Ms": 78.39999997615814,
+          "p95Ms": 78.39999997615814,
+          "maxMs": 78.39999997615814
+        },
+        "fieldCommitRender": {
+          "count": 20,
+          "samplesMs": [
+            75.5,
+            75,
+            74.09999996423721,
+            73.69999998807907,
+            74.5,
+            74.89999997615814,
+            74.70000004768372,
+            74.69999998807907,
+            74,
+            74.69999998807907,
+            75.30000001192093,
+            75.40000003576279,
+            75.89999997615814,
+            78.09999996423721,
+            74,
+            75.80000001192093,
+            73.80000001192093,
+            73.80000001192093,
+            74.90000003576279,
+            73.89999997615814
+          ],
+          "p50Ms": 74.69999998807907,
+          "p95Ms": 75.89999997615814,
+          "maxMs": 78.09999996423721
+        },
+        "hiddenNodeLocateWarmup": {
+          "count": 1,
+          "samplesMs": [
+            31.600000023841858
+          ],
+          "p50Ms": 31.600000023841858,
+          "p95Ms": 31.600000023841858,
+          "maxMs": 31.600000023841858
+        },
+        "hiddenNodeLocate": {
+          "count": 20,
+          "samplesMs": [
+            32,
+            30.80000001192093,
+            32.30000001192093,
+            30.899999976158142,
+            31,
+            32,
+            31.099999964237213,
+            32.60000002384186,
+            31.899999976158142,
+            31.5,
+            32.69999998807907,
+            32.30000001192093,
+            31.30000001192093,
+            31.80000001192093,
+            32.39999997615814,
+            32,
+            31.5,
+            31.899999976158142,
+            32.39999997615814,
+            31.600000023841858
+          ],
+          "p50Ms": 31.899999976158142,
+          "p95Ms": 32.60000002384186,
+          "maxMs": 32.69999998807907
+        }
+      }
+    }
+  ],
+  "comparison": [
+    {
+      "id": "automation-1000",
+      "operation": "nodeSelection",
+      "beforeP95Ms": 271.30000001192093,
+      "afterP95Ms": 227.80000001192093,
+      "p95ReductionPercent": 16.033910799148032
+    },
+    {
+      "id": "automation-1000",
+      "operation": "fieldCommitRender",
+      "beforeP95Ms": 274.0999999642372,
+      "afterP95Ms": 228.70000004768372,
+      "p95ReductionPercent": 16.56329803811638
+    },
+    {
+      "id": "automation-1000",
+      "operation": "hiddenNodeLocate",
+      "beforeP95Ms": 56.69999998807907,
+      "afterP95Ms": 49.80000001192093,
+      "p95ReductionPercent": 12.169312129821583
+    },
+    {
+      "id": "automation-300",
+      "operation": "nodeSelection",
+      "beforeP95Ms": 79.10000002384186,
+      "afterP95Ms": 74.10000002384186,
+      "p95ReductionPercent": 6.321112513897509
+    },
+    {
+      "id": "automation-300",
+      "operation": "fieldCommitRender",
+      "beforeP95Ms": 75.89999997615814,
+      "afterP95Ms": 69.5,
+      "p95ReductionPercent": 8.43214753381887
+    },
+    {
+      "id": "automation-300",
+      "operation": "hiddenNodeLocate",
+      "beforeP95Ms": 32.60000002384186,
+      "afterP95Ms": 33.5,
+      "p95ReductionPercent": -2.7607361211654333
+    }
+  ],
+  "notes": [
+    "Before reports retain the supplied short source revision 30e0dfc; productBase records the resolved archive commit. The baseline asset hash matches the previously verified 30e0dfc build.",
+    "After sourceHead identifies the archive base; the candidate files and asset hash identify the patched product.",
+    "Positive reduction means faster; cold navigation has only three samples; 1000 nodes remains a pressure probe."
+  ]
+}

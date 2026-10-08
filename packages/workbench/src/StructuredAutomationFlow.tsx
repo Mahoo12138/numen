@@ -3,7 +3,7 @@ import { Button, SelectMenu } from '@numenjs/components'
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Clipboard, Copy, Focus, GripVertical, ListTree, MoreHorizontal, Scissors, Trash2 } from '@lucide/vue'
 import { computed, nextTick, ref, watch, type VNodeChild } from 'vue'
 import { AutomationQuickPicker } from './AutomationQuickPicker.js'
-import { automationRelativeInsertTarget, automationStepEditOptions } from './automation-source-editing.js'
+import { automationMovableNodeIds, automationRelativeInsertTarget, automationStepEditOptions } from './automation-source-editing.js'
 import type { AutomationInsertTarget, AutomationSourceCommand } from './automation-source-editing.js'
 import type { WorkbenchAutomationInsertCatalog, WorkbenchAutomationInsertItem } from './contracts.js'
 import type { AutomationStep } from './model.js'
@@ -58,6 +58,8 @@ export const StructuredAutomationFlow = defineSetupComponent<StructuredAutomatio
   const destination = ref('')
   const removal = ref<{ key: string; label: string; command: AutomationSourceCommand }>()
   const metadata = computed(() => new Map(props.steps.map(step => [step.sourceId, step])))
+  // Handles need only sequence membership; full copy validation stays in actions.
+  const movableNodeIds = computed(() => automationMovableNodeIds(props.source))
   // Focus is a viewport choice. Persisted folding still belongs to Presentation.
   const focusId = ref<string>()
   const containers = computed(() => new Map(automationFlowContainers(props.source).map(container => [container.node.id, container])))
@@ -262,7 +264,7 @@ export const StructuredAutomationFlow = defineSetupComponent<StructuredAutomatio
     const expandedActions = actionNode.value === node.id
     return <>
       <div class="structured-node-header">
-        {props.canEdit && automationStepEditOptions(props.source, node.id).canMoveTo ? <button class="structure-drag-handle"
+        {props.canEdit && movableNodeIds.value.has(node.id) ? <button class="structure-drag-handle"
           draggable="true" data-drag-node-id={node.id} aria-label={t('workbench.structure.drag', { label: step.label })}
           title={t('workbench.structure.drag', { label: step.label })} onDragstart={event => drag.start(event, node.id)}
           onDragend={drag.cancel} type="button" tabindex={-1}><GripVertical size={15} aria-hidden="true" /></button> : null}

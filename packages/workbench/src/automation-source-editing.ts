@@ -394,6 +394,17 @@ export interface AutomationStepEditOptions {
   canCopy: boolean
 }
 
+/** Render-time move eligibility by ID; commands still validate their current Source and destination. */
+export function automationMovableNodeIds(source: AutomationSource): ReadonlySet<string> {
+  const ids = new Set<string>()
+  for (const trigger of source.triggers) if (trigger.id) ids.add(trigger.id)
+  visitControls(source.flow, node => {
+    // Only sequence members move independently; branch/body slots retain their required identity.
+    if (node.type === 'block') for (const child of node.steps) if (child.id) ids.add(child.id)
+  })
+  return ids
+}
+
 function sequencePosition(source: AutomationSource, nodeId: string): { block: BlockSource; index: number } | undefined {
   let position: { block: BlockSource; index: number } | undefined
   // Find only Block.steps membership; branch/body slots keep their required identity.

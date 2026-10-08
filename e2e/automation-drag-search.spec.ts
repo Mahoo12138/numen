@@ -213,6 +213,65 @@ test('cancels a drag when its target disappears remotely and never falls back to
   await clean(page)
 })
 
+test('refreshes drag eligibility when the same node moves between a required slot and a sequence', async ({ page }, testInfo) => {
+  const initial: AutomationSource = { triggers: [], flow: { type: 'block', id: 'root', steps: [
+    { type: 'if', id: 'condition', condition: { type: 'literal', value: true }, then: { type: 'block', id: 'changing', steps: [wait('child')] } },
+    wait('tail'),
+  ] } }
+  const id = await openFixture(page, 'Changing drag eligibility', initial, []), requests = saves(page)
+  const handle = (nodeId: string) => page.locator(`[data-drag-node-id="${nodeId}"]`)
+  await expect(page.locator('[data-block-id="changing"]')).toBeVisible()
+  await expect(handle('changing')).toHaveCount(0)
+  await expect(handle('child')).toHaveCount(1)
+  const focusChanging = async () => {
+    await step(page, 'child').click()
+    if ((page.viewportSize()?.width ?? 1440) < 900) {
+      await page.locator('.inspector-close').click()
+      await expect(page.locator('.inspector')).not.toBeInViewport()
+    }
+    await page.getByRole('button', { name: 'Focus selected container', exact: true }).click()
+    await expect(page.locator('.structured-flow')).toHaveAttribute('data-focus-container-id', 'changing')
+  }
+  await focusChanging()
+  await expect(handle('changing')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Show entire flow', exact: true }).click()
+
+  const current = draft(id), next = structuredClone(current.source)
+  const root = next.flow as BlockSource
+  const condition = root.steps[0]!
+  if (condition.type !== 'if') throw new Error('Expected fixture condition')
+  root.steps.push(condition.then)
+  condition.then = { type: 'block', id: 'replacement', steps: [] }
+  application.context.automations.saveDraft({ automationId: id, expectedVersion: current.version, source: next, presentation: current.presentation })
+  await expect(page.locator('[data-block-id="replacement"]')).toBeVisible()
+  await expect(handle('changing')).toHaveCount(1)
+  await expect(handle('replacement')).toHaveCount(0)
+  await focusChanging()
+  await expect(handle('changing')).toHaveCount(1)
+  await page.getByRole('button', { name: 'Show entire flow', exact: true }).click()
+  expect(requests).toEqual([])
+  await drag(page, 'changing', 'replacement', 'inside')
+  await expect.poll(() => block(id, 'replacement').steps.map(node => node.id)).toEqual(['changing'])
+  await oneUndo(page, id, next)
+
+  const restored = draft(id)
+  application.context.automations.saveDraft({ automationId: id, expectedVersion: restored.version, source: initial, presentation: restored.presentation })
+  await expect(page.locator('[data-block-id="replacement"]')).toHaveCount(0)
+  await expect(page.locator('[data-block-id="changing"]')).toBeVisible()
+  await expect(handle('changing')).toHaveCount(0)
+  await expect(handle('child')).toHaveCount(1)
+  expect(source(id)).toEqual(initial)
+  await clean(page)
+  await page.screenshot({ path: testInfo.outputPath('drag-eligibility-desktop.png') })
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.locator('.inspector-close').click()
+  await focusChanging()
+  await expect(handle('changing')).toHaveCount(0)
+  await expect(handle('child')).toHaveCount(1)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await page.screenshot({ path: testInfo.outputPath('drag-eligibility-mobile.png') })
+})
+
 test('cancels an in-flight drag when an independent client causes a real Draft conflict', async ({ page }) => {
   const initial: AutomationSource = { triggers: [], flow: { type: 'block', id: 'root', steps: [echo('editable'), wait('moving'), { type: 'block', id: 'destination', steps: [] }] } }
   const id = await openFixture(page, 'Drag conflict', initial, []), before = structuredClone(draft(id))
