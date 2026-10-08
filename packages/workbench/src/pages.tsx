@@ -164,15 +164,14 @@ const RunsPage = defineSetupComponent<WorkbenchPageProps>('RunsPage', ['consoleC
     props.navigation?.navigate(coreWorkbenchRunFlowRoute, { parameters: { id: runId }, query: { from: props.navigation.route.search } })
   }
   return () => (
-    <main class="main-workbench core-page">
-      <header class="core-page-header"><Play size={22} /><div><h1>{t('workbench.runs')}</h1><p>{t('workbench.inspectDurableAutomationExecutionsAndTheirOutcomes')}</p></div></header>
+    <main class="main-workbench core-page overview-page">
+      <header class="core-page-header core-page-header-with-actions"><Play size={22} /><div class="core-page-heading"><h1>{t('workbench.runs')}</h1><p>{t('workbench.inspectDurableAutomationExecutionsAndTheirOutcomes')}</p></div><div class="core-page-actions"><Button variant="secondary" type="button" onClick={reload}>{t('workbench.management.refresh')}</Button></div></header>
       <section class="runs-filters" aria-label={t('workbench.navigation.runFilters')}>
         <label>{t('workbench.status')}<select aria-label={t('workbench.status')} value={filters.value.get('status') ?? ''} onChange={event => { setFilters({ history: undefined, status: (event.target as HTMLSelectElement).value || undefined, cursor: undefined }) }}>
           <option value="">{t('workbench.navigation.allStatuses')}</option>{(['QUEUED', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLING', 'CANCELLED'] as const).map(status => <option value={status}>{statusLabel(status)}</option>)}
         </select></label>
-        {filters.value.get('automationId') ? <span>{t('workbench.automation')}: <code>{filters.value.get('automationId')}</code></span> : null}
         <Button variant="secondary" type="button" onClick={() => { setFilters({ history: undefined, status: undefined, automationId: undefined, cursor: undefined }) }}>{t('workbench.navigation.clearFilters')}</Button>
-        <Button variant="secondary" type="button" onClick={reload}>{t('workbench.management.refresh')}</Button>
+        {filters.value.get('automationId') ? <span class="runs-automation-filter">{t('workbench.automation')}: <code>{filters.value.get('automationId')}</code></span> : null}
       </section>
       <RunsIndex
         onNext={goNext}
@@ -274,9 +273,8 @@ const ConnectionsPage = defineSetupComponent<WorkbenchPageProps>('ConnectionsPag
   const desiredState = useConnectionDesiredState(() => props.consoleClient, refresh)
   const configuration = ref<'create' | string>()
   return () => (
-    <main class="main-workbench core-page">
-      <header class="core-page-header"><Cable size={22} /><div><h1>{t('workbench.connections')}</h1><p>{t('workbench.manageTheSystemsAndAccountsAvailableToAutomations')}</p></div></header>
-      <div class="credential-navigation"><Button variant="secondary" type="button" onClick={() => { reload(); reloadUsage() }}>{t('workbench.management.refresh')}</Button><Button variant="secondary" class="secondary-button" disabled={!props.navigation} onClick={() => props.navigation?.navigate(coreWorkbenchCredentialsRoute)} type="button">{t('workbench.manageCredentials')}</Button></div>
+    <main class="main-workbench core-page overview-page">
+      <header class="core-page-header core-page-header-with-actions"><Cable size={22} /><div class="core-page-heading"><h1>{t('workbench.connections')}</h1><p>{t('workbench.manageTheSystemsAndAccountsAvailableToAutomations')}</p></div><div class="core-page-actions"><Button variant="secondary" type="button" onClick={() => { reload(); reloadUsage() }}>{t('workbench.management.refresh')}</Button><Button variant="secondary" disabled={!props.navigation} onClick={() => props.navigation?.navigate(coreWorkbenchCredentialsRoute)} type="button">{t('workbench.manageCredentials')}</Button></div></header>
       <ConnectionsIndex
         {...(props.consoleClient ? { client: props.consoleClient } : {})}
         {...(configuration.value ? { configuration: configuration.value } : {})}
