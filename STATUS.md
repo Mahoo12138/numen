@@ -411,8 +411,33 @@ the fixes discovered during verification, exact limits and logs. There is no mig
 new user configuration. Cross-Automation cloning, other browsers and deployment remain outside
 this module.
 
-Next: N3-01 adds safe Schema-driven plugin configuration forms sharing the existing
-JSON session, fingerprint and Preview/Apply flow, with unknown-field and secret protection.
+### N3-01 safe plugin configuration forms — verified 2026-10-08
+
+Public plugin Schemas now produce a bounded, secret-free display DTO for scalar, enum,
+nested object and array fields, with explicit JSON fallback for unsupported shapes.
+The default form and Advanced JSON edit one configuration in the existing fixed-fingerprint
+session and Preview/Apply flow. Unknown fields and explicit empty values survive, while
+omitted defaults stay omitted. Cross-field Host failures preserve local edits for correction.
+
+Plugin rows now show names, runtime state and short reasons. Instance/package identity,
+self/inherited enablement and read-only internal plugins live in the details region.
+Console and Workbench remain independent product instances. Missing or uninspectable
+Schemas, secrets, unloaded instances, protected management entries and non-JSON values
+remain read-only; no secret editor or impact-analysis policy is introduced.
+
+Verification: 117 Vitest files / 712 tests, typecheck, production and example builds,
+and all 69 Chromium scenarios passed. The eight new browser scenarios verify exact
+Preview/Apply payloads and disk contents, invalid input and navigation protection,
+server validation, two-client CAS, failed reads, lost responses and instance isolation.
+Final desktop and Chinese mobile screenshots were viewed without horizontal overflow.
+
+[N3-01 verification](docs/verification/plugin-config-form-2026-10-08.md) records the
+Schema/JSON bounds and regressions for accessor execution, non-finite YAML preservation,
+validator mutation and rendering-budget changes with pending input. All test data was
+temporary. There is no database migration, dependency upgrade, deployment or release.
+
+Next: N3-02 adds bounded impact analysis with explicit relationships, evidence and
+unknown reasons, reusing the existing registration ownership observations.
 
 M0/M1 foundation implemented and verified: independent Console/Workbench composition,
 v2 native groups and explicit migration, v1 compatibility, two sets of ten lifecycle cycles,

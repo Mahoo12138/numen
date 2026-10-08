@@ -1,11 +1,16 @@
 import { expect, test, type Page } from '@playwright/test'
 import { loadConfig, writeConfig, type HostConfigMutationRequest } from '../packages/config/dist/index.js'
 import { startRuntime, type NumenApplication } from '../packages/runtime/dist/index.js'
+import demoIntegrationPlugin from '../packages/integration-demo/dist/index.js'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 let application: NumenApplication, directory: string, configPath: string
+const schema = createRequire(new URL('../packages/runtime/package.json', import.meta.url))('schemastery')
+const editableDemo = demoIntegrationPlugin as typeof demoIntegrationPlugin & { Config?: unknown }
+let originalSchema: unknown
 const originalConfig = { retained: 'original value', nested: { unchanged: true } }
 interface BrowserErrors {
   page: string[]
@@ -31,6 +36,10 @@ function expectNetworkError(page: Page, message: string) {
 }
 
 test.beforeEach(async ({ page }) => {
+  // The N0 JSON editing regressions require an explicitly public, nonsecret Schema.
+  // Keep this test-only declaration scoped to the fixture rather than widening production policy.
+  originalSchema = editableDemo.Config
+  editableDemo.Config = schema.object({})
   observedPages = []
   observePage(page)
   directory = await mkdtemp(join(tmpdir(), 'numen-plugin-editing-e2e-'))
@@ -52,7 +61,12 @@ test.afterEach(async () => {
       expect(errors.console).toEqual([])
       for (const expected of errors.expected) expect(expected.count, expected.message).toBe(1)
     }
-  } finally { await application?.stop(); if (directory) await rm(directory, { recursive: true, force: true }) }
+  } finally {
+    await application?.stop()
+    if (originalSchema === undefined) delete editableDemo.Config
+    else editableDemo.Config = originalSchema
+    if (directory) await rm(directory, { recursive: true, force: true })
+  }
 })
 
 async function plugins(page: Page) {
@@ -63,6 +77,7 @@ async function plugins(page: Page) {
 async function editConfig(page: Page) {
   await page.locator('[data-entry-id="demo"]').getByRole('button', { name: 'Edit instance', exact: true }).click()
   await page.locator('.plugin-editor').getByLabel('Operation', { exact: true }).selectOption('setConfig')
+  await page.locator('.plugin-editor').getByRole('button', { name: 'Advanced JSON', exact: true }).click()
   return page.locator('.plugin-editor').getByLabel('Plugin configuration (JSON)', { exact: true })
 }
 async function save(page: Page) {

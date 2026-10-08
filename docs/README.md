@@ -76,3 +76,4 @@
 - [N2-01 固定快照查看验收](verification/version-workspace-2026-10-08.md)
 - [N2-02 固定版本语义比较验收](verification/semantic-comparison-2026-10-08.md)
 - [N2-03 固定版本恢复到草稿验收](verification/draft-restoration-2026-10-08.md)
+- [N3-01 安全插件配置表单验收](verification/plugin-config-form-2026-10-08.md)

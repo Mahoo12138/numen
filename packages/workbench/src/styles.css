@@ -1207,14 +1207,29 @@ button.command-center > span { min-width: 0; flex: 1; padding: 0 8px; overflow: 
 
 @media (max-width: 899px) { .top-bar { grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; } button.command-center { min-width: 0; } button.command-center > span { font-size: 12px; } }
 /* Host management and observed system state. */
-.management-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, .65fr); gap: 16px; align-items: start; }
-.management-layout:not(:has(.plugin-editor)) { grid-template-columns: minmax(0, 1fr); }
+.management-layout { display: grid; grid-template-columns: minmax(260px, .65fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+.management-layout:not(:has(.plugin-detail)) { grid-template-columns: minmax(0, 1fr); }
 .plugin-list { padding: 0; }
-.plugin-row { padding: 18px 20px; border-bottom: 1px solid var(--wb-border); min-width: 0; }
+.plugin-row { padding: 12px 16px; border-bottom: 1px solid var(--wb-border); min-width: 0; }
 .plugin-row:last-child { border-bottom: 0; }
 .plugin-row[data-parent="true"] { padding-left: 32px; border-left: 3px solid var(--wb-border); }
 .plugin-row header, .plugin-actions, .system-log-section > header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .plugin-row header { justify-content: space-between; }
+.plugin-row .plugin-entry-name { min-width: 0; height: auto; padding: 2px 0; justify-content: flex-start; text-align: start; white-space: normal; overflow-wrap: anywhere; }
+.plugin-row .plugin-entry-name strong { font-size: 13px; }
+.plugin-row .plugin-actions { margin-top: 8px; gap: 6px; }
+.plugin-row-reason { margin: 5px 0; color: var(--wb-muted); font-size: 11px; }
+.plugin-detail { min-width: 0; display: grid; gap: 16px; }
+.plugin-instance-facts { min-width: 0; padding: 18px 20px; border: 1px solid var(--wb-border); border-radius: 6px; background: var(--wb-surface); }
+.plugin-instance-facts h2 { margin: 0 0 12px; font-size: 16px; overflow-wrap: anywhere; }
+.plugin-instance-facts dl { display: grid; gap: 8px; margin: 0; font-size: 12px; }
+.plugin-instance-facts dl > div { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 12px; }
+.plugin-instance-facts dt { color: var(--wb-muted); }
+.plugin-instance-facts dd { margin: 0; overflow-wrap: anywhere; }
+.plugin-config-readonly { font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.plugin-internal { margin-top: 14px; font-size: 12px; }
+.plugin-internal li { display: flex; flex-wrap: wrap; gap: 6px; padding-block: 6px; overflow-wrap: anywhere; }
+.plugin-internal small { flex-basis: 100%; color: var(--wb-muted); }
 .plugin-row small, .plugin-row details small { display: block; color: var(--wb-muted); overflow-wrap: anywhere; }
 .plugin-row p, .plugin-row li, .plugin-preview p { overflow-wrap: anywhere; }
 .plugin-package, .plugin-protected, .system-observed { font-size: 12px; color: var(--wb-muted); }
@@ -1225,6 +1240,20 @@ button.command-center > span { min-width: 0; flex: 1; padding: 0 8px; overflow: 
 .plugin-editor form { gap: 16px; }
 .plugin-editor input, .plugin-editor select, .plugin-editor textarea, .runs-filters select { min-width: 0; width: 100%; padding: 8px; color: inherit; background: var(--wb-surface); border: 1px solid var(--wb-border); border-radius: 5px; font: inherit; }
 .plugin-editor textarea { font-family: var(--font-mono, monospace); resize: vertical; }
+.plugin-configuration, .plugin-config-form { min-width: 0; }
+.plugin-config-modes { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.plugin-config-modes [aria-pressed="true"] { border-color: var(--wb-accent); color: var(--wb-accent); }
+.plugin-config-help, .plugin-config-description, .plugin-config-default, .plugin-config-fallback, .plugin-config-limit { margin: 6px 0 10px; font-size: 12px; line-height: 1.6; color: var(--wb-muted); overflow-wrap: anywhere; }
+.plugin-config-form fieldset { min-width: 0; margin: 0 0 14px; padding: 14px; border: 1px solid var(--wb-border); border-radius: 5px; }
+.plugin-config-form > fieldset { padding: 0; border: 0; }
+.plugin-config-form legend { padding-inline: 5px; font-size: 12px; font-weight: 600; overflow-wrap: anywhere; max-width: 100%; }
+.plugin-config-field { min-width: 0; display: grid; gap: 6px; margin-block: 0 18px; }
+.plugin-config-field > label { font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
+.plugin-config-field > button { justify-self: start; }
+.plugin-config-requirement { display: block; font-size: 10px; color: var(--wb-muted); margin-bottom: 6px; }
+.plugin-config-array-item { min-width: 0; padding-block: 10px; border-bottom: 1px solid var(--wb-border); }
+.plugin-config-array-item > .plugin-config-field { margin-bottom: 8px; }
+.plugin-config-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .plugin-preview { margin-top: 16px; }
 .plugin-preview pre { max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
 .plugin-baseline { padding: 12px; border: 1px solid var(--wb-border); border-radius: 5px; }

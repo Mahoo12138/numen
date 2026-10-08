@@ -8,6 +8,27 @@ export interface HostInternalPlugin {
   ownerEntryId: string
 }
 
+/** Bounded display metadata only. Host validation remains authoritative. */
+export interface HostConfigSchemaNode {
+  type: 'string' | 'number' | 'boolean' | 'enum' | 'object' | 'array' | 'json'
+  required: boolean
+  /** Defaults are intentionally withheld and must never be materialized by the editor. */
+  hasDefault?: true
+  description?: string
+  min?: number
+  max?: number
+  step?: number
+  options?: Array<{ label: string; value: string | number | boolean | null }>
+  fields?: HostConfigSchemaField[]
+  item?: HostConfigSchemaNode
+  fallbackReason?: 'unsupported' | 'cycle' | 'limit' | 'unsafe-metadata'
+}
+
+export interface HostConfigSchemaField extends HostConfigSchemaNode {
+  name: string
+  label: string
+}
+
 export interface HostPluginEntry {
   id: string
   key: string
@@ -25,6 +46,7 @@ export interface HostPluginEntry {
   children?: string[]
   config: Record<string, unknown>
   configEditable: boolean
+  configSchema?: HostConfigSchemaNode
   configReadOnlyReason?: string
   protected: boolean
   internal: HostInternalPlugin[]

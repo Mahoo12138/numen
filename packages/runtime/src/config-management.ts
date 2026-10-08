@@ -2,7 +2,7 @@ import { redactText } from '@numenjs/logging'
 import { Service, type Context, type Fiber, resolveConfig } from 'cordis'
 import type { Entry, EntryOptions } from '@cordisjs/plugin-loader'
 import {
-  commitManagedConfig, flattenRuntimeEntries, HostConfigError, mutateManagedConfig, readManagedConfig,
+  commitManagedConfig, flattenRuntimeEntries, HostConfigError, inspectHostConfigSchema, mutateManagedConfig, readManagedConfig, sensitiveConfigKey,
   type HostConfigService, type HostConfigSnapshot, type HostConfigPreview, type HostConfigMutationResult,
   type HostConfigMutationRequest, type HostConfigOperation, type HostPluginState, type ManagedConfigDocument, type RuntimeEntry,
   type HostRegistrationRef, type HostRegistrationDiagnosis,
@@ -27,43 +27,48 @@ interface HostConfigurationOptions {
 }
 
 const stateNames: HostPluginState[] = ['PENDING', 'LOADING', 'ACTIVE', 'FAILED', 'DISPOSED', 'UNLOADING']
-const sensitiveKey = /secret|token|password|credential|authorization|cookie|private.?key|api.?key|^auth$|^key$/i
-interface ConfigSchemaShape {
-  type?: string
-  meta?: { role?: string }
-  dict?: Record<string, unknown>
-  inner?: unknown
-  list?: unknown[]
-}
-function schemaAlternatives(schemas: unknown[], seen = new Set<unknown>()): ConfigSchemaShape[] {
-  return schemas.flatMap(schema => {
-    if (!schema || (typeof schema !== 'object' && typeof schema !== 'function') || seen.has(schema)) return []
-    seen.add(schema)
-    const shape = schema as ConfigSchemaShape
-    return shape.type === 'union' || shape.type === 'intersect'
-      ? schemaAlternatives(shape.list ?? [], seen) : [shape]
-  })
-}
-function safeConfig(value: unknown, schemas: unknown[] = []): { value: unknown; sensitive: boolean } {
-  const alternatives = schemaAlternatives(schemas)
-  if (alternatives.some(schema => schema.meta?.role === 'secret')) return { value: '[redacted]', sensitive: true }
-  if (typeof value === 'string') {
-    const redacted = redactText(value)
-    return { value: redacted, sensitive: redacted !== value }
-  }
-  if (Array.isArray(value)) {
-    const children = value.map(child => safeConfig(child, alternatives.map(schema => schema.inner)))
-    return { value: children.map(child => child.value), sensitive: children.some(child => child.sensitive) }
-  }
-  if (!value || typeof value !== 'object') return { value, sensitive: false }
+// Schema-wide classification happens once through inspectHostConfigSchema.
+// Never revisit the live Schema while copying values into transport data.
+function safeConfig(value: unknown): { value: unknown; sensitive: boolean; unsafe: boolean } {
+  type Container = Record<string, unknown> | unknown[]
+  type Frame = { kind: 'value'; source: unknown; target: Container; key: string } | { kind: 'leave'; source: object }
+  const holder: Record<string, unknown> = {}
+  const frames: Frame[] = [{ kind: 'value', source: value, target: holder, key: 'value' }]
+  const active = new Set<object>()
   let sensitive = false
-  const entries = Object.entries(value).map(([key, child]) => {
-    if (sensitiveKey.test(key)) { sensitive = true; return [key, '[redacted]'] }
-    const childSchemas = alternatives.map(schema => schema.type === 'dict' ? schema.inner : schema.dict?.[key])
-    const result = safeConfig(child, childSchemas); sensitive ||= result.sensitive
-    return [key, result.value]
-  })
-  return { value: Object.fromEntries(entries), sensitive }
+  let unsafe = false
+  while (frames.length) {
+    const frame = frames.pop()!
+    if (frame.kind === 'leave') { active.delete(frame.source); continue }
+    const { source, target, key } = frame
+    let copy = source
+    if (typeof source === 'string') {
+      copy = redactText(source)
+      sensitive ||= copy !== source
+    } else if (source !== null && typeof source === 'object') {
+      const array = Array.isArray(source)
+      const prototype = Object.getPrototypeOf(source)
+      if ((!array && prototype !== Object.prototype && prototype !== null) || active.has(source) || Object.getOwnPropertySymbols(source).length) { unsafe = true; continue }
+      active.add(source)
+      frames.push({ kind: 'leave', source })
+      copy = array ? [] : {}
+      const names = Object.getOwnPropertyNames(source)
+      const keys = array ? names.filter(name => name !== 'length') : names
+      if (array && (keys.length !== source.length || keys.some((name, index) => name !== String(index)))) { unsafe = true; continue }
+      for (let index = keys.length - 1; index >= 0; index--) {
+        const childKey = keys[index]!, descriptor = Object.getOwnPropertyDescriptor(source, childKey)!
+        // JSON ignores non-enumerable values and invokes enumerable getters.
+        // Either behavior loses the original configuration's representation.
+        if (!('value' in descriptor) || !descriptor.enumerable) { unsafe = true; continue }
+        if (sensitiveConfigKey.test(childKey)) {
+          sensitive = true
+          Object.defineProperty(copy, childKey, { value: '[redacted]', enumerable: true, configurable: true, writable: true })
+        } else frames.push({ kind: 'value', source: descriptor.value, target: copy as Container, key: childKey })
+      }
+    } else if (!(source === null || typeof source === 'boolean' || typeof source === 'number' && Number.isFinite(source))) { unsafe = true; continue }
+    Object.defineProperty(target, key, { value: copy, enumerable: true, configurable: true, writable: true })
+  }
+  return { value: unsafe ? {} : holder.value, sensitive, unsafe }
 }
 
 function actualState(entry: Entry | undefined): HostPluginState {
@@ -133,9 +138,11 @@ export class HostConfigurationService extends Service implements HostConfigServi
       safeMode: this.options.safeMode, restartRequired,
       entries: all.map(entry => {
         const runtime = this.ctx.loader.store[entry.id]
-        const safe = safeConfig(entry.config, [this.schema(entry)])
+        const schema = this.schema(entry)
+        const inspection = inspectHostConfigSchema(schema)
+        const safe = safeConfig(entry.config)
         const protectedEntry = protectedIds.has(entry.id)
-        const configEditable = !entry.children && !safe.sensitive && !protectedEntry && !!runtime?.fiber?.runtime
+        const configEditable = !entry.children && !safe.sensitive && !safe.unsafe && !inspection.sensitive && !protectedEntry && !!runtime?.fiber?.runtime && !!inspection.schema
         return {
           id: entry.id, key: entry.key, name: entry.name,
           packageName: entry.name === 'cordis:console' ? '@numenjs/console' : entry.name === 'cordis:workbench' ? '@numenjs/workbench' : entry.name,
@@ -145,7 +152,8 @@ export class HostConfigurationService extends Service implements HostConfigServi
           selfEnabled: entry.selfEnabled ?? !entry.disabled, effectiveEnabled: entry.effectiveEnabled ?? !entry.disabled,
           actualState: actualState(runtime), ...(entry.children ? { children: entry.children.map(child => child.id) } : {}),
           config: configEditable ? safe.value as Record<string, unknown> : {}, configEditable,
-          ...(!configEditable ? { configReadOnlyReason: entry.children ? 'Use group operations.' : safe.sensitive ? 'Secret-bearing configuration must be edited locally.' : protectedEntry ? 'This entry is required by the current management channel. Edit it locally.' : 'Load the plugin before editing its configuration.' } : {}),
+          ...(configEditable ? { configSchema: inspection.schema } : {}),
+          ...(!configEditable ? { configReadOnlyReason: entry.children ? 'Use group operations.' : safe.sensitive || inspection.sensitive ? 'Secret-bearing configuration must be edited locally.' : protectedEntry ? 'This entry is required by the current management channel. Edit it locally.' : !runtime?.fiber?.runtime ? 'Load the plugin before editing its configuration.' : safe.unsafe ? 'Configuration contains values that cannot be represented losslessly as JSON. Edit it locally.' : 'The plugin does not expose an inspectable configuration schema. Edit it locally.' } : {}),
           protected: protectedEntry,
           internal: fibers.filter(fiber => fiber.uid !== runtime?.fiber?.uid && owningEntry(fiber) === entry.id).map(fiber => ({
             diagnosticId: `fiber:${fiber.uid ?? 'pending'}`, name: fiber.name, state: stateNames[fiber.state] ?? 'UNLOADED', dependencies: Object.keys(fiber.inject), ownerEntryId: entry.id,
@@ -166,10 +174,18 @@ export class HostConfigurationService extends Service implements HostConfigServi
     const protectedIds = this.protectedIds(document.entries)
     if (protectedIds.has(operation.id) && ((operation.kind === 'setEnabled' && !operation.enabled) || ['move', 'removeGroup', 'setConfig'].includes(operation.kind))) throw new HostConfigError('MANAGEMENT_CHANNEL_PROTECTED', 'This change would interrupt the current management channel. Edit the host configuration locally and restart instead.')
     if (operation.kind === 'setConfig') {
-      if (safeConfig(selected?.config, [this.schema(selected)]).sensitive || safeConfig(operation.config, [this.schema(selected)]).sensitive) throw new HostConfigError('SECRET_CONFIG_READ_ONLY', 'Secret-bearing configuration must be edited locally.')
+      const schema = this.schema(selected)
+      const inspection = inspectHostConfigSchema(schema)
+      const currentConfig = safeConfig(selected?.config)
+      const requestedConfig = safeConfig(operation.config)
+      if (inspection.sensitive || currentConfig.sensitive || requestedConfig.sensitive) throw new HostConfigError('SECRET_CONFIG_READ_ONLY', 'Secret-bearing configuration must be edited locally.')
       const runtime = this.ctx.loader.store[operation.id]?.fiber?.runtime
       if (!runtime) throw new HostConfigError('PLUGIN_UNAVAILABLE', 'The plugin must be loaded before its configuration can be edited.')
-      try { resolveConfig(runtime, operation.config) } catch { throw new HostConfigError('PLUGIN_CONFIG_INVALID', 'Plugin configuration does not match its schema. Values are omitted.') }
+      if (!inspection.schema) throw new HostConfigError('PLUGIN_SCHEMA_UNAVAILABLE', 'The plugin does not expose an inspectable configuration schema. Edit it locally.')
+      if (currentConfig.unsafe || requestedConfig.unsafe) throw new HostConfigError('PLUGIN_CONFIG_NOT_JSON', 'Configuration contains values that cannot be represented losslessly as JSON. Edit it locally.')
+      // A validator may normalize or mutate its input. Validate a detached copy;
+      // the file must retain the user's explicit values and unknown fields.
+      try { resolveConfig(runtime, structuredClone(operation.config)) } catch { throw new HostConfigError('PLUGIN_CONFIG_INVALID', 'Plugin configuration does not match its schema. Values are omitted.') }
     }
     const next = mutateManagedConfig(document, operation, this.options.builtins, this.options.safeMode)
     // Guard indirect changes, including moves beneath a disabled group.
@@ -193,7 +209,7 @@ export class HostConfigurationService extends Service implements HostConfigServi
     const statuses = capabilities?.list() ?? []
     return {
       fingerprint: document.fingerprint,
-      operation: input.operation.kind === 'setConfig' ? { ...input.operation, config: safeConfig(input.operation.config, [this.schema(target)]).value as Record<string, unknown> } : input.operation,
+      operation: input.operation.kind === 'setConfig' ? { ...input.operation, config: this.snapshot(document).entries.find(entry => entry.id === target?.id)?.configEditable ? safeConfig(input.operation.config).value as Record<string, unknown> : {} } : input.operation,
       affectedEntryIds: target ? flattenRuntimeEntries([target]).map(entry => entry.id) : [],
       impact: {
         status: 'unknown', message: 'Dependency impact cannot be proven complete. Listed objects are potentially related; running external effects cannot be undone by this change.',
