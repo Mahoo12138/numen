@@ -77,14 +77,49 @@ export interface HostConfigMutationRequest {
   operation: HostConfigOperation
 }
 
+export type HostConfigImpactSource = 'ownership' | 'configuration' | 'connections' | 'active-revisions' | 'nonterminal-runs' | 'run-executions' | 'run-snapshots' | 'drafts' | 'dynamic-references' | 'external-effects'
+
+export interface HostConfigImpactCoverage {
+  source: HostConfigImpactSource
+  status: 'complete' | 'partial' | 'unavailable' | 'excluded'
+  scanned: number
+  limit: number
+  truncated: boolean
+  reasons: string[]
+}
+
+export type HostConfigImpactRunCondition = 'not-started' | 'blocked' | 'waiting' | 'executing-external-action' | 'outcome-unknown' | 'running' | 'cancelling' | 'unknown'
+
+export type HostConfigImpactNode =
+  | { key: string; kind: 'entry'; id: string; group: boolean }
+  | { key: string; kind: 'registration'; id: string; registrationKind: HostRegistrationRef['kind']; version: number; role: HostRegistrationOwner['role']; observedAt: string }
+  | { key: string; kind: 'connection'; id: string; enabled: boolean }
+  | { key: string; kind: 'revision'; id: string; automationId: string; purpose: 'published' | 'draft-test'; active: boolean; automationEnabled: boolean }
+  | { key: string; kind: 'run'; id: string; automationId: string; revisionId: string; status: string; condition: HostConfigImpactRunCondition; executions: Array<{ id: string; status: string; scope: 'affected-call' | 'run-context'; outcomeUnknown: boolean; attemptStatus?: string }>; executionTruncated: boolean }
+
+export interface HostConfigImpactEdge {
+  from: string
+  to: string
+  relation: 'contains' | 'owns-definition' | 'owns-provider' | 'uses-adapter' | 'uses-type' | 'depends-on-capability' | 'depends-on-connection' | 'executes-revision' | 'invokes-capability' | 'uses-connection'
+  source: HostConfigImpactSource
+  observedAt?: string
+  executionId?: string
+}
+
+export type HostConfigImpactUnknownCode = 'entry-not-observed' | 'historical-only' | 'ownership-invalid' | 'ownership-evicted' | 'source-incomplete' | 'graph-limit' | 'dynamic-references-excluded' | 'drafts-excluded' | 'external-effects-not-reversible' | 'execution-state-incomplete'
+
 export interface HostConfigImpact {
-  status: 'unknown'
+  status: 'known-impacts' | 'no-known-impacts' | 'unknown'
+  operationEffect: 'runtime' | 'metadata-only'
+  computedAt: string
   message: string
-  /** Potentially related objects, not a complete dependency proof. */
-  connections: string[]
-  capabilities: string[]
-  triggers: string[]
-  automations: string[]
+  nodes: HostConfigImpactNode[]
+  edges: HostConfigImpactEdge[]
+  /** Historical clues are deliberately outside the current-evidence graph. */
+  history: Array<{ registration: HostRegistrationRef; role: HostRegistrationOwner['role']; entryId: string; observedAt: string }>
+  unknownReasons: Array<{ code: HostConfigImpactUnknownCode; source: HostConfigImpactSource; message: string; entryId?: string }>
+  coverage: HostConfigImpactCoverage[]
+  truncated: boolean
 }
 
 export interface HostConfigPreview {

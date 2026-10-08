@@ -11,6 +11,7 @@ export function owningEntry(fiber: Fiber): string | undefined {
 }
 
 interface Observation {
+  ref: HostRegistrationRef
   token: symbol
   active: boolean
   observedAt: string
@@ -22,8 +23,11 @@ const key = (ref: HostRegistrationRef, role: string) => JSON.stringify([ref.kind
 /** Bounded process-local evidence. Never retain a disposed Context/Fiber or infer an owner from names. */
 export class RegistrationOwnership {
   private readonly observations = new Map<string, Observation>()
+  private evicted = false
+  private invalid = false
 
   observe(registration: RuntimeRegistration, active: boolean, source: (id: string) => string | undefined): void {
+    if (typeof registration.id !== 'string' || registration.id.length < 1 || registration.id.length > 256 || !Number.isSafeInteger(registration.version) || registration.version < 1 || !['capability', 'connection-adapter', 'connection-type'].includes(registration.kind) || !['definition', 'provider'].includes(registration.role)) { this.invalid = true; return }
     const id = key(registration, registration.role)
     const previous = this.observations.get(id)
     if (!active) {
@@ -33,11 +37,27 @@ export class RegistrationOwnership {
     const entryId = owningEntry(registration.owner.fiber)
     const name = entryId ? source(entryId) : undefined
     this.observations.delete(id)
-    this.observations.set(id, { token: registration.token, active, observedAt: new Date().toISOString(),
+    this.observations.set(id, { ref: { kind: registration.kind, id: registration.id, version: registration.version }, token: registration.token, active, observedAt: new Date().toISOString(),
       ...(entryId ? { entryId } : {}), ...(name ? { source: name } : {}),
     })
     // Eviction means unknown, never attribution to an unrelated or older instance.
-    if (this.observations.size > 4096) this.observations.delete(this.observations.keys().next().value!)
+    if (this.observations.size > 4096) { this.observations.delete(this.observations.keys().next().value!); this.evicted = true }
+  }
+
+  /** Reverse lookup uses observed owner identities, never registration names. */
+  inspect(entryIds: ReadonlySet<string>, snapshot: HostConfigSnapshot, limit = 256): {
+    diagnoses: HostRegistrationDiagnosis[]; scanned: number; limit: number; truncated: boolean; evicted: boolean; invalid?: boolean
+  } {
+    const refs = new Map<string, HostRegistrationRef>()
+    let truncated = false
+    for (const observation of this.observations.values()) {
+      if (!observation.entryId || !entryIds.has(observation.entryId)) continue
+      const id = JSON.stringify([observation.ref.kind, observation.ref.id, observation.ref.version])
+      if (refs.has(id)) continue
+      if (refs.size >= limit) { truncated = true; continue }
+      refs.set(id, observation.ref)
+    }
+    return { diagnoses: this.diagnose([...refs.values()], snapshot), scanned: refs.size, limit, truncated, evicted: this.evicted, ...(this.invalid ? { invalid: true } : {}) }
   }
 
   diagnose(refs: HostRegistrationRef[], snapshot: HostConfigSnapshot): HostRegistrationDiagnosis[] {

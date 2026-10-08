@@ -8,6 +8,8 @@ import {
   type HostRegistrationRef, type HostRegistrationDiagnosis,
 } from '@numenjs/config'
 import { owningEntry, RegistrationOwnership } from './registration-ownership.js'
+import { buildConfigImpact, isMetadataOperation } from './config-impact.js'
+import { collectRuntimeImpactEvidence } from './config-impact-evidence.js'
 
 export function toCordisEntry(entry: RuntimeEntry): EntryOptions {
   return { id: entry.id, name: entry.name, config: entry.children ? entry.children.map(toCordisEntry) : entry.config, disabled: entry.disabled, ...(entry.children ? { group: true } : {}) }
@@ -201,23 +203,19 @@ export class HostConfigurationService extends Service implements HostConfigServi
     const target = all.find(entry => entry.id === input.operation.id)
     let blockedReason: string | undefined
     try { await this.prepare(document, input) } catch (error) { if (error instanceof HostConfigError) blockedReason = error.message; else throw error }
-    // Cordis get() is the supported dynamic optional lookup. Do not use
-    // injected property getters on the always-available host service.
-    const capabilities = this.ctx.get('capabilities') as Context['capabilities'] | undefined
-    const connections = this.ctx.get('connections') as Context['connections'] | undefined
-    const automations = this.ctx.get('automations') as Context['automations'] | undefined
-    const statuses = capabilities?.list() ?? []
+    const snapshot = this.snapshot(document)
+    const affectedEntryIds = target ? flattenRuntimeEntries([target]).map(entry => entry.id) : []
+    const metadataOnly = isMetadataOperation(input.operation)
+    const ownership = metadataOnly
+      ? { diagnoses: [], scanned: 0, limit: 256, truncated: false, evicted: false }
+      : this.ownership.inspect(new Set(affectedEntryIds), snapshot)
+    const evidence = metadataOnly ? { connections: [], snapshots: [], runs: [], coverage: [] } : collectRuntimeImpactEvidence(this.ctx)
     return {
       fingerprint: document.fingerprint,
-      operation: input.operation.kind === 'setConfig' ? { ...input.operation, config: this.snapshot(document).entries.find(entry => entry.id === target?.id)?.configEditable ? safeConfig(input.operation.config).value as Record<string, unknown> : {} } : input.operation,
-      affectedEntryIds: target ? flattenRuntimeEntries([target]).map(entry => entry.id) : [],
-      impact: {
-        status: 'unknown', message: 'Dependency impact cannot be proven complete. Listed objects are potentially related; running external effects cannot be undone by this change.',
-        connections: connections?.list().slice(0, 100).map(connection => connection.id) ?? [],
-        capabilities: statuses.filter(item => item.definition.kind !== 'trigger').slice(0, 100).map(item => `${item.definition.id}@${item.definition.version}`),
-        triggers: statuses.filter(item => item.definition.kind === 'trigger').slice(0, 100).map(item => `${item.definition.id}@${item.definition.version}`),
-        automations: automations?.list().slice(0, 100).map(automation => automation.id) ?? [],
-      }, ...(blockedReason ? { blockedReason } : {}),
+      operation: input.operation.kind === 'setConfig' ? { ...input.operation, config: snapshot.entries.find(entry => entry.id === target?.id)?.configEditable ? safeConfig(input.operation.config).value as Record<string, unknown> : {} } : input.operation,
+      affectedEntryIds,
+      impact: buildConfigImpact(input.operation, affectedEntryIds, snapshot, ownership, evidence),
+      ...(blockedReason ? { blockedReason } : {}),
     }
   }
 

@@ -436,8 +436,38 @@ Schema/JSON bounds and regressions for accessor execution, non-finite YAML prese
 validator mutation and rendering-budget changes with pending input. All test data was
 temporary. There is no database migration, dependency upgrade, deployment or release.
 
-Next: N3-02 adds bounded impact analysis with explicit relationships, evidence and
-unknown reasons, reusing the existing registration ownership observations.
+### N3-02 bounded plugin impact analysis — verified 2026-10-08
+
+Plugin Preview now follows actual Entry/Group registration ownership through explicit
+Connection references, active Revision manifests and nonterminal Runs. Definition and
+Provider are separate roles; previous owners remain historical clues. Every result
+includes object identities, evidence edges, timestamps, source coverage, truncation and
+unknown reasons. Missing observations, excluded Draft/dynamic references and incomplete
+database records never imply that arbitrary plugin behavior is unaffected.
+
+One bounded SQLite read snapshot supplies only dependency and execution metadata.
+Run explanations distinguish unstarted, blocked, waiting, ongoing external actions and
+uncertain outcomes, including historical OUTCOME_UNKNOWN attempts and unrelated parallel
+work as Run context. Preview never invokes Providers or retries uncertain effects.
+Metadata-only operations skip domain queries; sensitive configuration and existing
+management-channel protection remain intact. Workbench renders these proofs and links
+to Connections, fixed snapshots and Runs through the existing navigation guard.
+
+Verification: 119 Vitest files / 753 tests, typecheck, production and example builds,
+20 related Chromium scenarios and all 74 final Chromium scenarios passed. Final desktop
+and Chinese mobile screenshots were viewed without horizontal overflow.
+The new browser fixtures use explicit Definition readiness dependencies after the first
+full run exposed concurrent Loader startup assumptions; product registration rules and
+impact assertions were preserved.
+
+[N3-02 verification](docs/verification/plugin-impact-2026-10-08.md) records exact limits,
+privacy and corruption regressions, complex Run state checks and browser evidence.
+All test data is temporary; no migration, dependency upgrade, deployment or release.
+
+Next: N3-03 binds Preview to relevant runtime observations and revalidates material
+ownership/impact changes before Apply, while preserving management-channel protection.
+This runtime-observation expiry gate is not part of N3-02; current configuration CAS
+continues to protect writes.
 
 M0/M1 foundation implemented and verified: independent Console/Workbench composition,
 v2 native groups and explicit migration, v1 compatibility, two sets of ten lifecycle cycles,

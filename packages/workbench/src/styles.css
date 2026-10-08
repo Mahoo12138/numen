@@ -1256,6 +1256,26 @@ button.command-center > span { min-width: 0; flex: 1; padding: 0 8px; overflow: 
 .plugin-config-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .plugin-preview { margin-top: 16px; }
 .plugin-preview pre { max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.plugin-impact { margin-block: 20px; padding: 16px; border: 1px solid var(--wb-border); border-radius: 6px; min-width: 0; }
+.plugin-impact > header, .plugin-impact-group li > header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.plugin-impact h3 { margin: 0; font-size: 15px; }
+.plugin-impact h4 { margin: 18px 0 10px; font-size: 13px; }
+.plugin-impact p { margin: 8px 0; font-size: 12px; line-height: 1.6; }
+.plugin-impact time, .plugin-impact small { display: block; font-size: 11px; line-height: 1.6; color: var(--wb-muted); }
+.plugin-impact .plugin-impact-summary { font-weight: 600; font-size: 13px; }
+.plugin-impact code, .plugin-impact summary, .plugin-impact li { overflow-wrap: anywhere; }
+.plugin-impact ul, .plugin-impact ol { margin: 8px 0; padding-inline-start: 20px; }
+.plugin-impact-group > ul, .plugin-impact-coverage > ul { list-style: none; padding: 0; }
+.plugin-impact li { margin-block: 8px; font-size: 12px; line-height: 1.6; }
+.plugin-impact-group > ul > li { padding: 10px 12px; border: 1px solid var(--wb-border); border-radius: 5px; }
+.plugin-impact-group li > header code { flex: 1; min-width: 0; }
+.plugin-impact > details { margin-top: 16px; border-top: 1px solid var(--wb-border); padding-top: 12px; }
+.plugin-impact summary { cursor: pointer; font-size: 12px; font-weight: 600; }
+.plugin-impact-edges li { padding-block: 6px; }
+.plugin-impact-notice, .plugin-impact-unknown { padding: 10px 12px; background: var(--wb-surface); border-left: 3px solid var(--wb-accent); }
+.plugin-impact-coverage > ul > li { border-bottom: 1px solid var(--wb-border); padding-block: 8px; }
+.plugin-impact .plugin-impact-footnote { margin-top: 18px; color: var(--wb-muted); }
+@media (max-width: 600px) { .plugin-impact { padding: 12px; } .plugin-impact-group > ul > li { padding: 8px; } }
 .plugin-baseline { padding: 12px; border: 1px solid var(--wb-border); border-radius: 5px; }
 .plugin-baseline p, .plugin-baseline summary { overflow-wrap: anywhere; }
 .plugin-baseline pre { max-height: 200px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }

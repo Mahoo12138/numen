@@ -11,6 +11,7 @@ import { useConsoleQuery } from './useConsoleQuery.js'
 import { defineSetupComponent } from './vue-component.js'
 import { PluginDetails } from './PluginDetails.js'
 import { PluginConfigurationForm } from './PluginConfigurationForm.js'
+import { PluginImpactPreview } from './PluginImpactPreview.js'
 import { parsePluginConfig } from './plugin-config-editing.js'
 
 interface PluginEditSession {
@@ -265,8 +266,7 @@ export const PluginsPage = defineSetupComponent<WorkbenchPageProps>('PluginsPage
     {preview.value ? <section class="core-page-section plugin-preview" aria-label={t('workbench.management.preview')}>
       <h2>{t('workbench.management.preview')}</h2><p>{t('workbench.management.affected')}: {preview.value.affectedEntryIds.join(', ')}</p>
       <pre>{JSON.stringify(preview.value.operation, null, 2)}</pre>
-      <p>{t('workbench.management.impactUnknown')}</p>
-      {(['connections', 'capabilities', 'triggers', 'automations'] as const).map(kind => preview.value!.impact[kind].length ? <p><strong>{t(kind === 'automations' ? 'workbench.pages.automations' : `workbench.${kind}`)}</strong>: {preview.value!.impact[kind].join(', ')}</p> : null)}
+      <PluginImpactPreview impact={preview.value.impact} {...(props.navigation ? { navigation: props.navigation } : {})} />
       <div class="plugin-actions"><Button disabled={busy.value || !!preview.value.blockedReason} variant="primary" type="button" onClick={apply}>{t('workbench.management.apply')}</Button><Button disabled={busy.value} type="button" onClick={() => { preview.value = undefined; request.value = undefined }}>{t('workbench.cancel')}</Button><Button type="button" onClick={() => props.navigation?.navigate(coreWorkbenchRoutes.connections)}>{t('workbench.connections')}</Button></div>
       {preview.value.blockedReason ? <p role="alert">{preview.value.blockedReason}</p> : null}
     </section> : null}
