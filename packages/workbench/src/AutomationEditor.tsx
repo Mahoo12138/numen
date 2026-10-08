@@ -1,4 +1,5 @@
 import { Button, SelectMenu } from '@numenjs/components'
+import type { AutomationSource } from '@numenjs/core'
 import { diagnosticText, t } from './i18n.js'
 import { automationStepEditOptions } from './automation-source-editing.js'
 import type { AutomationInsertTarget, AutomationSourceCommand } from './automation-source-editing.js'
@@ -69,14 +70,14 @@ export interface AutomationEditorProps {
   onCompareRevision?(revisionId: string): void
   onRestoreSnapshot?(snapshotId: string): void
   onSetEnabled?(enabled: boolean): void
-  onStepChange(id: string): void
+  onStepChange(id: string): boolean | void
   onTabChange(tab: string): void
   onOpenInspector(): void
   onAutomationChange?(id: string): void
   onDeleteStep?(nodeId: string): void
   onMoveStep?(nodeId: string, direction: 'up' | 'down'): void
   onInsert?(item: WorkbenchAutomationInsertItem, target: AutomationInsertTarget): boolean
-  onSourceCommand?(command: AutomationSourceCommand): boolean
+  onSourceCommand?(command: AutomationSourceCommand, expectedSource?: AutomationSource): boolean
   clipboard?: AutomationClipboardView
   collapsedNodes?: string[]
   onCopyStep?(nodeId: string): void

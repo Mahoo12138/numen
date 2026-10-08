@@ -79,3 +79,4 @@
 - [N3-01 安全插件配置表单验收](verification/plugin-config-form-2026-10-08.md)
 - [N3-02 有界插件影响分析验收](verification/plugin-impact-2026-10-08.md)
 - [N3-03 预览过期与管理保护验收](verification/plugin-preview-expiry-2026-10-08.md)
+- [N4-01 拖拽移动与节点搜索验收](verification/drag-node-search-2026-10-08.md)

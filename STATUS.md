@@ -496,8 +496,33 @@ horizontal overflow or clipped controls.
 scope, limits and evidence. All test data is temporary; no migration, dependency upgrade,
 deployment or release.
 
-Next: N4-01 adds direct structural movement and node-location search through existing
-Source commands, with explicit drop targets, cancellation and one-step undo.
+### N4-01 structural drag and node search — verified 2026-10-08
+
+Desktop drag handles now resolve explicit before/after/inside destinations through
+the existing MOVE_TO command. A drag pins the Source identity and hover target;
+changed Source, conflict/read-only state, cancellation or disposal cannot retarget it
+to the root. Descendant and fixed-slot protection, trigger isolation, no-ops and one
+document Undo retain their existing semantics. Overlay drop zones preserve source
+geometry during native drag, and canvas-edge scrolling stops with the session.
+
+Outline search indexes only names, stable Source IDs and explicit Capability refs.
+It excludes parameters, summaries and opaque extension data. Explicit location
+reveals ancestors and scrolls once; background refresh/deletion preserves search
+focus. Declining to discard pending Inspector input keeps the search, selection and
+input intact. Menu and keyboard movement remain available on narrow/touch layouts.
+
+Verification: 124 Vitest files / 825 tests, typecheck, production and example builds,
+8 existing related Chromium scenarios, 7 new complex scenarios, and all 86 final
+Chromium scenarios passed. Browser regressions include native mouse movement,
+auto-scroll, one-step Undo, disappearing targets, real CAS conflicts, private-value
+search exclusions and background focus. A supplemental 390px search/location check
+passed against the same build; desktop, 780px and 390px screenshots were viewed.
+
+[N4-01 verification](docs/verification/drag-node-search-2026-10-08.md) records the
+boundaries, regression fix and evidence. No migration, dependency upgrade or release.
+
+Next: N4-02 makes long-flow panels and container context more compact, preserving
+existing Source/Presentation ownership and Inspector behavior.
 
 M0/M1 foundation implemented and verified: independent Console/Workbench composition,
 v2 native groups and explicit migration, v1 compatibility, two sets of ten lifecycle cycles,

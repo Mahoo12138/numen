@@ -1094,7 +1094,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .structure-menu-button:hover, .structure-collapse:hover { background: #e8ecf3; color: var(--wb-text); }
 .structure-menu-button[aria-expanded="true"] { background: #e8ecf3; color: var(--wb-accent); }
 .structure-container-content { margin: 10px 0 18px 15px; padding: 0 0 0 12px; border-left: 1px solid var(--wb-border-strong); }
-.structure-block { min-width: 0; margin-top: 12px; }
+.structure-block { position: relative; min-width: 0; margin-top: 12px; }
 .structure-block-header { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; min-width: 0; min-height: 36px; padding: 2px 0; border-bottom: 1px solid var(--wb-border); }
 .structure-block-title { overflow-wrap: anywhere; padding: 5px 0; border: 0; background: none; color: var(--wb-text); font: inherit; font-size: 12px; font-weight: 650; cursor: pointer; }
 .structure-block-title[aria-pressed="true"] { color: var(--wb-accent); }
@@ -1158,6 +1158,26 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .structure-outline button > span { min-width: 0; overflow-wrap: anywhere; }
 .structure-outline button > small { overflow: hidden; margin-left: auto; color: var(--wb-muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .structure-outline button > em { font-size: 10px; font-style: normal; color: #9f3425; }
+.structure-search { padding: 9px 10px 0; }
+.structure-search input { box-sizing: border-box; width: 100%; min-width: 0; min-height: 34px; padding: 6px 9px; border: 1px solid var(--wb-border-strong); border-radius: 4px; background: var(--wb-surface); color: var(--wb-text); font: inherit; font-size: 12px; }
+.structure-search input:focus-visible { outline: 2px solid var(--wb-accent); outline-offset: 1px; }
+.structure-search p { margin: 7px 0 3px; color: var(--wb-muted); font-size: 10px; }
+.structure-outline button > span > em { display: block; margin-top: 3px; color: var(--wb-muted); font-size: 10px; font-style: normal; overflow-wrap: anywhere; }
+.structure-drag-handle { display: inline-flex; flex: 0 0 18px; align-items: center; justify-content: center; align-self: stretch; padding: 0; border: 0; background: transparent; color: var(--wb-muted); cursor: grab; }
+.structure-drag-handle:hover { color: var(--wb-accent); }
+.structured-flow[data-dragging-node-id] .structure-drag-handle { cursor: grabbing; }
+/* Overlay landing positions: starting a native drag must never move its source. */
+.structure-drop-zone { position: absolute; z-index: 2; left: 20px; right: 0; box-sizing: border-box; display: flex; align-items: center; height: 20px; border: 1px dashed var(--wb-border-strong); border-radius: 4px; background: #f5f7fb; color: var(--wb-muted); font-size: 10px; }
+.structure-drop-zone > span { min-width: 0; padding: 2px 7px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; pointer-events: none; }
+.structure-drop-zone[data-drop-placement="before"] { top: 0; }
+.structure-drop-zone[data-drop-placement="after"] { bottom: 0; }
+.structure-drop-zone[data-drop-placement="inside"] { bottom: 0; height: 36px; justify-content: center; }
+.structured-node-header > .structure-drop-zone[data-drop-placement="inside"] { top: 20px; bottom: 20px; height: auto; }
+.structure-drop-zone[data-drop-state="allowed"] { border: 2px solid var(--wb-accent); background: var(--wb-selection); color: var(--wb-accent-strong); }
+.structure-drop-zone[data-drop-state="rejected"] { border-color: #ae4333; background: #fff2ef; color: #9f3425; }
+@media (max-width: 700px), (pointer: coarse) {
+  .structure-drag-handle { display: none; }
+}
 @media (max-width: 700px) { .structure-outline button { min-height: 36px; } }
 
 .automation-trigger-status { margin: 6px 0 0; color: var(--wb-muted); font-size: 11px; line-height: 1.5; }

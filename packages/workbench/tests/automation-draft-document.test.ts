@@ -9,6 +9,7 @@ import type {
   WorkbenchSaveAutomationDraftInput,
 } from '../src/contracts.js'
 import { applyAutomationSourceCommand } from '../src/automation-source-editing.js'
+import { resolveAutomationDropTarget } from '../src/automation-drag.js'
 import type { WorkbenchConsoleClient } from '../src/types.js'
 import {
   canPublishAutomationDraft,
@@ -649,6 +650,30 @@ describe('structural history and presentation', () => {
     state = reduceAutomationDraftDocument(state, { type: 'REDO' })
     expect(state.document!.source).toEqual(saving.source)
     expect(state.document!.presentation).toEqual(saving.presentation)
+  })
+
+  it('moves into a collapsed receiver with one undo and keeps the restored document after a late save', () => {
+    let state = reduceAutomationDraftDocument(prepared(), { type: 'SELECT_NODE', nodeId: 'waiting' })
+    const before = state.document!
+    const intent = resolveAutomationDropTarget(before.source, 'waiting', 'else', 'inside')
+    if (!intent.allowed) throw new Error('Expected a valid collapsed receiver')
+    state = reduceAutomationDraftDocument(state, { type: 'EDIT', command: { type: 'MOVE_TO', nodeId: 'waiting', target: intent.target } })
+    expect(state.undoStack).toHaveLength(1)
+    expect(state.selectedNodeId).toBe('waiting')
+    expect(state.document!.presentation).toEqual({ collapsedNodes: [], untouched: { value: 'opaque' } })
+    const moved = state.document!
+    state = reduceAutomationDraftDocument(state, { type: 'SAVE_REQUEST' })
+    state = reduceAutomationDraftDocument(state, { type: 'UNDO' })
+    state = reduceAutomationDraftDocument(state, { type: 'SAVE_SUCCESS', result: { draft: { ...draft(3, moved.source), presentation: moved.presentation } } })
+    expect(state.document!.source).toEqual(before.source)
+    expect(state.document!.presentation).toEqual(before.presentation)
+    expect(state.selectedNodeId).toBe('waiting')
+    expect(state.savePhase).toBe('DIRTY')
+    expect(state.undoStack).toHaveLength(0)
+    expect(state.redoStack).toHaveLength(1)
+    state = reduceAutomationDraftDocument(state, { type: 'REDO' })
+    expect(state.document!.source).toEqual(moved.source)
+    expect(state.document!.presentation).toEqual(moved.presentation)
   })
 
   it('copies presentation from the clipboard snapshot and leaves a stale insertion out of history', () => {

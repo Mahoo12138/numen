@@ -402,7 +402,11 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
         ...(authoring.saveError ? { saveError: authoring.saveError } : {}),
         ...(authoring.publishError ? { publishError: authoring.publishError } : {}),
       },
-      ...(editable.value ? { onInsert: (item, target) => allowInputChange() && authoring.insert(item, target), onSourceCommand: command => allowInputChange() && authoring.edit(command),
+      ...(editable.value ? { onInsert: (item, target) => allowInputChange() && authoring.insert(item, target), onSourceCommand: (command, expectedSource) => {
+        // Committing a pending field can replace Source and invalidate a captured drag.
+        if (!allowInputChange() || (expectedSource && authoring.document?.source !== expectedSource)) return false
+        return authoring.edit(command)
+      },
         onCopyStep: authoring.copyStep, onCutStep: authoring.cutStep, onPaste: target => allowInputChange() && authoring.paste(target),
         onToggleCollapse: authoring.toggleCollapse,
       } : {}),
@@ -470,12 +474,13 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
       })
     },
     onStepChange: id => {
-      if (id !== activeStepId.value && !allowInputChange()) return
       const step = steps.value.find(item => item.id === id)
-      if (props.consoleClient) authoring.selectNode(step?.sourceId, editable.value && authoring.canEdit)
+      if (!step || (id !== activeStepId.value && !allowInputChange())) return false
+      if (props.consoleClient) authoring.selectNode(step.sourceId, editable.value && authoring.canEdit)
       else requestedStepId.value = id
       fieldFocus.value = undefined
       props.onInspectorOpenChange(true)
+      return true
     },
     onTabChange: tab => { if (tab !== activeTab.value && !allowInputChange()) return; activeTab.value = tab; if (tab !== 'Editor') props.onInspectorOpenChange(false) },
     onReload: reloadDetail,
