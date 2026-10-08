@@ -16,7 +16,10 @@ const english: Translate = (key, params) => interpolate((enUS as Record<string, 
 function describeExpression(expression: ValueExpr, t: Translate): string {
   switch (expression.type) {
     case 'literal': {
-      const value = JSON.stringify(expression.value)
+      const literal = expression.value
+      if (Array.isArray(literal)) return t('workbench.projection.array', { count: literal.length })
+      if (literal !== null && typeof literal === 'object') return t('workbench.projection.object', { count: Object.keys(literal).length })
+      const value = JSON.stringify(literal)
       return value.length > 44 ? `${value.slice(0, 41)}…` : value
     }
     case 'ref': return expression.path

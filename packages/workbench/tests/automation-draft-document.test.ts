@@ -963,3 +963,389 @@ describe('full-document snapshot restoration', () => {
     } finally { scope.stop(); vi.useRealTimers() }
   })
 })
+
+describe('batch collapse Presentation edits', () => {
+  const nested: AutomationSource = { triggers: [{ id: 'trigger', capability: { id: 'timer', version: 1 }, config: {} }], flow: { type: 'block', id: 'root', steps: [
+    { type: 'wait', id: 'wait', durationMs: { type: 'literal', value: 10 } },
+    { type: 'if', id: 'condition', condition: { type: 'literal', value: true }, then: { type: 'block', id: 'then', steps: [] }, else: { type: 'block', id: 'else', steps: [] } },
+    { type: 'foreach', id: 'loop', items: { type: 'literal', value: [] }, body: { type: 'block', id: 'body', steps: [] } },
+    { type: 'parallel', id: 'parallel', branches: [{ type: 'block', id: 'parallel-one', steps: [] }, { type: 'block', id: 'parallel-two', steps: [] }] },
+    { type: 'race', id: 'race', branches: [{ type: 'block', id: 'race-one', steps: [] }, { type: 'block', id: 'race-two', steps: [] }] },
+    { type: 'capability', id: 'call', capability: { id: 'echo', version: 1 }, input: {} },
+    { type: 'extension', id: 'opaque', control: { id: 'future:opaque', version: 8 }, input: {} },
+  ] } }
+  const presentation = { collapsedNodes: ['else', 'legacy-stale-id'], viewport: { x: 7, y: 11, scale: 0.5 }, future: { state: ['opaque', 4, false] } }
+  function prepared(): AutomationDraftDocumentState {
+    let state = reduceAutomationDraftDocument(loadedState(), { type: 'SERVER', automationId: 'automation-1', draft: { ...draft(2, nested), presentation, baseRevisionId: 'published-base' } })
+    state = reduceAutomationDraftDocument(state, { type: 'SELECT_NODE', nodeId: 'wait', reveal: false })
+    return state
+  }
+
+  it('edits all requested real containers in one full-document history entry without changing Source or opaque Presentation', () => {
+    const before = prepared()
+    const targets = ['condition', 'then', 'else', 'loop', 'body', 'parallel', 'parallel-one', 'parallel-two', 'race', 'race-one', 'race-two', 'condition', 'root', 'wait', 'call', 'opaque', 'trigger', 'missing']
+    const changed = reduceAutomationDraftDocument(before, { type: 'COLLAPSE_MANY', nodeIds: targets, collapsed: true })
+    expect(changed.document!.source).toBe(nested)
+    expect(changed.document).toMatchObject({ version: 2, baseRevisionId: 'published-base' })
+    expect(changed).toMatchObject({ savePhase: 'DIRTY', editRevision: 1, selectedNodeId: 'wait' })
+    expect(changed.undoStack).toEqual([{ source: nested, presentation, selectedNodeId: 'wait' }])
+    expect(changed.redoStack).toEqual([])
+    expect(changed.document!.presentation.collapsedNodes).toEqual(['else', 'legacy-stale-id', 'condition', 'then', 'loop', 'body', 'parallel', 'parallel-one', 'parallel-two', 'race', 'race-one', 'race-two'])
+    expect(changed.document!.presentation.viewport).toBe(presentation.viewport)
+    expect(changed.document!.presentation.future).toBe(presentation.future)
+    expect(before.document!.presentation).toBe(presentation)
+    expect(presentation.collapsedNodes).toEqual(['else', 'legacy-stale-id'])
+    const undone = reduceAutomationDraftDocument(changed, { type: 'UNDO' })
+    expect(undone.document!.source).toBe(nested)
+    expect(undone.document!.presentation).toBe(presentation)
+    expect(undone.undoStack).toEqual([])
+    expect(undone.redoStack).toHaveLength(1)
+    const redone = reduceAutomationDraftDocument(undone, { type: 'REDO' })
+    expect(redone.document!.source).toBe(nested)
+    expect(redone.document!.presentation).toBe(changed.document!.presentation)
+    expect(redone.undoStack).toHaveLength(1)
+    expect(redone.redoStack).toEqual([])
+  })
+
+  it('changes only valid targets and preserves collapsed states outside the requested set', () => {
+    const before = prepared()
+    before.document = { ...before.document!, presentation: { ...presentation, collapsedNodes: ['else', 'condition', 'loop', 'legacy-stale-id', 'root', 'wait', 'trigger'] } }
+    const changed = reduceAutomationDraftDocument(before, { type: 'COLLAPSE_MANY', nodeIds: ['condition', 'condition', 'root', 'wait', 'trigger', 'legacy-stale-id', 'missing'], collapsed: false })
+    expect(changed.document!.presentation.collapsedNodes).toEqual(['else', 'loop', 'legacy-stale-id', 'root', 'wait', 'trigger'])
+    expect(changed.undoStack).toHaveLength(1)
+    expect(changed.document!.source).toBe(before.document!.source)
+    const allInvalid = reduceAutomationDraftDocument(changed, { type: 'COLLAPSE_MANY', nodeIds: ['root', 'wait', 'call', 'opaque', 'trigger', 'missing'], collapsed: true })
+    expect(allInvalid).toBe(changed)
+  })
+
+  it('ignores duplicates, empty sets and no-ops without clearing redo, advancing revision or scheduling a save', () => {
+    const before = prepared()
+    const changed = reduceAutomationDraftDocument(before, { type: 'COLLAPSE_MANY', nodeIds: ['condition', 'condition'], collapsed: true })
+    expect(reduceAutomationDraftDocument(changed, { type: 'COLLAPSE_MANY', nodeIds: ['condition', 'condition'], collapsed: true })).toBe(changed)
+    const undone = reduceAutomationDraftDocument(changed, { type: 'UNDO' })
+    for (const action of [
+      { type: 'COLLAPSE_MANY' as const, nodeIds: [], collapsed: true },
+      { type: 'COLLAPSE_MANY' as const, nodeIds: ['condition', 'condition'], collapsed: false },
+      { type: 'COLLAPSE_MANY' as const, nodeIds: ['else', 'else'], collapsed: true },
+      { type: 'COLLAPSE_MANY' as const, nodeIds: ['root', 'missing', 'call'], collapsed: false },
+    ]) expect(reduceAutomationDraftDocument(undone, action)).toBe(undone)
+    expect(undone.redoStack).toHaveLength(1)
+    const otherChange = reduceAutomationDraftDocument(undone, { type: 'COLLAPSE_MANY', nodeIds: ['loop'], collapsed: true })
+    expect(otherChange.redoStack).toEqual([])
+    expect(otherChange.undoStack).toHaveLength(1)
+    expect(otherChange.editRevision).toBe(undone.editRevision + 1)
+  })
+
+  it('allows a non-Block root container to collapse and uses identical eligibility for individual toggles', () => {
+    const rootSource: AutomationSource = { triggers: [], flow: { type: 'if', id: 'condition', condition: { type: 'literal', value: true }, then: { type: 'block', id: 'then', steps: [] } } }
+    const before = reduceAutomationDraftDocument(loadedState(), { type: 'SERVER', automationId: 'automation-1', draft: draft(2, rootSource) })
+    const changed = reduceAutomationDraftDocument(before, { type: 'COLLAPSE_MANY', nodeIds: ['condition', 'then'], collapsed: true })
+    expect(changed.document!.presentation.collapsedNodes).toEqual(['condition', 'then'])
+    const individual = reduceAutomationDraftDocument(prepared(), { type: 'COLLAPSE', nodeId: 'condition', collapsed: true })
+    expect(individual.document!.presentation.collapsedNodes).toEqual(['else', 'legacy-stale-id', 'condition'])
+    for (const nodeId of ['root', 'wait', 'call', 'opaque', 'trigger', 'missing']) {
+      expect(reduceAutomationDraftDocument(individual, { type: 'COLLAPSE', nodeId, collapsed: true })).toBe(individual)
+    }
+  })
+
+  it('keeps later batch edits and Undo/Redo intact after an earlier autosave acknowledgement', () => {
+    let state = reduceAutomationDraftDocument(prepared(), { type: 'COLLAPSE_MANY', nodeIds: ['condition', 'loop'], collapsed: true })
+    const first = state.document!.presentation
+    state = reduceAutomationDraftDocument(state, { type: 'SAVE_REQUEST' })
+    const pending = state.pendingSave
+    state = reduceAutomationDraftDocument(state, { type: 'COLLAPSE_MANY', nodeIds: ['condition'], collapsed: false })
+    const latest = state.document!.presentation
+    expect(state.savePhase).toBe('SAVING')
+    expect(state.pendingSave).toBe(pending)
+    expect(pending?.presentation).toBe(first)
+    state = reduceAutomationDraftDocument(state, { type: 'UNDO' })
+    expect(state.document!.presentation).toBe(first)
+    state = reduceAutomationDraftDocument(state, { type: 'REDO' })
+    expect(state.document!.presentation).toBe(latest)
+    state = reduceAutomationDraftDocument(state, { type: 'SAVE_SUCCESS', result: { draft: { ...draft(3, nested), presentation: first, baseRevisionId: 'published-base' } } })
+    expect(state).toMatchObject({ savePhase: 'DIRTY', pendingSave: undefined, document: { version: 3, source: nested, baseRevisionId: 'published-base' } })
+    expect(state.document!.presentation).toBe(latest)
+    expect(state.undoStack).toHaveLength(2)
+    state = reduceAutomationDraftDocument(state, { type: 'SAVE_REQUEST' })
+    expect(state.pendingSave).toMatchObject({ expectedVersion: 3, presentation: latest })
+    state = reduceAutomationDraftDocument(state, { type: 'SAVE_SUCCESS', result: { draft: { ...draft(4, nested), presentation: latest } } })
+    expect(state.savePhase).toBe('CLEAN')
+    state = reduceAutomationDraftDocument(state, { type: 'UNDO' })
+    expect(state.document!.presentation).toBe(first)
+    expect(state.document!.version).toBe(4)
+    state = reduceAutomationDraftDocument(state, { type: 'UNDO' })
+    expect(state.document!.presentation).toBe(presentation)
+    expect(state.document!.source).toBe(nested)
+  })
+
+  it('does not modify unavailable, conflicted, reloading or publishing documents', () => {
+    const before = prepared()
+    let conflict = reduceAutomationDraftDocument(before, { type: 'COLLAPSE_MANY', nodeIds: ['condition'], collapsed: true })
+    conflict = reduceAutomationDraftDocument(conflict, { type: 'SAVE_REQUEST' })
+    conflict = reduceAutomationDraftDocument(conflict, { type: 'SAVE_FAILURE', error: { code: 'DRAFT_VERSION_CONFLICT', details: { expectedVersion: 2, actualVersion: 3 } } })
+    const readonly = [unavailableState(), conflict, reduceAutomationDraftDocument(before, { type: 'RELOAD' }), reduceAutomationDraftDocument(before, { type: 'PUBLISH_REQUEST' })]
+    for (const state of readonly) {
+      expect(reduceAutomationDraftDocument(state, { type: 'COLLAPSE_MANY', nodeIds: ['condition', 'loop', 'else'], collapsed: true })).toBe(state)
+      expect(reduceAutomationDraftDocument(state, { type: 'COLLAPSE_MANY', nodeIds: ['condition', 'else'], collapsed: false })).toBe(state)
+    }
+    expect(conflict.document!.presentation.collapsedNodes).toEqual(['else', 'legacy-stale-id', 'condition'])
+  })
+
+  it('batches through the public model and existing autosave action, retaining latest Presentation across a deferred save', async () => {
+    vi.useFakeTimers()
+    const scope = effectScope(), writes: WorkbenchSaveAutomationDraftInput[] = []
+    let savedVersion = 2
+    let finishFirst!: () => void
+    const client = {
+      action: vi.fn(async (_ref, input: WorkbenchSaveAutomationDraftInput) => {
+        expect(input.expectedVersion).toBe(savedVersion)
+        writes.push(structuredClone(input))
+        if (writes.length === 1) await new Promise<void>(resolve => { finishFirst = resolve })
+        savedVersion++
+        return { draft: { ...draft(savedVersion, input.source), presentation: input.presentation, baseRevisionId: 'published-base' } }
+      }), query: vi.fn(), subscribe: vi.fn(),
+    } as unknown as WorkbenchConsoleClient
+    const model = scope.run(() => useAutomationDraftDocument({ client, automationId: 'automation-1',
+      detail: () => ({ automation: { id: 'automation-1' }, draft: { ...draft(2, nested), presentation, baseRevisionId: 'published-base' } }) as WorkbenchAutomationDetail,
+      reloadDetail() {}, autosaveDelayMs: 10,
+    }))!
+    try {
+      const before = model.document
+      model.setCollapsed([], true)
+      model.setCollapsed(['root', 'wait', 'missing'], true)
+      model.setCollapsed(['else'], true)
+      await vi.advanceTimersByTimeAsync(20)
+      expect(model.document).toBe(before)
+      expect(model.canUndo).toBe(false)
+      expect(writes).toEqual([])
+      model.setCollapsed(['condition', 'loop', 'condition'], true)
+      const first = model.document!.presentation
+      await nextTick(); await vi.advanceTimersByTimeAsync(10)
+      expect(model.savePhase).toBe('SAVING')
+      expect(writes).toHaveLength(1)
+      expect(writes[0]?.presentation).toEqual(first)
+      model.setCollapsed(['condition'], false)
+      const latest = model.document!.presentation
+      finishFirst(); await nextTick(); await nextTick(); await nextTick()
+      expect(model.savePhase).toBe('DIRTY')
+      expect(model.document!.version).toBe(3)
+      expect(model.document!.presentation).toBe(latest)
+      expect(await model.flushDraft()).toBe(true)
+      expect(writes).toHaveLength(2)
+      expect(writes[1]).toMatchObject({ expectedVersion: 3, presentation: latest, source: nested })
+      expect(model.document!.source).toBe(nested)
+      model.undo()
+      expect(model.document!.presentation).toBe(first)
+      expect(await model.flushDraft()).toBe(true)
+      model.redo()
+      expect(model.document!.presentation).toBe(latest)
+      expect(await model.flushDraft()).toBe(true)
+      const saved = model.document
+      model.setCollapsed(['loop', 'loop'], true)
+      await vi.advanceTimersByTimeAsync(20)
+      expect(model.document).toBe(saved)
+      expect(writes.map(write => write.expectedVersion)).toEqual([2, 3, 4, 5])
+    } finally { scope.stop(); vi.useRealTimers() }
+  })
+})
+
+
+describe('history input preservation', () => {
+  function fixture(client?: WorkbenchConsoleClient) {
+    const initial: AutomationSource = { triggers: [], flow: { type: 'block', id: 'root', steps: [
+      { type: 'wait', id: 'wait', durationMs: { type: 'literal', value: 10 } },
+      { type: 'if', id: 'condition', condition: { type: 'literal', value: true }, then: { type: 'block', id: 'then', steps: [] } },
+    ] } }
+    const id = ref('automation-1'), scope = effectScope()
+    const detail = shallowRef({ automation: { id: 'automation-1' }, draft: draft(1, initial) } as WorkbenchAutomationDetail)
+    const model = scope.run(() => useAutomationDraftDocument({ client, automationId: id, detail, reloadDetail() {}, autosaveDelayMs: 60_000 }))!
+    model.selectNode('wait', false)
+    return { model, scope, initial, id, detail }
+  }
+
+  it('allows presentation-only Undo and Redo without changing Source, selection or pending-save state', () => {
+    const { model, scope, initial } = fixture()
+    try {
+      expect(model.historyPreservesInputs('undo')).toBe(false)
+      expect(model.historyPreservesInputs('redo')).toBe(false)
+      model.setCollapsed(['condition', 'then'], true)
+      const collapsed = model.document
+      expect(model.historyPreservesInputs('undo')).toBe(true)
+      expect(model.historyPreservesInputs('redo')).toBe(false)
+      expect(model.document).toBe(collapsed)
+      expect(model.document!.source).toBe(initial)
+      expect(model.selectedNodeId).toBe('wait')
+      expect(model.savePhase).toBe('DIRTY')
+      model.undo()
+      expect(model.historyPreservesInputs('undo')).toBe(false)
+      expect(model.historyPreservesInputs('redo')).toBe(true)
+      model.redo()
+      expect(model.historyPreservesInputs('undo')).toBe(true)
+      expect(model.historyPreservesInputs('redo')).toBe(false)
+    } finally { scope.stop() }
+  })
+
+  it('recognizes equal Source content after real saved responses clone it for Undo and Redo', async () => {
+    let version = 1
+    const client = { action: vi.fn(async (_ref, input: WorkbenchSaveAutomationDraftInput) => ({
+      draft: { ...draft(++version, structuredClone(input.source)), presentation: structuredClone(input.presentation) },
+    })), query: vi.fn(), subscribe: vi.fn() } as unknown as WorkbenchConsoleClient
+    const { model, scope, initial } = fixture(client)
+    try {
+      model.setCollapsed(['condition'], true)
+      expect(await model.flushDraft()).toBe(true)
+      expect(model.document!.source).not.toBe(initial)
+      expect(model.document!.source).toEqual(initial)
+      expect(model.historyPreservesInputs('undo')).toBe(true)
+      model.undo()
+      const beforeSave = model.document!.source
+      expect(await model.flushDraft()).toBe(true)
+      expect(model.document!.source).not.toBe(beforeSave)
+      expect(model.historyPreservesInputs('redo')).toBe(true)
+      model.redo()
+      expect(model.historyPreservesInputs('undo')).toBe(true)
+      expect(model.selectedNodeId).toBe('wait')
+    } finally { scope.stop() }
+  })
+
+  it('requires input protection when either history direction changes Source content even with the same selection', () => {
+    const { model, scope } = fixture()
+    try {
+      model.setWaitExpression('wait', 'durationMs', { type: 'literal', value: 20 })
+      expect(model.selectedNodeId).toBe('wait')
+      expect(model.historyPreservesInputs('undo')).toBe(false)
+      model.undo()
+      expect(model.selectedNodeId).toBe('wait')
+      expect(model.historyPreservesInputs('redo')).toBe(false)
+      model.redo()
+      model.setCollapsed(['condition'], true)
+      expect(model.historyPreservesInputs('undo')).toBe(true)
+      model.undo()
+      // A blur commit adds a new Source edit on top of presentation history;
+      // callers must recheck after blur rather than reuse the previous true.
+      model.setWaitExpression('wait', 'durationMs', { type: 'literal', value: 30 })
+      expect(model.historyPreservesInputs('undo')).toBe(false)
+      expect(model.historyPreservesInputs('redo')).toBe(false)
+    } finally { scope.stop() }
+  })
+
+  it('requires input protection for selection changes despite identical Source content', () => {
+    const { model, scope } = fixture()
+    try {
+      model.setCollapsed(['condition'], true)
+      expect(model.historyPreservesInputs('undo')).toBe(true)
+      model.selectNode('condition', false)
+      expect(model.historyPreservesInputs('undo')).toBe(false)
+      model.undo()
+      expect(model.selectedNodeId).toBe('wait')
+      expect(model.historyPreservesInputs('redo')).toBe(false)
+      model.selectNode('condition', false)
+      expect(model.historyPreservesInputs('redo')).toBe(true)
+    } finally { scope.stop() }
+  })
+
+  it('conservatively rejects equal-looking Source values with different JSON property order', async () => {
+    const client = { action: vi.fn(async (_ref, input: WorkbenchSaveAutomationDraftInput) => ({ draft: {
+      ...draft(2, { flow: structuredClone(input.source.flow), triggers: structuredClone(input.source.triggers) }), presentation: input.presentation,
+    } })), query: vi.fn(), subscribe: vi.fn() } as unknown as WorkbenchConsoleClient
+    const { model, scope, initial } = fixture(client)
+    try {
+      model.setCollapsed(['condition'], true)
+      expect(await model.flushDraft()).toBe(true)
+      expect(model.document!.source).toEqual(initial)
+      expect(model.historyPreservesInputs('undo')).toBe(false)
+    } finally { scope.stop() }
+  })
+
+  it.each(['conflict', 'reloading', 'publishing', 'automation-change'] as const)('rejects history bypass while the document is %s', async mode => {
+    const client = mode === 'conflict' ? { action: vi.fn(async () => {
+      throw { code: 'DRAFT_VERSION_CONFLICT', details: { expectedVersion: 1, actualVersion: 2 } }
+    }), query: vi.fn(), subscribe: vi.fn() } as unknown as WorkbenchConsoleClient : undefined
+    const { model, scope, id } = fixture(client)
+    try {
+      model.setCollapsed(['condition'], true)
+      expect(model.historyPreservesInputs('undo')).toBe(true)
+      if (mode === 'conflict') expect(await model.flushDraft()).toBe(false)
+      else if (mode === 'reloading') model.reload()
+      else if (mode === 'publishing') model.publish()
+      else id.value = 'automation-other'
+      expect(model.historyPreservesInputs('undo')).toBe(false)
+      expect(model.historyPreservesInputs('redo')).toBe(false)
+      if (mode === 'automation-change') {
+        await nextTick()
+        expect(model.document).toBeUndefined()
+        expect(model.historyPreservesInputs('undo')).toBe(false)
+      }
+    } finally { scope.stop() }
+  })
+})
+
+describe('focused-scope selection', () => {
+  const nested: AutomationSource = { triggers: [], flow: { type: 'block', id: 'root', steps: [{
+    type: 'foreach', id: 'scope', items: { type: 'literal', value: [] }, body: { type: 'block', id: 'body', steps: [{
+      type: 'if', id: 'condition', condition: { type: 'literal', value: true }, then: { type: 'block', id: 'then', steps: [{ type: 'wait', id: 'leaf', durationMs: { type: 'literal', value: 1 } }] },
+      else: { type: 'block', id: 'else', steps: [] },
+    }] },
+  }] } }
+  const presentation = { collapsedNodes: ['root', 'scope', 'body', 'condition', 'then', 'else'], future: { opaque: ['retained'] } }
+  function prepared() {
+    return reduceAutomationDraftDocument(loadedState(), { type: 'SERVER', automationId: 'automation-1', draft: { ...draft(2, nested), presentation } })
+  }
+
+  it('passes the public focus scope through selection, revealing interior ancestors without new history', () => {
+    const scope = effectScope()
+    const model = scope.run(() => useAutomationDraftDocument({ automationId: 'automation-1',
+      detail: () => ({ automation: { id: 'automation-1' }, draft: { ...draft(2, nested), presentation } }) as WorkbenchAutomationDetail,
+      reloadDetail() {}, autosaveDelayMs: 60_000,
+    }))!
+    try {
+      model.selectNode('leaf', true, 'scope')
+      expect(model.selectedNodeId).toBe('leaf')
+      expect(model.document!.presentation.collapsedNodes).toEqual(['root', 'scope', 'else'])
+      expect(model.document!.source).toBe(nested)
+      expect(model.document!.presentation.future).toBe(presentation.future)
+      expect(model.canUndo).toBe(false)
+      expect(model.canRedo).toBe(false)
+      expect(model.savePhase).toBe('DIRTY')
+      const revealed = model.document
+      model.selectNode('leaf', true, 'scope')
+      expect(model.document).toBe(revealed)
+      model.selectNode('scope', true, 'scope')
+      expect(model.document).toBe(revealed)
+      expect(model.collapsedNodes).toContain('scope')
+    } finally { scope.stop() }
+  })
+
+  it('does not add or clear full-document history when revealing within a valid scope', () => {
+    const before = reduceAutomationDraftDocument(prepared(), { type: 'COLLAPSE_MANY', nodeIds: ['condition'], collapsed: false })
+    const state = reduceAutomationDraftDocument(before, { type: 'SELECT_NODE', nodeId: 'leaf', revealWithinNodeId: 'scope' })
+    expect(state.undoStack).toBe(before.undoStack)
+    expect(state.redoStack).toBe(before.redoStack)
+    expect(state.document!.presentation.collapsedNodes).toEqual(['root', 'scope', 'else'])
+    expect(state.document!.source).toBe(before.document!.source)
+  })
+
+  it.each(['missing', 'else', 'leaf', ''] as const)('updates selection without revealing outside invalid focus %s', revealWithinNodeId => {
+    const before = prepared()
+    const state = reduceAutomationDraftDocument(before, { type: 'SELECT_NODE', nodeId: 'leaf', revealWithinNodeId })
+    expect(state.selectedNodeId).toBe('leaf')
+    expect(state.document).toBe(before.document)
+    expect(state.savePhase).toBe('CLEAN')
+    expect(state.editRevision).toBe(0)
+    expect(state.undoStack).toBe(before.undoStack)
+    expect(state.redoStack).toBe(before.redoStack)
+  })
+
+  it('keeps a conflicted or explicitly read-only scoped selection from writing Presentation', () => {
+    const before = prepared()
+    const conflict = reduceAutomationDraftDocument(before, { type: 'SAVE_FAILURE', error: { code: 'DRAFT_VERSION_CONFLICT', details: { expectedVersion: 2, actualVersion: 3 } } })
+    for (const [state, reveal] of [[conflict, true], [before, false]] as const) {
+      const selected = reduceAutomationDraftDocument(state, { type: 'SELECT_NODE', nodeId: 'leaf', reveal, revealWithinNodeId: 'scope' })
+      expect(selected.selectedNodeId).toBe('leaf')
+      expect(selected.document).toBe(state.document)
+      expect(selected.savePhase).toBe(state.savePhase)
+      expect(selected.editRevision).toBe(state.editRevision)
+      expect(selected.undoStack).toBe(state.undoStack)
+    }
+  })
+})

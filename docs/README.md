@@ -80,3 +80,4 @@
 - [N3-02 有界插件影响分析验收](verification/plugin-impact-2026-10-08.md)
 - [N3-03 预览过期与管理保护验收](verification/plugin-preview-expiry-2026-10-08.md)
 - [N4-01 拖拽移动与节点搜索验收](verification/drag-node-search-2026-10-08.md)
+- [N4-02 长流程面板与容器上下文验收](verification/flow-context-2026-10-08.md)

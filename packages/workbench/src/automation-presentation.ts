@@ -32,8 +32,17 @@ export function automationAncestors(source: AutomationSource, nodeId: string): s
 export function reconcileAutomationPresentation(
   presentation: Record<string, NumenValue>,
   source: AutomationSource,
-  options: { idMap?: Record<string, string>; copiedPresentation?: Record<string, NumenValue>; revealNodeId?: string } = {},
+  options: { idMap?: Record<string, string>; copiedPresentation?: Record<string, NumenValue>; revealNodeId?: string; revealWithinNodeId?: string } = {},
 ): Record<string, NumenValue> {
+  let revealAncestors = options.revealNodeId ? automationAncestors(source, options.revealNodeId) : []
+  if (options.revealNodeId && options.revealWithinNodeId !== undefined) {
+    const scopeIndex = revealAncestors.indexOf(options.revealWithinNodeId)
+    // Focus overrides the scope's visibility only in the view. Selecting within
+    // it may reveal deeper containers, but must not unfold the persisted scope
+    // or its ancestors. An invalid scope never falls back to a global reveal.
+    if (scopeIndex < 0 && !options.idMap) return presentation
+    revealAncestors = scopeIndex < 0 ? [] : revealAncestors.slice(scopeIndex + 1)
+  }
   const before = collapsedAutomationNodes(presentation)
   const nodes = new Set(before.filter(id => !!findAutomationControl(source, id)))
   if (options.idMap) {
@@ -42,9 +51,7 @@ export function reconcileAutomationPresentation(
       if (copy && findAutomationControl(source, copy)) nodes.add(copy)
     }
   }
-  if (options.revealNodeId) {
-    for (const id of automationAncestors(source, options.revealNodeId)) nodes.delete(id)
-  }
+  for (const id of revealAncestors) nodes.delete(id)
   const after = [...nodes]
   if (before.length === after.length && before.every((id, index) => id === after[index])) return presentation
   return { ...presentation, collapsedNodes: after }

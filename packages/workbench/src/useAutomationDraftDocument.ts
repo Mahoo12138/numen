@@ -19,6 +19,7 @@ import {
 import {
   applyAutomationSourceCommand,
   automationSourceHasNode,
+  findAutomationControl,
   automationNodeCopyError,
   automationStepEditOptions,
   type AutomationInsertTarget,
@@ -94,10 +95,11 @@ export interface AutomationDraftDocumentState {
 export type AutomationDraftDocumentAction =
   | { type: 'SELECT'; automationId?: string }
   | { type: 'SERVER'; automationId: string; draft: WorkbenchAutomationDraft }
-  | { type: 'SELECT_NODE'; nodeId?: string; reveal?: boolean }
+  | { type: 'SELECT_NODE'; nodeId?: string; reveal?: boolean; revealWithinNodeId?: string }
   | { type: 'EDIT'; command: AutomationSourceCommand; copiedPresentation?: Record<string, NumenValue> }
   | ({ type: 'REPLACE_FROM_SNAPSHOT' } & ReplaceAutomationDraftFromSnapshotInput)
   | { type: 'COLLAPSE'; nodeId: string; collapsed: boolean }
+  | { type: 'COLLAPSE_MANY'; nodeIds: string[]; collapsed: boolean }
   | { type: 'EDIT_ERROR'; code: string }
   | { type: 'UNDO' }
   | { type: 'REDO' }
@@ -239,18 +241,31 @@ export function reduceAutomationDraftDocument(
       if (!state.document || !automationSourceHasNode(state.document.source, action.nodeId)) {
         return action.nodeId === undefined ? { ...state, selectedNodeId: undefined } : state
       }
-      const presentation = action.nodeId && action.reveal !== false ? reconcileAutomationPresentation(state.document.presentation, state.document.source, { revealNodeId: action.nodeId }) : state.document.presentation
+      const presentation = action.nodeId && action.reveal !== false ? reconcileAutomationPresentation(state.document.presentation, state.document.source, { revealNodeId: action.nodeId, ...(action.revealWithinNodeId !== undefined ? { revealWithinNodeId: action.revealWithinNodeId } : {}) }) : state.document.presentation
       if (presentation !== state.document.presentation && canChangeDocument(state)) {
         return changedState(state, { ...state.document, presentation }, state.undoStack, state.redoStack, action.nodeId)
       }
       return state.selectedNodeId === action.nodeId ? state : { ...state, selectedNodeId: action.nodeId }
     case 'EDIT_ERROR': return { ...state, editError: action.code }
-    case 'COLLAPSE': {
-      if (!state.document || !canChangeDocument(state) || !automationSourceHasNode(state.document.source, action.nodeId)) return state
+    case 'COLLAPSE':
+    case 'COLLAPSE_MANY': {
+      if (!state.document || !canChangeDocument(state)) return state
+      const source = state.document.source
+      const nodeIds = action.type === 'COLLAPSE' ? [action.nodeId] : action.nodeIds
       const collapsed = new Set(collapsedAutomationNodes(state.document.presentation))
-      if (collapsed.has(action.nodeId) === action.collapsed) return state
-      if (action.collapsed) collapsed.add(action.nodeId)
-      else collapsed.delete(action.nodeId)
+      let changed = false
+      for (const nodeId of new Set(nodeIds)) {
+        const node = findAutomationControl(source, nodeId)
+        // The root Block has no collapsible header. Fixed branch/body Blocks do,
+        // while leaves and Trigger declarations never hide a structural subtree.
+        if (!node || !['block', 'if', 'foreach', 'parallel', 'race'].includes(node.type)
+          || node.type === 'block' && node.id === source.flow.id
+          || collapsed.has(nodeId) === action.collapsed) continue
+        if (action.collapsed) collapsed.add(nodeId)
+        else collapsed.delete(nodeId)
+        changed = true
+      }
+      if (!changed) return state
       return changedState(state,
         { ...state.document, presentation: { ...state.document.presentation, collapsedNodes: [...collapsed] } },
         [...state.undoStack.slice(-(historyLimit - 1)), snapshot(state.document, state.selectedNodeId)], [], state.selectedNodeId)
@@ -474,6 +489,7 @@ export interface AutomationDraftDocumentModel {
   canPublish: boolean
   canUndo: boolean
   canRedo: boolean
+  historyPreservesInputs(direction: 'undo' | 'redo'): boolean
   canReplaceFromSnapshot: boolean
   deleteStep(nodeId: string): void
   moveStep(nodeId: string, direction: 'up' | 'down'): void
@@ -487,7 +503,8 @@ export interface AutomationDraftDocumentModel {
   cutStep(nodeId: string): void
   paste(target: AutomationInsertTarget): boolean
   toggleCollapse(nodeId: string, collapsed: boolean): void
-  selectNode(nodeId?: string, reveal?: boolean): void
+  setCollapsed(nodeIds: string[], collapsed: boolean): void
+  selectNode(nodeId?: string, reveal?: boolean, revealWithinNodeId?: string): void
   setCapabilityConnection(nodeId: string, slotName: string, connectionId?: string): void
   setTriggerConfig(nodeId: string, fieldName: string, value?: NumenValue): void
   setExtensionInput(nodeId: string, fieldName: string, expression?: ValueExpr): void
@@ -643,8 +660,8 @@ export function useAutomationDraftDocument({
     if (changed && copied.mode === 'cut') clipboard.value = undefined
     return changed
   }
-  const selectNode = (nodeId?: string, reveal = true) => {
-    dispatch({ type: 'SELECT_NODE', reveal, ...(nodeId ? { nodeId } : {}) })
+  const selectNode = (nodeId?: string, reveal = true, revealWithinNodeId?: string) => {
+    dispatch({ type: 'SELECT_NODE', reveal, ...(nodeId ? { nodeId } : {}), ...(revealWithinNodeId !== undefined ? { revealWithinNodeId } : {}) })
   }
   const setCapabilityConnection = (nodeId: string, slotName: string, connectionId?: string) => {
     dispatch({
@@ -672,6 +689,16 @@ export function useAutomationDraftDocument({
   }
   const setWaitExpression = (nodeId: string, field: 'durationMs' | 'until', expression: ValueExpr) => {
     dispatch({ type: 'EDIT', command: { type: 'SET_WAIT_EXPRESSION', nodeId, field, expression } })
+  }
+  const historyPreservesInputs = (direction: 'undo' | 'redo'): boolean => {
+    const current = state.value
+    if (!current.document || !canChangeDocument(current) || toValue(automationId) !== current.document.automationId) return false
+    const target = (direction === 'undo' ? current.undoStack : current.redoStack).at(-1)
+    if (!target || target.selectedNodeId !== current.selectedNodeId) return false
+    // Save responses recreate JSON objects. Identity is only a fast path; equal
+    // content and identical selection keep the Inspector's pending inputs valid.
+    return target.source === current.document.source
+      || JSON.stringify(target.source) === JSON.stringify(current.document.source)
   }
   const undo = () => dispatch({ type: 'UNDO' })
   const redo = () => dispatch({ type: 'REDO' })
@@ -766,6 +793,7 @@ export function useAutomationDraftDocument({
     cutStep,
     paste,
     toggleCollapse: (nodeId, collapsed) => dispatch({ type: 'COLLAPSE', nodeId, collapsed }),
+    setCollapsed: (nodeIds, collapsed) => dispatch({ type: 'COLLAPSE_MANY', nodeIds, collapsed }),
     selectNode,
     setCapabilityConnection,
     setCapabilityInput,
@@ -776,6 +804,7 @@ export function useAutomationDraftDocument({
     setWaitExpression,
     undo,
     redo,
+    historyPreservesInputs,
     publish,
     flushDraft,
     reload,

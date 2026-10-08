@@ -1163,6 +1163,41 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .structure-outline button > span { min-width: 0; overflow-wrap: anywhere; }
 .structure-outline button > small { overflow: hidden; margin-left: auto; color: var(--wb-muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .structure-outline button > em { font-size: 10px; font-style: normal; color: #9f3425; }
+/* Container focus is a local view; folding still follows document Presentation. */
+.structure-context-bar { position: sticky; z-index: 3; top: 0; display: grid; gap: 5px; min-width: 0; margin-bottom: 10px; padding: 7px 9px; border: 1px solid var(--wb-border); border-radius: 5px; background: var(--wb-surface); }
+.structure-breadcrumbs { display: flex; align-items: center; gap: 3px; min-width: 0; overflow-x: auto; }
+.structure-breadcrumbs > span { display: flex; align-items: center; flex: 0 0 auto; gap: 3px; min-width: 0; }
+.structure-breadcrumbs button { flex: 0 0 auto; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 4px; border: 0; border-radius: 3px; background: transparent; color: var(--wb-muted); font: inherit; font-size: 11px; cursor: pointer; }
+.structure-breadcrumbs button[aria-current="location"] { color: var(--wb-text); font-weight: 650; }
+.structure-breadcrumbs button:hover { color: var(--wb-accent); background: var(--wb-selection); }
+.structure-view-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+.structure-view-actions > button { display: inline-flex; align-items: center; gap: 5px; min-height: 28px; padding: 4px 7px; border: 1px solid var(--wb-border); border-radius: 4px; background: var(--wb-surface); color: var(--wb-text); font-size: 10.5px; cursor: pointer; }
+.structure-view-actions > button:disabled { color: var(--wb-faint); cursor: default; }
+.structured-flow .automation-step, .structured-flow .structure-block-title { scroll-margin-top: 110px; }
+.structure-block[data-slot="then"] > .structure-block-header, .structure-block[data-slot="else"] > .structure-block-header { border-left: 2px solid #b8c9df; padding-left: 6px; }
+.structure-block[data-slot="body"] > .structure-block-header { border-left: 2px solid #b8cfc8; padding-left: 6px; }
+.structure-block[data-slot="branch"] > .structure-block-header { border-left: 2px solid #c9c0df; padding-left: 6px; }
+.structure-triggers { padding-bottom: 16px; border-bottom: 1px solid var(--wb-border-strong); }
+.automation-editor .entity-title-row > div:first-child { flex-basis: auto; }
+.automation-editor .entity-title-actions { margin-left: auto; }
+.structured-node-header .step-copy strong { overflow-wrap: anywhere; line-height: 1.4; }
+.inspector-header > div { min-width: 0; }
+.inspector-header h2, .inspector-field-error, .inspector-diagnostics p, .authoring-notice { overflow-wrap: anywhere; }
+.inspector .schema-field:has(textarea) > .schema-field-row { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+.inspector .schema-field:has(textarea) > .schema-field-row > .schema-value-editor { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+.inspector .schema-field:has(textarea) > .schema-field-row > .schema-value-editor > .schema-value-mode { width: 110px; }
+.inspector .schema-field:has(textarea) > .inspector-field-help, .inspector .schema-field:has(textarea) > .inspector-field-error { margin-left: 0; }
+.inspector .schema-field textarea { min-height: 100px; }
+.automation-problem { grid-template-columns: 18px minmax(0, 1fr); align-items: start; }
+.automation-problem > span { display: grid; gap: 3px; }
+.automation-problem strong, .automation-problem code { overflow-wrap: anywhere; }
+.automation-problem small { white-space: normal; overflow-wrap: anywhere; }
+.automation-problem code { grid-column: 2; }
+@media (max-width: 700px) {
+  .structure-context-bar { position: static; }
+  .structure-view-actions > button { min-height: 32px; }
+  .structured-flow .automation-step, .structured-flow .structure-block-title { scroll-margin-top: 8px; }
+}
 .structure-search { padding: 9px 10px 0; }
 .structure-search input { box-sizing: border-box; width: 100%; min-width: 0; min-height: 34px; padding: 6px 9px; border: 1px solid var(--wb-border-strong); border-radius: 4px; background: var(--wb-surface); color: var(--wb-text); font: inherit; font-size: 12px; }
 .structure-search input:focus-visible { outline: 2px solid var(--wb-accent); outline-offset: 1px; }

@@ -65,6 +65,10 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
     if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) document.activeElement.blur()
   }
   const allowInputChange = () => { blurCurrentInput(); return inputs.confirmDiscard() }
+  const allowHistoryChange = (direction: 'undo' | 'redo') => {
+    blurCurrentInput()
+    return authoring.historyPreservesInputs(direction) || inputs.confirmDiscard()
+  }
   const confirmedAutomationId = ref<string>()
   const requestedAutomationId = ref('morning-brief')
   const createRequest = ref(0)
@@ -409,12 +413,13 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
       },
         onCopyStep: authoring.copyStep, onCutStep: authoring.cutStep, onPaste: target => allowInputChange() && authoring.paste(target),
         onToggleCollapse: authoring.toggleCollapse,
+        onSetCollapsed: authoring.setCollapsed,
       } : {}),
       ...(authoring.clipboard ? { clipboard: authoring.clipboard } : {}),
       collapsedNodes: authoring.collapsedNodes,
       ...(editable.value ? { onDeleteStep: nodeId => { if (allowInputChange()) authoring.deleteStep(nodeId) }, onMoveStep: (nodeId, direction) => { if (allowInputChange()) authoring.moveStep(nodeId, direction) } } : {}),
       onReloadInsertCatalog: reloadInsertCatalog,
-      ...(editable.value ? { onUndo: () => { if (allowInputChange()) authoring.undo() }, onRedo: () => { if (allowInputChange()) authoring.redo() }, onPublish: publishDraft } : {}),
+      ...(editable.value ? { onUndo: () => { if (allowHistoryChange('undo')) authoring.undo() }, onRedo: () => { if (allowHistoryChange('redo')) authoring.redo() }, onPublish: publishDraft } : {}),
       ...(editable.value || draftTestMounted.value ? { onTestDraft: openDraftTest, draftTestSessionActive: draftTestMounted.value } : {}),
       onReloadDraft: () => { if (allowDocumentLeave()) { inputs.discard(); authoring.reload() } },
       ...(editable.value ? { onRetrySave: authoring.retrySave } : {}),
@@ -473,10 +478,10 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
         query: { left: revisionId, right: 'draft', draftVersion: String(authoring.document.version) },
       })
     },
-    onStepChange: id => {
+    onStepChange: (id, revealWithinNodeId) => {
       const step = steps.value.find(item => item.id === id)
       if (!step || (id !== activeStepId.value && !allowInputChange())) return false
-      if (props.consoleClient) authoring.selectNode(step.sourceId, editable.value && authoring.canEdit)
+      if (props.consoleClient) authoring.selectNode(step.sourceId, editable.value && authoring.canEdit, revealWithinNodeId)
       else requestedStepId.value = id
       fieldFocus.value = undefined
       props.onInspectorOpenChange(true)

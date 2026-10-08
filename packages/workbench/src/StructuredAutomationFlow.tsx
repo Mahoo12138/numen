@@ -1,6 +1,6 @@
 import type { AutomationSource, BlockSource, ControlSource, TriggerSource } from '@numenjs/core'
 import { Button, SelectMenu } from '@numenjs/components'
-import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Clipboard, Copy, GripVertical, ListTree, MoreHorizontal, Scissors, Trash2 } from '@lucide/vue'
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Clipboard, Copy, Focus, GripVertical, ListTree, MoreHorizontal, Scissors, Trash2 } from '@lucide/vue'
 import { computed, nextTick, ref, watch, type VNodeChild } from 'vue'
 import { AutomationQuickPicker } from './AutomationQuickPicker.js'
 import { automationRelativeInsertTarget, automationStepEditOptions } from './automation-source-editing.js'
@@ -13,6 +13,7 @@ import { automationAncestors } from './automation-presentation.js'
 import { searchAutomationNodes } from './automation-node-search.js'
 import type { AutomationDropPlacement } from './automation-drag.js'
 import { useAutomationDrag } from './useAutomationDrag.js'
+import { automationCollapsibleIds, automationContainerPath, automationFlowContainers, type AutomationFlowContainer } from './automation-flow-context.js'
 import { defineSetupComponent } from './vue-component.js'
 
 export interface AutomationClipboardView {
@@ -30,7 +31,7 @@ interface StructuredAutomationFlowProps {
   insertCatalogState?: ConsoleQueryState<WorkbenchAutomationInsertCatalog>
   collapsedNodes?: string[]
   clipboard?: AutomationClipboardView
-  onStepChange(id: string): boolean | void
+  onStepChange(id: string, revealWithinNodeId?: string): boolean | void
   onInsert?(item: WorkbenchAutomationInsertItem, target: AutomationInsertTarget): boolean
   onReloadInsertCatalog?(): void
   onSourceCommand?(command: AutomationSourceCommand, expectedSource?: AutomationSource): boolean
@@ -40,12 +41,13 @@ interface StructuredAutomationFlowProps {
   onCutStep?(nodeId: string): void
   onPaste?(target: AutomationInsertTarget): boolean
   onToggleCollapse?(nodeId: string, collapsed: boolean): void
+  onSetCollapsed?(nodeIds: string[], collapsed: boolean): void
 }
 
 export const StructuredAutomationFlow = defineSetupComponent<StructuredAutomationFlowProps>('StructuredAutomationFlow', [
   'source', 'steps', 'activeStepId', 'inspectorFocusNodeId', 'canEdit', 'insertCatalogState', 'collapsedNodes', 'clipboard',
   'onStepChange', 'onInsert', 'onReloadInsertCatalog', 'onSourceCommand', 'onDeleteStep', 'onMoveStep',
-  'onCopyStep', 'onCutStep', 'onPaste', 'onToggleCollapse',
+  'onCopyStep', 'onCutStep', 'onPaste', 'onToggleCollapse', 'onSetCollapsed',
 ], props => {
   const host = ref<HTMLElement>()
   const outlineOpen = ref(false)
@@ -56,13 +58,40 @@ export const StructuredAutomationFlow = defineSetupComponent<StructuredAutomatio
   const destination = ref('')
   const removal = ref<{ key: string; label: string; command: AutomationSourceCommand }>()
   const metadata = computed(() => new Map(props.steps.map(step => [step.sourceId, step])))
+  // Focus is a viewport choice. Persisted folding still belongs to Presentation.
+  const focusId = ref<string>()
+  const containers = computed(() => new Map(automationFlowContainers(props.source).map(container => [container.node.id, container])))
+  const focused = computed(() => focusId.value ? containers.value.get(focusId.value) : undefined)
+  const selectedSourceId = computed(() => props.steps.find(step => step.id === props.activeStepId)?.sourceId)
+  const selectedPath = computed(() => selectedSourceId.value ? automationContainerPath(props.source, selectedSourceId.value) : [])
+  const focusCandidate = computed(() => selectedPath.value.at(-1))
+  const focusPath = computed(() => focusId.value ? automationContainerPath(props.source, focusId.value).filter(container => container.node.id !== props.source.flow.id) : [])
+  const foldingIds = computed(() => automationCollapsibleIds(props.source, focusId.value))
+  const containerLabel = (container: AutomationFlowContainer) => {
+    if (container.role === 'root') return t('workbench.structure.flow')
+    if (container.role === 'branch') return t('workbench.structure.branch', { count: (container.branchIndex ?? 0) + 1 })
+    if (container.role === 'then' || container.role === 'else' || container.role === 'body') return t(`workbench.structure.${container.role}`)
+    return metadata.value.get(container.node.id)?.label ?? container.node.id
+  }
+  watch([() => props.source, selectedSourceId], () => {
+    if (focusId.value && (!focused.value || !selectedPath.value.some(container => container.node.id === focusId.value))) focusId.value = undefined
+  })
   // Archived and conflicted drafts remain browsable without mutating the document.
   // Once editing resumes, the persisted presentation owns the view again.
   const readonlyCollapsed = ref<string[]>()
   watch(() => props.canEdit && !!props.onToggleCollapse, canPersist => {
     readonlyCollapsed.value = canPersist ? undefined : [...(props.collapsedNodes ?? [])]
   }, { immediate: true })
-  const isCollapsed = (id: string) => (readonlyCollapsed.value ?? props.collapsedNodes)?.includes(id) ?? false
+  const isCollapsed = (id: string) => id !== focusId.value && ((readonlyCollapsed.value ?? props.collapsedNodes)?.includes(id) ?? false)
+  const setCollapsed = (collapsed: boolean) => {
+    drag.cancel()
+    if (readonlyCollapsed.value === undefined) props.onSetCollapsed?.(foldingIds.value, collapsed)
+    else {
+      const ids = new Set(readonlyCollapsed.value)
+      for (const id of foldingIds.value) { if (collapsed) ids.add(id); else ids.delete(id) }
+      readonlyCollapsed.value = [...ids]
+    }
+  }
   const toggleCollapse = (id: string, collapsed: boolean) => {
     if (readonlyCollapsed.value === undefined) {
       props.onToggleCollapse?.(id, collapsed)
@@ -75,12 +104,14 @@ export const StructuredAutomationFlow = defineSetupComponent<StructuredAutomatio
   }
   const revealReadonly = (nodeId: string | undefined) => {
     if (readonlyCollapsed.value === undefined || !nodeId) return
-    const ancestors = new Set(automationAncestors(props.source, nodeId))
+    const path = automationAncestors(props.source, nodeId)
+    const scopeIndex = focusId.value ? path.indexOf(focusId.value) : -1
+    const ancestors = new Set(focusId.value ? scopeIndex >= 0 ? path.slice(scopeIndex + 1) : [] : path)
     readonlyCollapsed.value = readonlyCollapsed.value.filter(id => !ancestors.has(id))
   }
   const select = (id: string) => {
     const step = metadata.value.get(id)
-    if (step && props.onStepChange(step.id) !== false) revealReadonly(step.sourceId)
+    if (step && props.onStepChange(step.id, focusId.value) !== false) revealReadonly(step.sourceId)
   }
   const focusSelection = async (explicit = false) => {
     await nextTick()
@@ -106,6 +137,17 @@ export const StructuredAutomationFlow = defineSetupComponent<StructuredAutomatio
     return applied
   }
   const drag = useAutomationDrag({ host, source: () => props.source, canEdit: () => props.canEdit, commit: command })
+  const focusContainer = (id?: string) => {
+    if (id && !containers.value.has(id)) return
+    drag.cancel()
+    focusId.value = id === props.source.flow.id ? undefined : id
+    actionNode.value = undefined
+    moveNode.value = undefined
+    removal.value = undefined
+    void nextTick(() => {
+      host.value?.closest<HTMLElement>('.automation-canvas')?.scrollTo({ top: 0 })
+    })
+  }
   const dropZone = (nodeId: string, placement: AutomationDropPlacement): VNodeChild => {
     if (!drag.session.value) return null
     const active = drag.intent.value?.nodeId === nodeId && drag.intent.value.placement === placement
@@ -117,7 +159,9 @@ export const StructuredAutomationFlow = defineSetupComponent<StructuredAutomatio
     </div>
   }
   const locate = (step: AutomationStep) => {
-    if (props.onStepChange(step.id) === false) return
+    const scope = focusId.value && automationContainerPath(props.source, step.sourceId ?? '').some(container => container.node.id === focusId.value) ? focusId.value : undefined
+    if (props.onStepChange(step.id, scope) === false) return
+    if (!scope) focusId.value = undefined
     revealReadonly(step.sourceId)
     outlineOpen.value = false
     void focusSelection(true)
@@ -222,7 +266,7 @@ export const StructuredAutomationFlow = defineSetupComponent<StructuredAutomatio
           draggable="true" data-drag-node-id={node.id} aria-label={t('workbench.structure.drag', { label: step.label })}
           title={t('workbench.structure.drag', { label: step.label })} onDragstart={event => drag.start(event, node.id)}
           onDragend={drag.cancel} type="button" tabindex={-1}><GripVertical size={15} aria-hidden="true" /></button> : null}
-        {structural ? <Button class="structure-collapse" aria-label={t(`workbench.structure.${collapsed ? 'expand' : 'collapse'}`, { label: step.label })}
+        {structural && node.id !== focusId.value ? <Button class="structure-collapse" aria-label={t(`workbench.structure.${collapsed ? 'expand' : 'collapse'}`, { label: step.label })}
           aria-expanded={!collapsed} onClick={() => toggleCollapse(node.id, !collapsed)} type="button">
           {collapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
         </Button> : null}
@@ -245,7 +289,8 @@ export const StructuredAutomationFlow = defineSetupComponent<StructuredAutomatio
     const collapsed = isCollapsed(value.id)
     const target: AutomationInsertTarget = { kind: 'block', blockId: value.id }
     const step = metadata.value.get(value.id)
-    return <section class="structure-block" data-block-id={value.id} data-root={root}>
+    const context = containers.value.get(value.id)
+    return <section class="structure-block" data-block-id={value.id} data-root={root} data-slot={context?.role}>
       {!root && showHeader ? <header class="structure-block-header">
         <Button class="structure-collapse" aria-expanded={!collapsed} aria-label={t(`workbench.structure.${collapsed ? 'expand' : 'collapse'}`, { label })}
           onClick={() => toggleCollapse(value.id, !collapsed)} type="button">{collapsed ? <ChevronRight size={15} /> : <ChevronDown size={15} />}</Button>
@@ -269,13 +314,13 @@ export const StructuredAutomationFlow = defineSetupComponent<StructuredAutomatio
   }
 
   const node = (value: ControlSource): VNodeChild => {
-    if (value.type === 'block') return <div class="structured-node" data-structure-node-id={value.id} key={value.id}>
+    if (value.type === 'block') return <div class="structured-node" data-structure-node-id={value.id} data-control-kind={value.type} key={value.id}>
       {nodeHeader(value, true)}
       {!isCollapsed(value.id) ? block(value, metadata.value.get(value.id)?.label ?? value.id, undefined, false, false) : null}
     </div>
     const structural = value.type === 'if' || value.type === 'foreach' || value.type === 'parallel' || value.type === 'race'
     const elseLabel = t('workbench.structure.else')
-    return <div class="structured-node" data-structure-node-id={value.id} data-cut={props.clipboard?.mode === 'cut' && props.clipboard.nodeId === value.id} key={value.id}>
+    return <div class="structured-node" data-structure-node-id={value.id} data-control-kind={value.type} data-cut={props.clipboard?.mode === 'cut' && props.clipboard.nodeId === value.id} key={value.id}>
       {nodeHeader(value, structural)}
       {structural && !isCollapsed(value.id) ? <div class="structure-container-content">
         {value.type === 'if' ? <>
@@ -302,7 +347,31 @@ export const StructuredAutomationFlow = defineSetupComponent<StructuredAutomatio
     </div>
   }
 
-  return () => <div class="structured-flow" ref={host} data-dragging-node-id={drag.session.value?.nodeId}>
+  return () => <div class="structured-flow" ref={host} data-dragging-node-id={drag.session.value?.nodeId} data-focus-container-id={focusId.value}>
+    <div class="structure-context-bar">
+      <nav class="structure-breadcrumbs" aria-label={t('workbench.structure.containerPath')}>
+        <button type="button" aria-label={t('workbench.structure.showFlow')} aria-current={!focused.value ? 'location' : undefined}
+          onMousedown={event => event.preventDefault()} onClick={() => focusContainer()}>{t('workbench.structure.flow')}</button>
+        {focusPath.value.map(container => <span key={container.node.id}>
+          <ChevronRight size={12} aria-hidden="true" />
+          <button type="button" title={container.node.id} aria-label={t('workbench.structure.showContainer', { id: container.node.id })}
+            aria-current={focusId.value === container.node.id ? 'location' : undefined}
+            onMousedown={event => event.preventDefault()} onClick={() => focusContainer(container.node.id)}>{containerLabel(container)}</button>
+        </span>)}
+      </nav>
+      <div class="structure-view-actions" role="group" aria-label={t('workbench.structure.viewActions')}>
+        {focused.value ? <Button type="button" aria-label={t('workbench.structure.parent')} onMousedown={event => event.preventDefault()}
+          onClick={() => focusContainer(focused.value?.parentId)}><ArrowUp size={13} aria-hidden="true" />{t('workbench.structure.parent')}</Button> : null}
+        <Button type="button" aria-label={t('workbench.structure.focusSelected')} title={focusCandidate.value ? containerLabel(focusCandidate.value) : undefined}
+          disabled={!focusCandidate.value || focusCandidate.value.node.id === props.source.flow.id || focusCandidate.value.node.id === focusId.value}
+          onMousedown={event => event.preventDefault()} onClick={() => { if (focusCandidate.value) focusContainer(focusCandidate.value.node.id) }}>
+          <Focus size={13} aria-hidden="true" />{t('workbench.structure.focusSelected')}</Button>
+        <Button type="button" disabled={!foldingIds.value.some(id => !isCollapsed(id))} onMousedown={event => event.preventDefault()}
+          onClick={() => setCollapsed(true)}>{t('workbench.structure.collapseAll')}</Button>
+        <Button type="button" disabled={!foldingIds.value.some(id => isCollapsed(id))} onMousedown={event => event.preventDefault()}
+          onClick={() => setCollapsed(false)}>{t('workbench.structure.expandAll')}</Button>
+      </div>
+    </div>
     <details class="structure-outline" open={outlineOpen.value} onToggle={event => { outlineOpen.value = (event.currentTarget as HTMLDetailsElement).open }}
       onKeydown={event => {
         if (event.isComposing) return
@@ -332,15 +401,15 @@ export const StructuredAutomationFlow = defineSetupComponent<StructuredAutomatio
       </nav>
     </details>
     {props.clipboard ? <p class="structure-clipboard" role="status">{t(`workbench.structure.${props.clipboard.mode === 'cut' ? 'cutReady' : 'copyReady'}`, { label: props.clipboard.label ?? props.clipboard.nodeId })}</p> : null}
-    {props.source.triggers.length ? <section class="structure-triggers" aria-label={t('workbench.triggers')}>
+    {!focused.value && props.source.triggers.length ? <section class="structure-triggers" aria-label={t('workbench.triggers')}>
       <h2>{t('workbench.triggers')}</h2>
       {props.source.triggers.map(trigger => <div class="structured-node" data-structure-node-id={trigger.id} key={trigger.id}>
         {nodeHeader(trigger, false)}
       </div>)}
     </section> : null}
     <section class="structure-main" aria-label={t('workbench.structure.flow')}>
-      <h2>{t('workbench.structure.flow')}</h2>
-      {props.source.flow.type === 'block' ? block(props.source.flow, t('workbench.structure.flow'), undefined, true) : <>
+      <h2>{focused.value ? containerLabel(focused.value) : t('workbench.structure.flow')}</h2>
+      {focused.value ? node(focused.value.node) : props.source.flow.type === 'block' ? block(props.source.flow, t('workbench.structure.flow'), undefined, true) : <>
         {node(props.source.flow)}
         {picker({ kind: 'root' }, t('workbench.addStep'), false, true)}
         {paste({ kind: 'root' }, t('workbench.structure.pasteInto', { label: t('workbench.structure.flow') }))}

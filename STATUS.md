@@ -521,8 +521,34 @@ passed against the same build; desktop, 780px and 390px screenshots were viewed.
 [N4-01 verification](docs/verification/drag-node-search-2026-10-08.md) records the
 boundaries, regression fix and evidence. No migration, dependency upgrade or release.
 
-Next: N4-02 makes long-flow panels and container context more compact, preserving
-existing Source/Presentation ownership and Inspector behavior.
+### N4-02 long-flow panels and container context — verified 2026-10-08
+
+The canvas now exposes container breadcrumbs, focus/parent navigation and scoped
+collapse/expand. Focus is a local viewport choice; folding remains one reversible
+Presentation edit. Scoped selection preserves outer folding, while search and
+Problems can return to the entire flow. Missing remote containers safely clear
+focus without stealing Outline input. Presentation-only history preserves pending
+Inspector input; Source or selection changes retain the existing discard guard.
+
+Known structural slots provide explicit Trigger, branch and loop-body boundaries.
+Complex literals show compact counts on nodes; long Chinese titles, JSON fields
+and diagnostic source paths remain readable in desktop, narrow and mobile views.
+No new global state, migration or dependency change is introduced.
+
+Verification: current workspace typecheck, production/example builds and 126
+Vitest files / 876 tests passed. Its mixed browser run passed 95 of 97 cases; the
+two failures follow concurrent System-page changes that remove a panel expected
+by existing tests. An independent candidate built from `0e959e2` plus only N4-02
+passes all 93 browser cases and 126 Vitest files / 871 tests. A pre-existing async
+Preview ordering assumption intermittently failed one configuration test, then
+passed scoped and full reruns; the verification record retains that limitation.
+
+[N4-02 verification](docs/verification/flow-context-2026-10-08.md) records the
+seven new complex browser cases, reviewed 1440/780/390px screenshots, candidate
+isolation and parallel-work boundaries. No deployment or release.
+
+Next: N4-03 establishes measured 100/300-node and plugin capacity/performance
+baselines before making capacity claims or adding optimizations.
 
 M0/M1 foundation implemented and verified: independent Console/Workbench composition,
 v2 native groups and explicit migration, v1 compatibility, two sets of ten lifecycle cycles,

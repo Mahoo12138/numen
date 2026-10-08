@@ -70,7 +70,7 @@ export interface AutomationEditorProps {
   onCompareRevision?(revisionId: string): void
   onRestoreSnapshot?(snapshotId: string): void
   onSetEnabled?(enabled: boolean): void
-  onStepChange(id: string): boolean | void
+  onStepChange(id: string, revealWithinNodeId?: string): boolean | void
   onTabChange(tab: string): void
   onOpenInspector(): void
   onAutomationChange?(id: string): void
@@ -84,6 +84,7 @@ export interface AutomationEditorProps {
   onCutStep?(nodeId: string): void
   onPaste?(target: AutomationInsertTarget): boolean
   onToggleCollapse?(nodeId: string, collapsed: boolean): void
+  onSetCollapsed?(nodeIds: string[], collapsed: boolean): void
   onReloadInsertCatalog?(): void
   onUndo?(): void
   onRedo?(): void
@@ -147,6 +148,7 @@ export function AutomationEditor({
   onCutStep,
   onPaste,
   onToggleCollapse,
+  onSetCollapsed,
   onDeleteStep,
   onMoveStep,
   onReloadInsertCatalog,
@@ -176,11 +178,11 @@ export function AutomationEditor({
   const triggerRuntime = detail?.triggerRuntime?.activationGeneration === detail?.automation.activationGeneration
     ? detail?.triggerRuntime : undefined
   return (
-    <main class="main-workbench">
+    <main class="main-workbench automation-editor">
       <header class="entity-header">
         <div class="entity-title-row">
           <div>
-            <span class="breadcrumb">{t('workbench.automations')}{automationName}</span>
+            <span class="breadcrumb">{t('workbench.pages.automations')}</span>
             <div class="automation-title"><h1>{automationName}</h1>{detail ? (
               <span class="automation-badges">
                 {archived ? <em data-tone="archived">{t('workbench.archived')}</em> : null}
@@ -327,6 +329,7 @@ export function AutomationEditor({
                 {...(onCutStep ? { onCutStep } : {})}
                 {...(onPaste ? { onPaste } : {})}
                 {...(onToggleCollapse ? { onToggleCollapse } : {})}
+                {...(onSetCollapsed ? { onSetCollapsed } : {})}
                 {...(onReloadInsertCatalog ? { onReloadInsertCatalog } : {})}
               /> : <>
                 {steps.map((step, index) => {
