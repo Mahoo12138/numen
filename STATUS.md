@@ -572,8 +572,35 @@ excluded from both the commit and these results.
 measurement definitions, exact environment/build identity, retained numeric data,
 reviewed screenshots, budgets and limitations. No deployment or release.
 
-Next: profile 300/1000-node selection and field commits to establish the actual
-projection/render/layout bottleneck before choosing a targeted optimization.
+### Workbench translation render optimization — verified 2026-10-08
+
+Production CPU profiles identify repeated locale resolution and Cordis proxy
+traversal as a major cost in 300/1000-node selection and field commits. A bounded
+256-message cache now belongs to each Workbench Vue provider. Only calls without
+parameters use it; language/dictionary revisions, service replacement and disposal
+invalidate it. Snapshot-fenced hits preserve earlier-listener ordering, while
+parameterized and reference-created placeholder semantics remain unchanged.
+
+A fresh controlled comparison against `a7a4f93` reduces selection/field P95 from
+102.8/100.0ms to 78.9/76.3ms at 300 nodes and 352.4/348.9ms to 279.8/275.8ms at
+1000 nodes (about 21–24%). All five formal benchmark cases meet the unchanged
+local budgets; Home DOM/listener/subscription counts remain stable for ten rounds.
+Retained heap still rises 324.2–389.8KiB, and 1000 nodes remains a pressure probe.
+
+The isolated candidate passes typecheck, production/example builds, 129 Vitest
+files / 911 tests including 12 translation cache regressions, and all 102 browser
+cases. Existing browser tests were aligned with the committed System/Home layout after all
+three original failures were reproduced against the unoptimized base. A separate
+reload timing failure was corrected by awaiting Inspector visibility before the
+unchanged exact-width assertion; it passed three repeated checks and the full run.
+
+[Render performance verification](docs/verification/workbench-render-performance-2026-10-08.md)
+records profiles, raw numeric comparisons, exact candidate/build identities,
+cache boundaries and validation. No deployment or release.
+
+Next: isolate the per-node `automationStepEditOptions` copy-safety traversal in
+flow rendering, preserving Source command validation while avoiding redundant
+work. Parameterized translation remains a separate measured cost.
 
 M0/M1 foundation implemented and verified: independent Console/Workbench composition,
 v2 native groups and explicit migration, v1 compatibility, two sets of ten lifecycle cycles,

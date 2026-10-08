@@ -1,0 +1,459 @@
+{
+  "schemaVersion": 1,
+  "kind": "workbench-render-performance-comparison",
+  "productBase": "a7a4f93dd0e2a4eb59173821ddb3da5a8148d945",
+  "candidateProductFiles": {
+    "packages/workbench/src/i18n.ts": {
+      "sha256": "32dd8421d0d630b80a81acbe6830b95413a0f7f59952a5bf0daecd87e872fe26"
+    }
+  },
+  "environment": {
+    "cpu": "Apple M4",
+    "os": "darwin",
+    "arch": "arm64",
+    "release": "25.6.0",
+    "node": "v22.14.0",
+    "chromiumVersion": "153.0.8010.12",
+    "logicalCpus": 10,
+    "memoryBytes": 25769803776,
+    "viewport": {
+      "width": 1440,
+      "height": 960
+    }
+  },
+  "before": [
+    {
+      "id": "automation-1000",
+      "fixtureSha256": "7a3310c29438b9d9b6a8e1c7fa68dc0b263e87a413a42cdd890eda84fb24d4ad",
+      "measuredAt": "2026-10-08T12:46:25.427Z",
+      "settings": {
+        "samples": 20,
+        "coldTrials": 3,
+        "lifecycleRounds": 10
+      },
+      "latency": {
+        "nodeSelectionWarmup": {
+          "count": 1,
+          "p50Ms": 350.2000000476837,
+          "p95Ms": 350.2000000476837,
+          "maxMs": 350.2000000476837,
+          "samplesMs": [
+            350.2000000476837
+          ]
+        },
+        "nodeSelection": {
+          "count": 20,
+          "p50Ms": 341.10000002384186,
+          "p95Ms": 352.4000000357628,
+          "maxMs": 354.69999998807907,
+          "samplesMs": [
+            335.2000000476837,
+            327.19999998807907,
+            329.30000001192093,
+            326.19999998807907,
+            327,
+            329.69999998807907,
+            343.5,
+            342.30000001192093,
+            341.5,
+            354.69999998807907,
+            341.10000002384186,
+            346.19999998807907,
+            343.19999998807907,
+            337.0999999642372,
+            352.4000000357628,
+            339.60000002384186,
+            337.39999997615814,
+            341.5,
+            342.10000002384186,
+            343.30000001192093
+          ]
+        },
+        "fieldCommitRenderWarmup": {
+          "count": 1,
+          "p50Ms": 349.9000000357628,
+          "p95Ms": 349.9000000357628,
+          "maxMs": 349.9000000357628,
+          "samplesMs": [
+            349.9000000357628
+          ]
+        },
+        "fieldCommitRender": {
+          "count": 20,
+          "p50Ms": 339,
+          "p95Ms": 348.89999997615814,
+          "maxMs": 355,
+          "samplesMs": [
+            341.80000001192093,
+            339.5,
+            341,
+            335.89999997615814,
+            336.5,
+            336.80000001192093,
+            336.5,
+            355,
+            339,
+            346.5,
+            348.89999997615814,
+            337.80000001192093,
+            343.2999999523163,
+            339.10000002384186,
+            340.69999998807907,
+            335.80000001192093,
+            337,
+            335.4000000357628,
+            339.60000002384186,
+            337.5
+          ]
+        },
+        "hiddenNodeLocateWarmup": {
+          "count": 1,
+          "p50Ms": 84.40000003576279,
+          "p95Ms": 84.40000003576279,
+          "maxMs": 84.40000003576279,
+          "samplesMs": [
+            84.40000003576279
+          ]
+        },
+        "hiddenNodeLocate": {
+          "count": 20,
+          "p50Ms": 79.89999997615814,
+          "p95Ms": 82.60000002384186,
+          "maxMs": 82.69999998807907,
+          "samplesMs": [
+            80.39999997615814,
+            82,
+            81,
+            82.60000002384186,
+            81.5,
+            82.69999998807907,
+            80.30000001192093,
+            80.69999998807907,
+            79.89999997615814,
+            79.80000001192093,
+            79.10000002384186,
+            79,
+            79.79999995231628,
+            79,
+            79,
+            79.90000003576279,
+            79.70000004768372,
+            80.19999998807907,
+            78.90000003576279,
+            78.79999995231628
+          ]
+        }
+      },
+      "saves": {
+        "selectionSaves": 0,
+        "fieldSaves": 21,
+        "expectedFieldSaves": 21,
+        "locationSaves": 42,
+        "expectedLocationSaves": 42
+      },
+      "firstInteractive": {
+        "count": 3,
+        "p50Ms": 612.1000000238419,
+        "maxMs": 614.8999999761581,
+        "samplesMs": [
+          607,
+          614.8999999761581,
+          612.1000000238419
+        ]
+      },
+      "workbenchAssetSha256": "6fa28e5df71993f5f2341d8787997da433531d995eda9ab1564e7b7161abad4a"
+    },
+    {
+      "id": "automation-300",
+      "fixtureSha256": "69b717f0943fb74815198cd01138cd50f5c668ca7ccb116dc7519afc445fb78b",
+      "measuredAt": "2026-10-08T12:44:11.482Z",
+      "settings": {
+        "samples": 20,
+        "coldTrials": 3,
+        "lifecycleRounds": 10
+      },
+      "latency": {
+        "nodeSelectionWarmup": {
+          "count": 1,
+          "p50Ms": 105.80000001192093,
+          "p95Ms": 105.80000001192093,
+          "maxMs": 105.80000001192093,
+          "samplesMs": [
+            105.80000001192093
+          ]
+        },
+        "nodeSelection": {
+          "count": 20,
+          "p50Ms": 99.29999995231628,
+          "p95Ms": 102.80000001192093,
+          "maxMs": 107.5,
+          "samplesMs": [
+            99.10000002384186,
+            99.39999997615814,
+            97.89999997615814,
+            98.20000004768372,
+            94.89999997615814,
+            100.5,
+            99.70000004768372,
+            107.5,
+            102.80000001192093,
+            100.09999996423721,
+            98.10000002384186,
+            98.80000001192093,
+            99.39999997615814,
+            99.80000001192093,
+            99.80000001192093,
+            98.5,
+            99.59999996423721,
+            98.5,
+            98.39999997615814,
+            99.29999995231628
+          ]
+        },
+        "fieldCommitRenderWarmup": {
+          "count": 1,
+          "p50Ms": 103.39999997615814,
+          "p95Ms": 103.39999997615814,
+          "maxMs": 103.39999997615814,
+          "samplesMs": [
+            103.39999997615814
+          ]
+        },
+        "fieldCommitRender": {
+          "count": 20,
+          "p50Ms": 97.19999998807907,
+          "p95Ms": 100,
+          "maxMs": 100.30000001192093,
+          "samplesMs": [
+            96.5,
+            97.59999996423721,
+            96.60000002384186,
+            98.60000002384186,
+            96,
+            97.5,
+            95.90000003576279,
+            96.40000003576279,
+            96.30000001192093,
+            96.89999997615814,
+            97,
+            98.80000001192093,
+            100,
+            97.60000002384186,
+            99.90000003576279,
+            100.30000001192093,
+            98.89999997615814,
+            98.40000003576279,
+            96.70000004768372,
+            97.19999998807907
+          ]
+        },
+        "hiddenNodeLocateWarmup": {
+          "count": 1,
+          "p50Ms": 31.5,
+          "p95Ms": 31.5,
+          "maxMs": 31.5,
+          "samplesMs": [
+            31.5
+          ]
+        },
+        "hiddenNodeLocate": {
+          "count": 20,
+          "p50Ms": 33.80000001192093,
+          "p95Ms": 35,
+          "maxMs": 36.30000001192093,
+          "samplesMs": [
+            33.5,
+            33.80000001192093,
+            32.60000002384186,
+            36.30000001192093,
+            35,
+            33.299999952316284,
+            34,
+            34.60000002384186,
+            33.5,
+            32.5,
+            32.69999998807907,
+            34,
+            34.30000001192093,
+            33.10000002384186,
+            33.80000001192093,
+            34.30000001192093,
+            33.39999997615814,
+            31.80000001192093,
+            34.200000047683716,
+            34
+          ]
+        }
+      },
+      "saves": {
+        "selectionSaves": 0,
+        "fieldSaves": 21,
+        "expectedFieldSaves": 21,
+        "locationSaves": 42,
+        "expectedLocationSaves": 42
+      },
+      "firstInteractive": {
+        "count": 3,
+        "p50Ms": 337.80000001192093,
+        "maxMs": 362.69999998807907,
+        "samplesMs": [
+          362.69999998807907,
+          276.89999997615814,
+          337.80000001192093
+        ]
+      },
+      "workbenchAssetSha256": "6fa28e5df71993f5f2341d8787997da433531d995eda9ab1564e7b7161abad4a"
+    }
+  ],
+  "afterFile": "workbench-render-performance-after-2026-10-08.json",
+  "comparisons": [
+    {
+      "case": "automation-1000",
+      "metric": "nodeSelection",
+      "beforeP95Ms": 352.4000000357628,
+      "afterP95Ms": 279.7999999523163,
+      "reductionPercent": 20.601589124880476
+    },
+    {
+      "case": "automation-1000",
+      "metric": "fieldCommitRender",
+      "beforeP95Ms": 348.89999997615814,
+      "afterP95Ms": 275.80000001192093,
+      "reductionPercent": 20.9515620433455
+    },
+    {
+      "case": "automation-1000",
+      "metric": "hiddenNodeLocate",
+      "beforeP95Ms": 82.60000002384186,
+      "afterP95Ms": 58.40000003576279,
+      "reductionPercent": 29.297820800355844
+    },
+    {
+      "case": "automation-300",
+      "metric": "nodeSelection",
+      "beforeP95Ms": 102.80000001192093,
+      "afterP95Ms": 78.89999997615814,
+      "reductionPercent": 23.249027269446778
+    },
+    {
+      "case": "automation-300",
+      "metric": "fieldCommitRender",
+      "beforeP95Ms": 100,
+      "afterP95Ms": 76.30000001192093,
+      "reductionPercent": 23.69999998807907
+    },
+    {
+      "case": "automation-300",
+      "metric": "hiddenNodeLocate",
+      "beforeP95Ms": 35,
+      "afterP95Ms": 32.39999997615814,
+      "reductionPercent": 7.428571496691022
+    }
+  ],
+  "cpuDiagnosis": [
+    {
+      "side": "before",
+      "nodeCount": 1000,
+      "operation": "selection",
+      "count": 10,
+      "samplingIntervalUs": 1000,
+      "diagnosticOnly": true,
+      "activeCpuMs": 3462.85,
+      "taskDurationMs": 3624.5709999999995,
+      "layoutDurationMs": 2.2080000000000015,
+      "recalcStyleDurationMs": 8.498000000000003,
+      "translationInclusiveMs": 2661.99
+    },
+    {
+      "side": "before",
+      "nodeCount": 1000,
+      "operation": "field",
+      "count": 10,
+      "samplingIntervalUs": 1000,
+      "diagnosticOnly": true,
+      "activeCpuMs": 18331.09,
+      "taskDurationMs": 18826.781,
+      "layoutDurationMs": 8.820999999999996,
+      "recalcStyleDurationMs": 3.4810000000000016,
+      "translationInclusiveMs": 13857.74
+    },
+    {
+      "side": "before",
+      "nodeCount": 300,
+      "operation": "selection",
+      "count": 10,
+      "samplingIntervalUs": 1000,
+      "diagnosticOnly": true,
+      "activeCpuMs": 1010.14,
+      "taskDurationMs": 1108.768,
+      "layoutDurationMs": 2.0869999999999984,
+      "recalcStyleDurationMs": 3.9059999999999997,
+      "translationInclusiveMs": 851.8
+    },
+    {
+      "side": "before",
+      "nodeCount": 300,
+      "operation": "field",
+      "count": 10,
+      "samplingIntervalUs": 1000,
+      "diagnosticOnly": true,
+      "activeCpuMs": 5361.28,
+      "taskDurationMs": 5560.722999999999,
+      "layoutDurationMs": 7.854,
+      "recalcStyleDurationMs": 2.73,
+      "translationInclusiveMs": 4431.86
+    },
+    {
+      "side": "after",
+      "nodeCount": 1000,
+      "operation": "selection",
+      "count": 10,
+      "samplingIntervalUs": 1000,
+      "diagnosticOnly": true,
+      "activeCpuMs": 2752.34,
+      "taskDurationMs": 2904.0809999999997,
+      "layoutDurationMs": 2.020000000000001,
+      "recalcStyleDurationMs": 8.25,
+      "translationInclusiveMs": 2014.71
+    },
+    {
+      "side": "after",
+      "nodeCount": 1000,
+      "operation": "field",
+      "count": 10,
+      "samplingIntervalUs": 1000,
+      "diagnosticOnly": true,
+      "activeCpuMs": 14561.85,
+      "taskDurationMs": 15000.606000000002,
+      "layoutDurationMs": 7.199999999999998,
+      "recalcStyleDurationMs": 2.7270000000000003,
+      "translationInclusiveMs": 10564.08
+    },
+    {
+      "side": "after",
+      "nodeCount": 300,
+      "operation": "selection",
+      "count": 10,
+      "samplingIntervalUs": 1000,
+      "diagnosticOnly": true,
+      "activeCpuMs": 820.2,
+      "taskDurationMs": 908.4499999999999,
+      "layoutDurationMs": 2.0389999999999993,
+      "recalcStyleDurationMs": 3.9179999999999997,
+      "translationInclusiveMs": 636.39
+    },
+    {
+      "side": "after",
+      "nodeCount": 300,
+      "operation": "field",
+      "count": 10,
+      "samplingIntervalUs": 1000,
+      "diagnosticOnly": true,
+      "activeCpuMs": 4293.72,
+      "taskDurationMs": 4472.642000000001,
+      "layoutDurationMs": 7.807000000000001,
+      "recalcStyleDurationMs": 2.728000000000001,
+      "translationInclusiveMs": 3355.21
+    }
+  ]
+}

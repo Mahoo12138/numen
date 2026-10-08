@@ -31,17 +31,54 @@ export function registerWorkbenchLocales(ctx: Context): void {
 /** A Vue subtree owns its subscription; separate Workbench apps never share language state. */
 export function provideWorkbenchI18n(getService: () => BrowserLocaleService | undefined): WorkbenchI18n {
   const revision = shallowRef(0)
+  const messages = new Map<string, string>()
+  const cacheLimit = 256
+  let subscribedService: BrowserLocaleService | undefined
+  let cacheRevision = 0
   watchEffect(onCleanup => {
     const service = getService()
-    revision.value = service?.getSnapshot() ?? 0
-    if (service) onCleanup(service.subscribe(() => { revision.value = service.getSnapshot() }))
-  })
+    messages.clear()
+    subscribedService = service
+    if (service) {
+      // Subscribe before reading the snapshot so no generation change is lost.
+      const unsubscribe = service.subscribe(() => {
+        if (subscribedService !== service) return
+        messages.clear()
+        cacheRevision = service.getSnapshot()
+        revision.value = cacheRevision
+      })
+      onCleanup(() => {
+        unsubscribe()
+        messages.clear()
+        subscribedService = undefined
+      })
+    }
+    cacheRevision = service?.getSnapshot() ?? 0
+    revision.value = cacheRevision
+  }, { flush: 'sync' })
   const value: WorkbenchI18n = {
     locale: computed(() => { revision.value; return getService()?.locale ?? 'en-US' }),
     preferredLocale: computed(() => { revision.value; return getService()?.preferredLocale }),
     t(path, params) {
       revision.value
-      return getService()?.text(path, params) ?? preview.t(path, params)
+      const service = getService()
+      if (!service) return preview.t(path, params)
+      // Parameter interpolation stays inside the service: resolving references
+      // can form literal placeholders that must not be interpreted a second time.
+      if (params !== undefined || service !== subscribedService) return service.text(path, params)
+      const cached = messages.get(path)
+      if (cached !== undefined) {
+        // An earlier service listener may render before our invalidation callback.
+        // Fence the hit without mutating Vue dependencies during that render.
+        const currentRevision = service.getSnapshot()
+        if (currentRevision === cacheRevision) return cached
+        messages.clear()
+        cacheRevision = currentRevision
+      }
+      const text = service.text(path, params)
+      if (messages.size >= cacheLimit) messages.delete(messages.keys().next().value!)
+      messages.set(path, text)
+      return text
     },
     setLocale(locale) { getService()?.setLocale(locale) },
   }

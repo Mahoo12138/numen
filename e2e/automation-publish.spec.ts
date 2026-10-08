@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { writeConfig } from '../packages/config/dist/index.js'
+import { withLogContext } from '../packages/logging/dist/index.js'
 import { startRuntime, type NumenApplication } from '../packages/runtime/dist/index.js'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { createServer } from 'node:net'
@@ -224,6 +225,9 @@ test('shows authenticated live logs, recovers from a lost query and WebSocket, a
   expect(unauthorized.status).toBe(401)
   await page.goto(application.workbenchUrl!)
   await page.getByRole('button', { name: 'System', exact: true }).click()
+  const logsTab = page.getByRole('tab', { name: 'Runtime logs', exact: true })
+  await logsTab.click()
+  await expect(logsTab).toHaveAttribute('aria-selected', 'true')
   await expect(page.getByRole('heading', { name: 'Runtime logs', exact: true })).toBeVisible()
   const view = page.getByRole('region', { name: 'Runtime logs', exact: true })
   await view.getByLabel('Namespace', { exact: true }).fill('e2e')
@@ -265,7 +269,10 @@ test('shows authenticated live logs, recovers from a lost query and WebSocket, a
   await expect(view.getByRole('alert')).toContainText('Logs could not be refreshed')
   await view.getByRole('button', { name: 'Try again' }).click()
   await expect(view).toContainText('refresh-after-network-failure')
-  for (let index = 0; index < 280; index++) logger.info('flood-%d', index)
+  const logAutomation = application.context.automations.create({ name: 'Live logs panel E2E' }).automation
+  withLogContext({ automationId: logAutomation.id }, () => {
+    for (let index = 0; index < 280; index++) logger.info('flood-%d', index)
+  })
   await expect(view.locator('.log-record')).toHaveCount(100)
   await expect(view).toContainText('flood-279')
   await view.getByRole('button', { name: 'Older logs' }).click()
@@ -281,9 +288,17 @@ test('shows authenticated live logs, recovers from a lost query and WebSocket, a
   await expect(page.getByRole('button', { name: '暂停更新', exact: true })).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   await page.screenshot({ path: testInfo.outputPath('logs-mobile.png') })
-  await page.getByRole('tab', { name: '日志', exact: true }).click()
+  await page.getByRole('button', { name: '自动化', exact: true }).click()
+  await page.getByRole('button', { name: '关闭检查器遮罩', exact: true }).click({ position: { x: 5, y: 50 } })
+  await page.getByRole('button', { name: '选择自动化', exact: true }).click()
+  await page.getByRole('option', { name: logAutomation.name, exact: true }).click()
+  await expect(page.getByRole('heading', { name: logAutomation.name, exact: true })).toBeVisible()
+  const panelLogs = page.locator('.bottom-panel').getByRole('tab', { name: '日志', exact: true })
+  await panelLogs.click()
+  await expect(panelLogs).toHaveAttribute('aria-selected', 'true')
   const panel = page.locator('.logs-panel-content')
   await expect(panel.locator('.log-record')).toHaveCount(100)
+  await expect(panel).toContainText('flood-279')
   expect(await panel.evaluate(element => element.getBoundingClientRect().bottom <= window.innerHeight)).toBe(true)
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   await page.screenshot({ path: testInfo.outputPath('logs-panel-mobile.png') })
@@ -298,6 +313,9 @@ test('uses shared controls in system logs at desktop and mobile widths', async (
   await page.getByRole('button', { name: 'System', exact: true }).click()
   await expect(page).toHaveURL(/\/system\/overview$/)
   await expect(page).toHaveTitle(/Numen/)
+  const logsTab = page.getByRole('tab', { name: 'Runtime logs', exact: true })
+  await logsTab.click()
+  await expect(logsTab).toHaveAttribute('aria-selected', 'true')
   await expect(page.getByRole('heading', { name: 'Runtime logs', exact: true })).toBeVisible()
   await expect(page.locator('select')).toHaveCount(0)
   await expect(page.getByLabel('Namespace', { exact: true })).toHaveClass(/n-input/)
@@ -654,6 +672,7 @@ test('keeps a splitter gesture maximum stable when collapsing changes competing 
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('numen.workbench.layout.v1')!).inspector)).toBe(500)
   await expect(page.locator('.n-resize-shield')).toHaveCount(0)
   await page.reload()
+  await expect(inspector).toBeVisible()
   await expect.poll(async () => (await inspector.boundingBox())!.width).toBe(500)
 })
 
