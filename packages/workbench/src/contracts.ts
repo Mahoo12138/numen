@@ -779,6 +779,39 @@ export const workbenchAutomationSnapshotQueryRef = { id: 'numen:automation-snaps
 
 export interface WorkbenchAutomationSnapshotQueryInput { automationId: string; snapshotId: string }
 
+export type WorkbenchAutomationComparisonTarget = { kind: 'draft'; version: number } | { kind: 'snapshot'; snapshotId: string }
+export const workbenchAutomationComparisonQueryRef = { id: 'numen:automation-comparison', version: 1 } as const satisfies ConsoleProcedureRef
+export const workbenchAutomationComparisonStateQueryRef = { id: 'numen:automation-comparison-state', version: 1 } as const satisfies ConsoleProcedureRef
+export interface WorkbenchAutomationComparisonQueryInput {
+  automationId: string
+  left: WorkbenchAutomationComparisonTarget
+  right: WorkbenchAutomationComparisonTarget
+}
+export interface WorkbenchAutomationComparisonState {
+  automationId: string
+  automationName: string
+  draftVersion: number
+  revisions: { id: string; number: number; createdAt: string }[]
+  revisionsTruncated: boolean
+}
+export type WorkbenchAutomationChangeCategory = 'structure' | 'parameters' | 'bindings' | 'policies' | 'triggers' | 'inputs' | 'presentation' | 'extensions'
+export interface WorkbenchAutomationChange {
+  category: WorkbenchAutomationChangeCategory
+  kind: 'added' | 'removed' | 'moved' | 'changed'
+  nodeId?: string
+  field?: 'node' | 'type' | 'capability' | 'control' | 'input' | 'output' | 'condition' | 'until' | 'durationMs' | 'items' | 'concurrency' | 'invocationPolicy' | 'connections' | 'automationPolicy' | 'triggers' | 'triggerConfig' | 'triggerCapability' | 'inputDeclarations' | 'presentation' | 'extensionFields'
+}
+export type WorkbenchAutomationComparisonIdentity =
+  | { kind: 'draft'; version: number; updatedAt: string }
+  | { kind: 'snapshot'; snapshotId: string; purpose: 'published' | 'draft-test'; number?: number; sourceDraftVersion?: number; createdAt: string }
+export interface WorkbenchAutomationComparison {
+  automationId: string
+  automationName: string
+  left: WorkbenchAutomationComparisonIdentity
+  right: WorkbenchAutomationComparisonIdentity
+  changes: WorkbenchAutomationChange[]
+}
+
 export interface WorkbenchAutomationSnapshotSourceNode {
   nodeId: string
   type: WorkbenchRunFlowNode['type']

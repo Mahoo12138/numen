@@ -347,7 +347,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .automation-state[data-tone="error"] { border-color: #ebcccc; background: #fffafa; }
 .automation-revisions { flex: 1; min-height: 0; overflow: auto; padding: 24px 28px; }
 .revision-list { max-width: 900px; border: 1px solid var(--wb-border); border-radius: 6px; background: white; }
-.revision-list article { display: grid; grid-template-columns: minmax(90px, 1fr) minmax(80px, 1fr) auto auto auto; align-items: center; gap: 14px; min-height: 58px; padding: 8px 14px; border-bottom: 1px solid var(--wb-border); }
+.revision-list article { display: grid; grid-template-columns: minmax(70px, 1fr) minmax(60px, 1fr) auto auto auto auto; align-items: center; gap: 10px; min-height: 58px; padding: 8px 14px; border-bottom: 1px solid var(--wb-border); }
 .revision-list article:last-child { border-bottom: 0; }
 .revision-list article[data-active="true"] { background: #f7fbf8; }
 .revision-list article > div { display: flex; align-items: center; gap: 7px; }
@@ -438,6 +438,23 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .snapshot-inputs { list-style: none; padding: 0; }
 .snapshot-inputs li { display: flex; flex-wrap: wrap; gap: 8px 16px; padding: 8px 0; border-bottom: 1px solid var(--wb-border); }
 .snapshot-notice { margin: 16px 28px; }
+.automation-comparison-page { min-width: 0; overflow: auto; }
+.comparison-picker { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; padding: 16px 28px; }
+.comparison-picker label { display: grid; gap: 6px; min-width: 0; flex: 1 1 200px; max-width: 360px; font-size: 12px; }
+.comparison-picker select { width: 100%; min-width: 0; padding: 8px; border: 1px solid var(--wb-border-strong); border-radius: 4px; background: var(--wb-surface); color: var(--wb-text); font: inherit; }
+.automation-comparison-result { min-width: 0; max-width: 1080px; padding: 16px 28px 34px; }
+.automation-comparison-result h2 { font-size: 16px; }
+.automation-comparison-result p { font-size: 12px; color: var(--wb-muted); line-height: 1.6; }
+.comparison-identities { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.comparison-identities article { min-width: 0; display: grid; gap: 8px; border: 1px solid var(--wb-border); border-radius: 5px; padding: 12px; font-size: 12px; }
+.comparison-identities code, .comparison-change code { overflow-wrap: anywhere; }
+.comparison-identities article > span { color: var(--wb-muted); }
+.comparison-category { margin-top: 24px; }
+.comparison-category h3 { font-size: 13px; }
+.comparison-category h3 span { font-weight: 400; color: var(--wb-muted); }
+.comparison-category ul { list-style: none; padding: 0; margin: 0; }
+.comparison-change { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px; padding: 10px 12px; border-bottom: 1px solid var(--wb-border); font-size: 12px; }
+.comparison-stale { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 16px 28px; padding: 12px; border: 1px solid var(--wb-border-strong); border-radius: 5px; font-size: 12px; }
 @media (max-width: 680px) {
   .snapshot-header { flex-direction: column; }
   .snapshot-actions { width: 100%; }
@@ -445,6 +462,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .automation-snapshot-content { padding: 16px 16px 28px; }
   .snapshot-facts dl { grid-template-columns: minmax(0, 1fr); }
   .snapshot-notice { margin-inline: 16px; }
+  .comparison-picker, .automation-comparison-result { padding-inline: 16px; }
+  .comparison-picker label { flex-basis: 100%; max-width: none; }
+  .comparison-identities { grid-template-columns: minmax(0, 1fr); }
+  .comparison-stale { margin-inline: 16px; }
 }
 .run-detail-header { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; }
 .run-detail-back { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 1px solid var(--wb-border); border-radius: 4px; background: white; color: var(--wb-muted); cursor: pointer; }

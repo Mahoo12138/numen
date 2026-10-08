@@ -347,8 +347,43 @@ and all 43 Chromium browser cases passed, including six snapshot cases. Final de
 Evidence and limits are recorded in [N2-01 verification](docs/verification/version-workspace-2026-10-08.md)
 and `/tmp/numen-n2-01-{typecheck-final,build-final,unit-final,browser-final}.log`.
 All Runtime/configuration/database/resource directories were temporary. Remote CI, other
-browser engines and deployment are not verified. N2-02 semantic comparison and N2-03
-undoable restoration to Draft remain the next modules.
+browser engines and deployment are not verified. These checks cover N2-01; the following
+section records N2-02. Undoable restoration to Draft remains N2-03.
+
+### N2-02 fixed-version semantic comparison — verified 2026-10-08
+
+Revisions now open saved Draft versus a selected published version, and the comparison Page
+also selects two published versions. The same read-only API accepts N1 test snapshots.
+Server-side comparison uses stable Source node IDs, parent/slot membership and stable sibling
+ordering to distinguish additions, removals and moves without recreating moved subtrees.
+Parameters/expressions, Connection bindings, execution policies, Triggers, input declarations,
+Presentation and unknown extensions are separate categories. All values and unknown names
+stay private; only fixed field labels, kinds and node identity enter the result.
+
+Comparison targets stay pinned to exact Draft versions or Snapshot IDs. Independent metadata
+invalidation marks a changed Draft stale; a later metadata failure cannot erase that observation.
+Explicit refresh re-reads the saved identity, preserves the immutable side and updates the
+bookmark. Changing selectors alone does not replace the result. Route changes cancel old
+requests; existing Draft navigation guards remain in force. No compilation or domain writes
+occur, and current activation and accepted Runs are unchanged.
+
+Actual local validation: typecheck, production and example builds, 112 unit/integration files /
+603 tests, all nine new comparison browser cases, and all 43 pre-existing Chromium cases
+passed. The initial full browser run was 49/52; three comparison expectations differed only
+in URL key ordering. The fixture now follows the Router's existing ordering while preserving
+the strict complete URL assertion, and all nine comparison cases passed on rerun without
+changing the production implementation. Desktop 1440×960 and Chinese mobile 390×844
+screenshots were viewed without horizontal overflow or unexpected browser errors.
+
+[N2-02 verification](docs/verification/semantic-comparison-2026-10-08.md) records the exact
+commands, separate run results and limits: 8 MiB stored documents, 250 Flow nodes/64 levels,
+1,000 changes and 128 KiB response; excess is rejected rather than compared partially.
+There is no schema migration or new user configuration entry. V2 owns the Provider; v1
+compatibility retains its prior leaf assembly. All Runtime/configuration/database/resource
+directories were temporary; remote CI, other browsers and deployment are not verified.
+
+Next: N2-03 restores snapshot Source/Presentation to Draft with CAS, input protection and
+one undoable document operation, while preserving historical revisions and formal Runs.
 
 M0/M1 foundation implemented and verified: independent Console/Workbench composition,
 v2 native groups and explicit migration, v1 compatibility, two sets of ten lifecycle cycles,
@@ -512,7 +547,7 @@ pnpm dev
 - The current Scheduler executes the Core IR subset emitted by the compiler, including retry, timeout, cancellation, recovery, and structured concurrency.
 - Parallel, first-success Race, and bounded ForEach use durable Execution scopes with interruptible concurrent dispatch; Try/Finally control flow remains planned work.
 - Typed Console transports, browser sessions, Browser Cordis clients, frontend extension registries, atomic Entry generations, authenticated revision-fenced asset delivery, and Browser Entry reconciliation/rollback are operational. Generated bootstrap tokens and sessions rotate on restart; the CLI prints a fragment-only Workbench launch URL only with explicit `--print-launch-url` authorization.
-- The responsive Workbench shell, eleven registered core Page routes, stable browser Route/Page reconciliation, a secret-free production bootstrap, and authenticated core Entry loading are operational through the default Runtime. Home, Automations, the keyset-paginated Runs index, bounded Run Flow/Timeline/Context detail with cancellation controls, and the desired/runtime-separated Connections index display live data and refresh through coalesced typed invalidations without replacing server truth in the browser. Automation authoring now supports registry-driven Capability/control insertion, plugin-owned Schema Literal renderers, unified Literal/Reference/Template/structured Call inputs, scope-aware typed Magic Variables, named Connection bindings, expression-backed Wait duration/until editing, targeted nested insertion, container/branch editing, safe subtree copy/cut/move, persistent collapse and Outline navigation, bounded undo/redo, debounced full-document autosave, explicit conflict recovery, immutable Revision publish, explicit Revision activation and enable/disable controls, and source-linked diagnostics. Automation `input.*` has optional typed declarations with defaults and a Settings editor; the Runs tab has a Revision-bound manual parameter form and Automation-scoped history with status filters, keyset pagination, and live updates. `vars.*` remains manually addressable without a declaration schema; conflict comparison and save-copy recovery are operational; force overwrite and automatic merging remain outside V1. Plugin-owned Control definitions now drive the live insert catalog and extension input fields.
+- The responsive Workbench shell, twelve registered core Page routes, stable browser Route/Page reconciliation, a secret-free production bootstrap, and authenticated core Entry loading are operational through the default Runtime. Home, Automations, the keyset-paginated Runs index, bounded Run Flow/Timeline/Context detail with cancellation controls, and the desired/runtime-separated Connections index display live data and refresh through coalesced typed invalidations without replacing server truth in the browser. Automation authoring now supports registry-driven Capability/control insertion, plugin-owned Schema Literal renderers, unified Literal/Reference/Template/structured Call inputs, scope-aware typed Magic Variables, named Connection bindings, expression-backed Wait duration/until editing, targeted nested insertion, container/branch editing, safe subtree copy/cut/move, persistent collapse and Outline navigation, bounded undo/redo, debounced full-document autosave, explicit conflict recovery, immutable Revision publish, explicit Revision activation and enable/disable controls, and source-linked diagnostics. Automation `input.*` has optional typed declarations with defaults and a Settings editor; the Runs tab has a Revision-bound manual parameter form and Automation-scoped history with status filters, keyset pagination, and live updates. `vars.*` remains manually addressable without a declaration schema; conflict comparison and save-copy recovery are operational; force overwrite and automatic merging remain outside V1. Plugin-owned Control definitions now drive the live insert catalog and extension input fields.
 - Manual Runs accept declared parameters from the active Revision (even with Trigger subscriptions disabled), durably deduplicate browser submissions, recover uncertain responses, and event Trigger subscriptions are supported. The built-in `schedule:cron` Trigger supports five-field schedules and IANA timezones; missed-run catch-up is not synthesized. Declarations support five top-level value types; nested schema constraints and enums remain outside this module. Omitted declarations preserve legacy open input objects. State Trigger transition detection, filtering, debounce, and throttle remain planned work.
 - Connection desired state, explicit Type/Adapter contracts, READY Runtime injection, generation-fenced create/update/delete/enable Actions, Adapter Schema configuration UI, generation-fenced Runtime recreation, and metadata-only Credential selection are operational. Credential metadata, creation/rotation/deletion Actions and UI are operational; automatic reconnect policy remains planned work. The shared outbound HTTP substrate supports scoped clients, timeout, cancellation, status errors, explicit proxy configuration, `NUMEN_HTTP_PROXY`, HTTP(S)/SOCKS proxy protocols, and host-owned `NO_PROXY` rules with per-redirect routing; CIDR, DNS-resolved address matching, and PAC remain outside this module. The built-in bounded `http:request` Action supports text/JSON requests and responses but not multipart, binary Resource output, cookie jars, or per-step proxy selection. The Echo demo has no Connection or Credential and therefore does not validate a Credential-backed external Integration. Credential writes require an available type plugin and a configured runtime master key. Non-object secret contracts require a plugin-provided editor.
 - Credential payloads use authenticated encryption with environment-provided keys; key-ring migration and external vault providers remain planned work.

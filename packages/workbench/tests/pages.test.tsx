@@ -13,6 +13,7 @@ import {
   coreWorkbenchRoutes,
   coreWorkbenchCredentialsRoute,
   coreWorkbenchAutomationSnapshotRoute,
+  coreWorkbenchAutomationComparisonRoute,
   WorkbenchShell,
   activityIdForRoute,
   type WorkbenchRouter,
@@ -36,6 +37,7 @@ describe('core Workbench Pages', () => {
     expect(root.webuiExtensions.listPages().map(page => ({ id: page.id, path: page.path }))).toEqual([
       { id: 'numen:home', path: '/' },
       { id: 'numen:automations', path: '/automations' },
+      { id: 'numen:automation-comparison', path: '/automations/:automationId/compare' },
       { id: 'numen:automation-snapshot', path: '/automations/:automationId/snapshots/:snapshotId' },
       { id: 'numen:connections', path: '/connections' },
       { id: 'numen:credentials', path: '/connections/credentials' },
@@ -46,7 +48,7 @@ describe('core Workbench Pages', () => {
       { id: 'numen:run-timeline', path: '/runs/:id/timeline' },
       { id: 'numen:system', path: '/system/overview' },
     ])
-    expect(coreWorkbenchPageDefinitions).toHaveLength(11)
+    expect(coreWorkbenchPageDefinitions).toHaveLength(12)
     await fiber.dispose()
     expect(root.webuiExtensions.listPages()).toEqual([])
     await root.fiber.dispose()
@@ -84,6 +86,9 @@ describe('core Workbench Pages', () => {
     expect(coreWorkbenchAutomationSnapshotRoute).toEqual({ id: 'numen:automation-snapshot', version: 1 })
     expect(activityIdForRoute(coreWorkbenchAutomationSnapshotRoute)).toBe('automations')
     expect(activityIdForRoute({ ...coreWorkbenchAutomationSnapshotRoute, version: 2 })).toBeUndefined()
+    expect(coreWorkbenchAutomationComparisonRoute).toEqual({ id: 'numen:automation-comparison', version: 1 })
+    expect(activityIdForRoute(coreWorkbenchAutomationComparisonRoute)).toBe('automations')
+    expect(activityIdForRoute({ ...coreWorkbenchAutomationComparisonRoute, version: 2 })).toBeUndefined()
   })
 
   it('keeps Run detail routes inside the Runs activity', async () => {

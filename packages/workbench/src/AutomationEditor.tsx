@@ -64,6 +64,7 @@ export interface AutomationEditorProps {
   inspectorFocusNodeId?: string
   onActivateRevision?(revisionId: string): void
   onViewSnapshot?(snapshotId: string): void
+  onCompareRevision?(revisionId: string): void
   onSetEnabled?(enabled: boolean): void
   onStepChange(id: string): void
   onTabChange(tab: string): void
@@ -125,6 +126,7 @@ export function AutomationEditor({
   draftTestSessionActive,
   onActivateRevision,
   onViewSnapshot,
+  onCompareRevision,
   onSetEnabled,
   onStepChange,
   onTabChange,
@@ -337,7 +339,9 @@ export function AutomationEditor({
         </>
       ) : activeTab === 'Settings' && inputSettings ? inputSettings : activeTab === 'Runs' && manualRunForm ? manualRunForm : activeTab === 'Revisions' && detail ? (
         <section class="automation-revisions">
-          <div class="runs-section-heading"><h2>{t('workbench.immutableRevisions')}</h2><span>{t('workbench.newestFirst')}</span></div>
+          <div class="runs-section-heading"><h2>{t('workbench.immutableRevisions')}</h2><span>{t('workbench.newestFirst')}</span>
+            {onCompareRevision && detail.revisions[0] ? <Button type="button" variant="secondary" onClick={() => onCompareRevision(detail.revisions[0]!.id)}>{t('workbench.comparison.title')}</Button> : null}
+          </div>
           <p class="activation-help">{t('workbench.activateAPublishedRevisionThenEnableTheAutomationToAcceptTriggerEventsExistingRunsKeep')}</p>
           {detail.revisions.length ? (
             <div class="revision-list">
@@ -348,6 +352,8 @@ export function AutomationEditor({
                   <time datetime={revision.createdAt}>{revision.createdAt}</time>
                   {onViewSnapshot ? <Button variant="secondary" aria-label={t('workbench.snapshots.viewRevision', { number: revision.number })}
                     type="button" onClick={() => onViewSnapshot(revision.id)}>{t('workbench.snapshots.view')}</Button> : null}
+                  {onCompareRevision ? <Button variant="secondary" aria-label={t('workbench.comparison.compareRevision', { number: revision.number })}
+                    type="button" onClick={() => onCompareRevision(revision.id)}>{t('workbench.comparison.withDraft')}</Button> : null}
                   {activation && onActivateRevision ? <Button
                     aria-label={t('workbench.activateRevisionValue0', { value0: revision.number })}
                     class="revision-activate-button"

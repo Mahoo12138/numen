@@ -1,5 +1,6 @@
 import { workbenchConnectionUsageProviderPlugin } from './connection-usage-provider.js'
 import { workbenchAutomationSnapshotProviderPlugin } from './automation-snapshot-provider.js'
+import { workbenchAutomationComparisonProviderPlugin } from './automation-comparison-provider.js'
 import { workbenchManagementProviderPlugin } from './management-provider.js'
 import { workbenchSystemProviderPlugin } from './system-provider.js'
 import { workbenchPluginOwnershipProviderPlugin } from './plugin-ownership-provider.js'
@@ -34,6 +35,7 @@ export function workbenchPlugin(ctx: Context, config: WorkbenchConfig = {}): voi
   ctx.plugin(workbenchAutomationCatalogProviderPlugin)
   ctx.plugin(workbenchAutomationsProviderPlugin)
   ctx.plugin(workbenchAutomationSnapshotProviderPlugin)
+  ctx.plugin(workbenchAutomationComparisonProviderPlugin)
   ctx.plugin(workbenchConnectionsProviderPlugin)
   ctx.plugin(workbenchCredentialsProviderPlugin)
   ctx.plugin(workbenchHomeProviderPlugin)

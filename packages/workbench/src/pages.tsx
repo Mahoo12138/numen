@@ -10,6 +10,7 @@ import { computed, ref } from 'vue'
 import { AutomationPageChrome, AutomationWorkspacePage } from './AutomationWorkspace.js'
 import { RunDetailPage } from './RunDetailPage.js'
 import { AutomationSnapshotPage } from './AutomationSnapshotPage.js'
+import { AutomationComparisonPage } from './AutomationComparisonPage.js'
 import { CredentialsPage } from './CredentialsPage.js'
 import { ConnectionConfigurationPanel } from './ConnectionConfigurationPanel.js'
 import {
@@ -26,6 +27,7 @@ import {
   coreWorkbenchRoutes,
   coreWorkbenchCredentialsRoute,
   coreWorkbenchAutomationSnapshotRoute,
+  coreWorkbenchAutomationComparisonRoute,
   coreWorkbenchRunContextRoute,
   coreWorkbenchRunFlowRoute,
   coreWorkbenchRunTimelineRoute,
@@ -410,6 +412,7 @@ export const coreWorkbenchPageDefinitions: ReadonlyArray<WorkbenchPageDefinition
   },
   { ...coreWorkbenchRoutes.runs, path: '/runs', title: 'Runs', titleKey: 'workbench.pages.runs', component: RunsPage },
   { ...coreWorkbenchAutomationSnapshotRoute, path: '/automations/:automationId/snapshots/:snapshotId', title: 'Snapshot', titleKey: 'workbench.snapshots.title', component: AutomationSnapshotPage },
+  { ...coreWorkbenchAutomationComparisonRoute, path: '/automations/:automationId/compare', title: 'Compare versions', titleKey: 'workbench.comparison.title', component: AutomationComparisonPage },
   { ...coreWorkbenchRunFlowRoute, path: '/runs/:id/flow', title: 'Run', titleKey: 'workbench.pages.run', component: RunDetailPage },
   { ...coreWorkbenchRunTimelineRoute, path: '/runs/:id/timeline', title: 'Run', titleKey: 'workbench.pages.run', component: RunDetailPage },
   { ...coreWorkbenchRunContextRoute, path: '/runs/:id/context', title: 'Run', titleKey: 'workbench.pages.run', component: RunDetailPage },

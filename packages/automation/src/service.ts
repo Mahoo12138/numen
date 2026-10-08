@@ -26,6 +26,10 @@ export class AutomationSnapshotInspectionLimitError extends Error {
   override name = 'AutomationSnapshotInspectionLimitError'
 }
 
+export class AutomationDraftInspectionLimitError extends Error {
+  override name = 'AutomationDraftInspectionLimitError'
+}
+
 export class AutomationActivationConflictError extends Error {
   override name = 'AutomationActivationConflictError'
 
@@ -86,6 +90,14 @@ export interface AutomationSummary extends Automation {
   activeRunCount: number
   runCount: number
   latestRevisionNumber?: number
+}
+
+export interface AutomationComparisonState {
+  automationId: string
+  automationName: string
+  draftVersion: number
+  revisions: { id: string; number: number; createdAt: string }[]
+  revisionsTruncated: boolean
 }
 
 /** Compiled saved Draft data; insertion still checks its exact source version. */
@@ -331,6 +343,50 @@ export class AutomationService extends Service {
       .prepare('SELECT * FROM automation_drafts WHERE automation_id = ?')
       .get(automationId) as DraftRow | undefined
     return row ? mapDraft(row) : undefined
+  }
+
+  /** A single read fixes the Draft version and bounds UTF-8 bytes before JSON decoding. */
+  getDraftForInspection(automationId: string, expectedVersion: number, maximumBytes = 8 * 1024 * 1024): AutomationDraft | undefined {
+    if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1) throw new TypeError('invalid draft inspection version')
+    if (!Number.isSafeInteger(maximumBytes) || maximumBytes < 1) throw new TypeError('invalid draft inspection byte limit')
+    const row = this.ctx.database.db.prepare(`
+      SELECT automation_id, base_revision_id, version, updated_at,
+        length(CAST(source_json AS BLOB)) + length(CAST(presentation_json AS BLOB)) AS json_bytes,
+        CASE WHEN version = ? AND length(CAST(source_json AS BLOB)) + length(CAST(presentation_json AS BLOB)) <= ?
+          THEN source_json END AS source_json,
+        CASE WHEN version = ? AND length(CAST(source_json AS BLOB)) + length(CAST(presentation_json AS BLOB)) <= ?
+          THEN presentation_json END AS presentation_json
+      FROM automation_drafts WHERE automation_id = ?
+    `).get(expectedVersion, maximumBytes, expectedVersion, maximumBytes, automationId) as (Omit<DraftRow, 'source_json' | 'presentation_json'> & { source_json: string | null; presentation_json: string | null; json_bytes: number }) | undefined
+    if (!row) return
+    if (row.version !== expectedVersion) throw new DraftConflictError(expectedVersion, row.version)
+    if (row.json_bytes > maximumBytes) throw new AutomationDraftInspectionLimitError('draft inspection exceeds its stored data limit')
+    if (row.source_json === null || row.presentation_json === null) throw new Error('draft inspection data is unavailable')
+    return mapDraft({ ...row, source_json: row.source_json, presentation_json: row.presentation_json })
+  }
+
+  /** Comparison selection and staleness metadata never parse mutable or historical document JSON. */
+  getComparisonState(automationId: string): AutomationComparisonState | undefined {
+    const row = this.ctx.database.db.prepare(`
+      SELECT automations.id, automations.name, automation_drafts.version
+      FROM automations JOIN automation_drafts ON automation_drafts.automation_id = automations.id
+      WHERE automations.id = ?
+    `).get(automationId) as { id: string; name: string; version: number } | undefined
+    if (!row) return
+    const revisions = this.ctx.database.db.prepare(`
+      SELECT id, number, created_at FROM automation_revisions
+      WHERE automation_id = ? AND purpose = 'published'
+      ORDER BY number DESC LIMIT 101
+    `).all(automationId) as Array<Pick<RevisionRow, 'id' | 'number' | 'created_at'>>
+    if (!Number.isSafeInteger(row.version) || row.version < 1
+      || revisions.some(revision => revision.number === null || !Number.isSafeInteger(revision.number) || revision.number < 1)) {
+      throw new Error('comparison identity metadata is unavailable')
+    }
+    return {
+      automationId: row.id, automationName: row.name, draftVersion: row.version,
+      revisions: revisions.slice(0, 100).map(revision => ({ id: revision.id, number: revision.number!, createdAt: revision.created_at })),
+      revisionsTruncated: revisions.length > 100,
+    }
   }
 
   saveDraft(input: SaveDraftInput): AutomationDraft {

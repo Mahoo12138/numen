@@ -1,5 +1,7 @@
 import { workbenchConnectionUsageQuery } from './connection-usage-provider.js'
 import { workbenchAutomationSnapshotQuery } from './automation-snapshot-provider.js'
+import { workbenchAutomationComparisonQuery, workbenchAutomationComparisonStateQuery } from './automation-comparison-provider.js'
+export { workbenchAutomationComparisonQuery, workbenchAutomationComparisonStateQuery, workbenchAutomationComparisonProviderPlugin } from './automation-comparison-provider.js'
 export { workbenchAutomationSnapshotQuery, workbenchAutomationSnapshotProviderPlugin } from './automation-snapshot-provider.js'
 import { workbenchPluginsQuery, workbenchPluginPreview, workbenchPluginApply } from './management-provider.js'
 import { workbenchPluginOwnershipQuery } from './plugin-ownership-provider.js'
@@ -118,6 +120,8 @@ export class WorkbenchRuntimeService extends Service {
     ctx.console.define(ctx, workbenchSaveAutomationDraftCopyAction)
     ctx.console.define(ctx, workbenchAutomationDetailQuery)
     ctx.console.define(ctx, workbenchAutomationSnapshotQuery)
+    ctx.console.define(ctx, workbenchAutomationComparisonQuery)
+    ctx.console.define(ctx, workbenchAutomationComparisonStateQuery)
     ctx.console.define(ctx, workbenchAutomationsIndexQuery)
     ctx.console.define(ctx, workbenchCreateAutomationAction)
     ctx.console.define(ctx, workbenchArchiveAutomationAction)
