@@ -300,3 +300,15 @@ Previous/Next 保存当前筛选下的游标路径。切换状态或 Automation 
 - 归档后不显示手动运行表单，也会拒绝新的手动 Run；先前已接受的请求仍可按相同 requestId 安全重试。
 - 永久移除只接受已归档 Automation。只要关联 Run 仍处于排队、运行或取消处理中，就必须先等待完成或取消；通过后在一个数据库事务内清除 Automation、Draft、Revision 和全部 Run 历史。
 - Run 删除同时释放其 Execution 的资源所有权。共享资源、仍被其他对象拥有的资源及有效租约不会被清除；没有其他所有者的资源进入现有延迟垃圾回收流程。
+
+## Graph 编辑与节点聚焦
+
+根 Source 为 Graph 时使用独立的画布投影；Structured Source 继续使用原结构视图。空流程有显式创建 Graph 的入口，旧流程通过转换预览创建副本。首版转换只接受单个 Capability 或不含显式输出的平坦 Capability 序列，不能证明等价的控制结构明确拒绝。
+
+画布的 Source 修改经过领域命令，坐标写入 `presentation.graphPositions[graphId][nodeId]`；拖动结束、自动布局、重连和插入均只产生一个相应历史项。选择、缩放和视口属于会话。循环体按作用域进入，访问过的画布保留视口；节点聚焦不卸载画布。
+
+聚焦态并排展示输入来源、参数和输出契约/历史值，窄屏切换单区。历史值带 Run、Snapshot、Execution 和迭代身份；未知动态路径及截断/隐藏字段不会被当作已验证完整数据。复制字段引用与复制当前值分开，增加引用不会隐式增加依赖。
+
+Connection 就地创建或修复后重新检查 Automation、节点、Slot、Capability、原绑定和类型兼容性，再返回原 Slot。局部测试仅面向根图普通 Capability 子图；其预览列出真实调用、样例替代和外部写入。请求结果未知时保留精确 requestId，离开保护与文档输入会话统一管理。
+
+固定 Run 与 Snapshot 使用只读拓扑和可展开的成员/连接清单。默认展示仍有 250 节点和响应字节边界；节点 ID 定点读取可检查后续成员。版本差异以 250 条分页，恢复读取完整受限 Source，不把显示截断的数据当作可恢复文档。实际验收见 [Graph 画布记录](26-graph-workflow-canvas.md)。

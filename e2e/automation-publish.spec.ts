@@ -646,6 +646,8 @@ test('opens a collapsed bottom panel by dragging and cancels back to its pre-ges
   await page.keyboard.press('ControlOrMeta+j')
   await expect.poll(async () => (await panel.boundingBox())!.height).toBe(180)
   await page.reload()
+  // The document load precedes the dynamic Workbench Entry and its shortcut registration.
+  await expect(panel).toHaveAttribute('data-open', 'false')
   await page.keyboard.press('ControlOrMeta+j')
   await expect.poll(async () => (await panel.boundingBox())!.height).toBe(180)
   await expect(page.locator('.n-resize-shield')).toHaveCount(0)

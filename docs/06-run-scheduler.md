@@ -219,3 +219,13 @@ RunCompleted
 ```
 
 Retry = same Run/new Attempt；Run Again = new Run。
+
+## Graph 耐久协调
+
+Graph scope 在数据库记录每个成员的 Execution 身份或明确 skip，唯一约束防止多个前驱/多个 Scheduler 创建重复逻辑调用。依赖依据固定计划和成员终态判定；共享节点只有一个结果。就绪成员使用现有全局并发限制，不按画布坐标或 Source 数组排列决定顺序。
+
+全部输入 Merge 等待每个具名输入；所选输入 Merge 等待所有互斥候选完成或 skip，恰好一个成功才返回该值。`null` 和 `[]` 均为真实结果。Graph ForEach 为每项持久化作用域及输入序号，按输入顺序收集循环体显式输出，嵌套项相互隔离，失败采用 fail-fast。
+
+所有迟到 Attempt 完成均受当前 Execution generation、Run 和祖先 scope 状态的事务门禁约束；取消、超时、Provider 重载及资源提交不能绕过该门禁。外部副作用仍可能结果未知，不能用逻辑 Execution 唯一性承诺外部严格一次。
+
+局部测试沿用耐久运行管线和接受请求幂等表，固定完整 Source、裁剪执行计划、契约、样例及范围。只有版本受支持的 Draft-test 快照允许 `graph_value`；替代输出记录 sampleId 和事件而不调用 Provider。删除可复用样例不会改变已接受快照，也不改变正式激活状态。

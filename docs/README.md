@@ -74,6 +74,7 @@
 - [23. Draft 固定快照试运行设计建议](23-draft-test-snapshot-design.md)
 - [24. Draft 快照决策与迁移影响清单（已批准）](24-draft-test-snapshot-decision.md)
 - [25. 图式工作流编辑器：G0 决策与交付计划（基线已确认）](25-graph-workflow-editor-decision.md)
+- [26. Graph 画布、节点聚焦、局部测试与验收记录](26-graph-workflow-canvas.md)
 - [N0–N4 整体验收与本地公共包消费检查（2026-10-10）](verification/n0-n4-acceptance-2026-10-10.md)
 - [N2-01 固定快照查看验收](verification/version-workspace-2026-10-08.md)
 - [N2-02 固定版本语义比较验收](verification/semantic-comparison-2026-10-08.md)

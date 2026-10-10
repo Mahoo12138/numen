@@ -1,6 +1,6 @@
 # Numen Development Status
 
-> Last updated: 2026-10-08
+> Last updated: 2026-10-10
 >
 > Architecture baseline: V1 Draft in [`docs/`](docs/README.md)
 
@@ -10,6 +10,10 @@ Numen is a runnable TypeScript/Node.js monorepo built on Cordis. Configuration, 
 
 ## Completed
 
+- [x] Explicit versioned Graph Source and IR v2 with durable shared dependencies, conditions, named merges, ordered nested ForEach collection, restart recovery, and stale-attempt fencing
+- [x] Graph canvas editing, atomic Source/Presentation history, node input/parameter/output focus, and Connection creation/repair return
+- [x] Persisted complete output samples and reviewed local Draft tests, isolated from formal activation and provider attempts
+- [x] Conservative Structured-to-Graph copy conversion, bounded historical node lookup, paged comparison, and exact Draft restoration; acceptance evidence in [Graph editor record](docs/26-graph-workflow-canvas.md)
 - [x] pnpm/TypeScript monorepo, build, typecheck, and Vitest setup
 - [x] YAML configuration validation, plugin key mapping, atomic writes, and safe-mode overlay
 - [x] Cordis Host, Loader, Server, CLI, health, and readiness lifecycle

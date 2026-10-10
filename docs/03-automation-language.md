@@ -121,7 +121,7 @@ interface GraphSource {
   type: 'graph'
   id: string
   version: 1
-  nodes: (CapabilitySource | GraphConditionSource | GraphMergeSource)[]
+  nodes: (CapabilitySource | GraphConditionSource | GraphMergeSource | GraphForEachSource)[]
   edges: { id: string; from: { nodeId: string; port: string }; to: { nodeId: string; port: string } }[]
   output?: ValueExpr
 }
@@ -131,9 +131,13 @@ interface GraphSource {
 
 边声明依赖，表达式引用不自动补边。普通节点等待全部输入成功；任一必需输入 skip 则跳过该节点。`all` Merge 的每个具名输入恰有一条入边，全部成功后输出名称到值的对象。`selected` Merge 等待所有候选成功或 skip，恰一个成功时透传其值，全 skip 则继续传播 skip。编译器证明候选路径互斥，并拒绝可能读取 skipped 结果的引用；失败不作为 skip。`null` 与 `[]` 都是正常输出。
 
-编译器校验 DAG、起点可达性、端口、引用祖先关系及条件可用性。断线的节点仍可保存为 Draft，但不可测试/发布。当前 G1 仅支持根图及上述三种成员，嵌套图或其他成员会明确诊断。普通数组不会隐式重复调用节点。Graph 输出缺省为 `null`，显式输出只能引用保证可用的成员。
+编译器校验 DAG、起点可达性、端口、引用祖先关系及条件可用性。断线的节点仍可保存为 Draft，但不可测试/发布。Graph 可作为根流程；嵌套图只能作为显式 Graph ForEach 的循环体，其他嵌入方式会明确诊断。普通数组不会隐式重复调用节点。根 Graph 输出缺省为 `null`，显式输出只能引用保证可用的成员。
 
-图编译为 `graph_scope`、`graph_condition`、`graph_merge` 和独立 `invoke`，不会转成顺序树或复制共享节点。Graph 固定快照使用 protocol 2 / IR 2；Structured 仍使用 1 / 1，交叉或未知版本组合拒绝执行。节点/边数组排列和 Presentation 不影响语义哈希。当前上限为 1024 个成员、8192 条边；互斥证明有 16384 决策节点和 200000 次运算的预算，超限产生明确诊断，不采用不可靠的回退判断。
+图编译为 `graph_scope`、`graph_condition`、`graph_merge`、`graph_iterate` 和独立 `invoke`，不会转成顺序树或复制共享节点。Graph 固定快照使用 protocol 2 / IR 2；Structured 仍使用 1 / 1，交叉或未知版本组合拒绝执行。节点/边数组排列、Presentation 和 Schema 进程内 UID 不影响 Graph 语义哈希；契约约束变化仍影响指纹。当前上限为 1024 个成员、8192 条边；互斥证明有 16384 决策节点和 200000 次运算的预算，超限产生明确诊断，不采用不可靠的回退判断。
+
+Graph ForEach 使用 `items: ValueExpr`、可选正整数 `concurrency` 以及带显式 `output` 的 `body: GraphSource`。循环体使用 `loop.item` / `loop.index`，并可读有明确外层依赖的祖先输出。每项获得独立作用域，结果按输入序号收集；空数组输出 `[]`，任一项失败采用 fail-fast。嵌套循环不会读取另一项或另一层同名成员的结果。
+
+局部测试的固定快照可包含 `localTest.version = 1` 与 `graph_value` 样例替代指令。该指令只允许出现在有对应完整样例的 Draft-test 快照中，产生带 `sampleId` 的 Execution 和 `ExecutionSampled` 事件，不产生 Provider Attempt。正式 Revision 不携带样例。具体产品边界见 [Graph 编辑器记录](26-graph-workflow-canvas.md)。
 
 ## 6. ValueExpr
 
