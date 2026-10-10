@@ -2,7 +2,7 @@ import { automationIdSchema } from './automation-schemas.js'
 import { provideManualRuns } from './manual-run-provider.js'
 import '@numenjs/automation'
 import '@numenjs/scheduler'
-import type { NumenValue } from '@numenjs/core'
+import { isSupportedAutomationVersion, type NumenValue } from '@numenjs/core'
 import {
   ConsoleProcedureError,
   type ConsoleActionDefinition,
@@ -280,14 +280,15 @@ export function workbenchRunsProviderPlugin(ctx: Context): void {
       if (!run) return null
       const automation = ctx.automations.get(run.automationId)
       const revision = ctx.automations.getExecutionSnapshot(run.revisionId)
+      const supportedRevision = revision && isSupportedAutomationVersion(revision.protocolVersion, revision.irVersion) ? revision : undefined
       const inspection = ctx.scheduler.inspectRun(run.id)!
       const diagnostics = ctx.scheduler.listExecutionDiagnosticsPage(
         run.id,
         input.executionLimit,
         input.executionCursor,
         {
-          ...(input.sourceNodeId ? { instructionIds: Object.keys(revision?.compiledPlan.instructions ?? {}).filter(id =>
-            (revision?.compiledPlan.sourceMap?.[id]?.nodeId ?? id) === input.sourceNodeId) } : {}),
+          ...(input.sourceNodeId ? { instructionIds: Object.keys(supportedRevision?.compiledPlan.instructions ?? {}).filter(id =>
+            (supportedRevision?.compiledPlan.sourceMap?.[id]?.nodeId ?? id) === input.sourceNodeId) } : {}),
           ...(input.executionId ? { executionId: input.executionId } : {}),
         },
       )

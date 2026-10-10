@@ -112,6 +112,8 @@ export interface WorkbenchRunDetailQueryInput {
 
 export type WorkbenchRunFlowStatus =
   | 'IDLE'
+  | 'PENDING'
+  | 'SKIPPED'
   | 'QUEUED'
   | 'RUNNING'
   | 'WAITING'
@@ -123,12 +125,18 @@ export type WorkbenchRunFlowStatus =
 
 export interface WorkbenchRunFlowNode {
   id: string
-  type: 'extension' | 'block' | 'capability' | 'if' | 'wait' | 'parallel' | 'race' | 'foreach'
+  type: 'extension' | 'block' | 'capability' | 'if' | 'wait' | 'parallel' | 'race' | 'foreach' | 'graph' | 'condition' | 'merge'
   title: string
   detail: string
   status: WorkbenchRunFlowStatus
   executionCount: number
   children: WorkbenchRunFlowNode[]
+  blockedReason?: string
+  /** Graph members are unordered. Edges, including ports, carry the actual control topology. */
+  graph?: {
+    nodes: WorkbenchRunFlowNode[]
+    edges: Array<{ id: string; from: { nodeId: string; port: string }; to: { nodeId: string; port: string } }>
+  }
 }
 
 export interface WorkbenchRunContextGroup {
@@ -809,7 +817,7 @@ export interface WorkbenchAutomationChange {
   category: WorkbenchAutomationChangeCategory
   kind: 'added' | 'removed' | 'moved' | 'changed'
   nodeId?: string
-  field?: 'node' | 'type' | 'capability' | 'control' | 'input' | 'output' | 'condition' | 'until' | 'durationMs' | 'items' | 'concurrency' | 'invocationPolicy' | 'connections' | 'automationPolicy' | 'triggers' | 'triggerConfig' | 'triggerCapability' | 'inputDeclarations' | 'presentation' | 'extensionFields'
+  field?: 'node' | 'type' | 'capability' | 'control' | 'input' | 'output' | 'condition' | 'until' | 'durationMs' | 'items' | 'concurrency' | 'invocationPolicy' | 'connections' | 'automationPolicy' | 'triggers' | 'triggerConfig' | 'triggerCapability' | 'inputDeclarations' | 'presentation' | 'extensionFields' | 'graphEdges' | 'mergeInputs' | 'mergeMode'
 }
 export type WorkbenchAutomationComparisonIdentity =
   | { kind: 'draft'; version: number; updatedAt: string }

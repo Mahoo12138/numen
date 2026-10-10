@@ -1,7 +1,9 @@
 import {
   capabilityKey,
+  isSupportedAutomationVersion,
   type AutomationExecutionSnapshot,
   type ControlSource,
+  type GraphNodeSource,
   type NumenValue,
   type Run,
 } from '@numenjs/core'
@@ -10,6 +12,7 @@ import type {
   RunExecutionDiagnosticsPage,
   RunInspection,
   RunInstructionExecutionSummary,
+  RunGraphMemberSummary,
 } from '@numenjs/scheduler'
 import type {
   WorkbenchRunContextGroup,
@@ -29,11 +32,12 @@ export function projectWorkbenchRunDetail(
   events: RunEventPage,
   encodeExecutionCursor: (cursor: NonNullable<RunExecutionDiagnosticsPage['nextCursor']>) => string,
 ): WorkbenchRunDetail {
+  const supportedRevision = revision && isSupportedAutomationVersion(revision.protocolVersion, revision.irVersion) ? revision : undefined
   const capabilityTitles = new Map(
-    (revision?.contractSnapshot.capabilities ?? []).map(capability => [capabilityKey(capability), capability.title]),
+    (supportedRevision?.contractSnapshot.capabilities ?? []).map(capability => [capabilityKey(capability), capability.title]),
   )
-  const instructions = revision?.compiledPlan.instructions ?? {}
-  const flow = projectRunFlow(revision, inspection.instructionExecutions)
+  const instructions = supportedRevision?.compiledPlan.instructions ?? {}
+  const flow = projectRunFlow(revision, inspection.instructionExecutions, inspection.graphMembers)
   const counts = diagnostics.statusCounts
   return {
     run: {
@@ -107,35 +111,36 @@ export function projectWorkbenchRunDetail(
 
 /** Resolve against the actual, visible immutable Source tree, never an instruction-name convention. */
 export function sourceNodeIdForExecution(revision: AutomationExecutionSnapshot | undefined, instructionId: string): string | undefined {
-  if (!revision) return
+  if (!revision || !isSupportedAutomationVersion(revision.protocolVersion, revision.irVersion)) return
   const candidate = revision.compiledPlan.sourceMap?.[instructionId]?.nodeId ?? instructionId
-  const pending = [revision.source.flow]
+  const pending: Array<ControlSource | GraphNodeSource> = [revision.source.flow]
   for (let count = 0; pending.length && count < 250; count++) {
     const node = pending.pop()!
     if (node.id === candidate) return candidate
     const children = node.type === 'block' ? node.steps
       : node.type === 'if' ? [node.then, ...(node.else ? [node.else] : [])]
         : node.type === 'foreach' ? [node.body]
-          : node.type === 'parallel' || node.type === 'race' ? node.branches : []
+          : node.type === 'parallel' || node.type === 'race' ? node.branches : node.type === 'graph' ? node.nodes : []
     pending.push(...children.slice().reverse())
   }
 }
 
 const flowStatusPriority: WorkbenchRunFlowStatus[] = [
-  'FAILED', 'CANCELLING', 'RUNNING', 'BLOCKED', 'WAITING', 'CANCELLED', 'QUEUED', 'COMPLETED', 'IDLE',
+  'FAILED', 'CANCELLING', 'RUNNING', 'BLOCKED', 'WAITING', 'CANCELLED', 'QUEUED', 'PENDING', 'COMPLETED', 'SKIPPED', 'IDLE',
 ]
 
 export function projectRunFlow(
   revision: AutomationExecutionSnapshot | undefined,
   summaries: RunInstructionExecutionSummary[],
+  graphMembers: RunGraphMemberSummary[] = [],
 ): WorkbenchRunDetail['flow'] {
-  if (!revision) {
+  if (!revision || !isSupportedAutomationVersion(revision.protocolVersion, revision.irVersion)) {
     return {
       root: {
-        id: '__missing-revision',
+        id: revision ? '__unsupported-revision' : '__missing-revision',
         type: 'block',
         title: 'Flow unavailable',
-        detail: 'The immutable Revision is no longer available.',
+        detail: revision ? 'This Source and IR version pair is not supported for inspection.' : 'The immutable Revision is no longer available.',
         status: 'IDLE',
         executionCount: 0,
         children: [],
@@ -158,7 +163,9 @@ export function projectRunFlow(
     }
   }
   const budget = { remaining: 250, truncated: false }
-  const source = projectFlowNode(revision.source.flow, byInstruction, capabilityTitles, budget)!
+  const membersByNode = new Map<string, RunGraphMemberSummary[]>()
+  for (const member of graphMembers) membersByNode.set(member.nodeId, [...(membersByNode.get(member.nodeId) ?? []), member])
+  const source = projectFlowNode(revision.source.flow, byInstruction, capabilityTitles, budget, membersByNode)!
   const root: WorkbenchRunFlowNode = {
     id: '__flow',
     type: 'block',
@@ -172,10 +179,11 @@ export function projectRunFlow(
 }
 
 function projectFlowNode(
-  control: ControlSource,
+  control: ControlSource | GraphNodeSource,
   summaries: ReadonlyMap<string, RunInstructionExecutionSummary>,
   capabilityTitles: ReadonlyMap<string, string>,
   budget: { remaining: number; truncated: boolean },
+  members: ReadonlyMap<string, RunGraphMemberSummary[]>,
   label?: string,
   depth = 0,
 ): WorkbenchRunFlowNode | undefined {
@@ -186,7 +194,7 @@ function projectFlowNode(
   budget.remaining -= 1
   const children: WorkbenchRunFlowNode[] = []
   const append = (child: ControlSource, childLabel?: string) => {
-    const projected = projectFlowNode(child, summaries, capabilityTitles, budget, childLabel, depth + 1)
+    const projected = projectFlowNode(child, summaries, capabilityTitles, budget, members, childLabel, depth + 1)
     if (projected) children.push(projected)
   }
   switch (control.type) {
@@ -206,20 +214,40 @@ function projectFlowNode(
       break
   }
   const summary = summaries.get(control.id)
+  const memberStates = members.get(control.id) ?? []
   const directStatus = summary ? flowStatusFromSummary(summary) : 'IDLE'
-  const status = highestFlowStatus([directStatus, ...children.map(child => child.status)])
+  let graph: WorkbenchRunFlowNode['graph']
+  if (control.type === 'graph') {
+    const nodes = control.nodes.flatMap(member => {
+      const projected = projectFlowNode(member, summaries, capabilityTitles, budget, members, undefined, depth + 1)
+      return projected ? [projected] : []
+    })
+    const ids = new Set([control.id, ...nodes.map(node => node.id)])
+    const edges = control.edges.filter(edge => ids.has(edge.from.nodeId) && ids.has(edge.to.nodeId)).slice(0, 1_000)
+      .map(edge => ({ id: edge.id, from: { nodeId: edge.from.nodeId, port: edge.from.port }, to: { nodeId: edge.to.nodeId, port: edge.to.port } }))
+    if (edges.length !== control.edges.length) budget.truncated = true
+    graph = { nodes, edges }
+  }
+  const status = highestFlowStatus([directStatus, ...memberStates.map(member => graphMemberStatus(member.status)), ...children.map(child => child.status), ...(graph?.nodes.map(node => node.status) ?? [])])
+  const blockedReason = memberStates.find(member => member.status === 'BLOCKED' && member.blockedReason)?.blockedReason
   return {
     id: control.id,
     type: control.type,
     title: label ?? flowNodeTitle(control, capabilityTitles),
     detail: flowNodeDetail(control),
     status,
-    executionCount: totalExecutions(summary) + children.reduce((total, child) => total + child.executionCount, 0),
+    executionCount: totalExecutions(summary) + [...children, ...(graph?.nodes ?? [])].reduce((total, child) => total + child.executionCount, 0),
     children,
+    ...(graph ? { graph } : {}),
+    ...(blockedReason ? { blockedReason } : {}),
   }
 }
 
-function flowNodeTitle(control: ControlSource, capabilityTitles: ReadonlyMap<string, string>): string {
+function graphMemberStatus(status: RunGraphMemberSummary['status']): WorkbenchRunFlowStatus {
+  return status === 'RUNNABLE' ? 'QUEUED' : status === 'TIMED_OUT' ? 'FAILED' : status
+}
+
+function flowNodeTitle(control: ControlSource | GraphNodeSource, capabilityTitles: ReadonlyMap<string, string>): string {
   switch (control.type) {
     case 'block': return 'Sequence'
     case 'extension': return capabilityTitles.get(`control:${control.control.id}@${control.control.version}`) ?? control.control.id
@@ -229,10 +257,13 @@ function flowNodeTitle(control: ControlSource, capabilityTitles: ReadonlyMap<str
     case 'parallel': return 'Parallel'
     case 'race': return 'Race'
     case 'foreach': return 'For each'
+    case 'graph': return 'Graph'
+    case 'condition': return 'Condition'
+    case 'merge': return 'Merge'
   }
 }
 
-function flowNodeDetail(control: ControlSource): string {
+function flowNodeDetail(control: ControlSource | GraphNodeSource): string {
   switch (control.type) {
     case 'block': return `${control.steps.length} ${control.steps.length === 1 ? 'step' : 'steps'}`
     case 'extension': return `${control.control.id}@${control.control.version}`
@@ -242,6 +273,9 @@ function flowNodeDetail(control: ControlSource): string {
     case 'parallel': return `${control.branches.length} branches · wait for all`
     case 'race': return `${control.branches.length} branches · first success`
     case 'foreach': return `Concurrency ${control.concurrency ?? 1}`
+    case 'graph': return `${control.nodes.length} members · ${control.edges.length} edges`
+    case 'condition': return 'True / False ports'
+    case 'merge': return `${control.mode === 'all' ? 'All inputs' : 'Selected input'} · ${control.inputs.length} inputs`
   }
 }
 
@@ -328,6 +362,9 @@ function instructionTitle(
     case 'complete': return 'Run complete'
     case 'fail': return 'Run failure'
     case 'eval': return `Set ${instruction.assign}`
+    case 'graph_scope': return 'Graph scope'
+    case 'graph_condition': return 'Graph condition'
+    case 'graph_merge': return 'Graph merge'
   }
 }
 

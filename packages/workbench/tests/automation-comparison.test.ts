@@ -191,7 +191,7 @@ describe('Bounded Automation semantic comparison', () => {
   })
 
   it('checks protocol support before traversing unknown future documents', () => {
-    const future = { source: null, presentation: null, protocolVersion: 2 } as unknown as ReturnType<typeof document>
+    const future = { source: null, presentation: null, protocolVersion: 99 } as unknown as ReturnType<typeof document>
     expect(() => compareAutomationDocuments(future, document(source()))).toThrow(AutomationComparisonUnavailableError)
     expect(() => compareAutomationDocuments(document(source()), future)).toThrow(AutomationComparisonUnavailableError)
   })

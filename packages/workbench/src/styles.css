@@ -527,6 +527,13 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .run-flow-view, .run-context-view { max-width: 900px; }
 .run-flow-tree, .run-flow-tree ol { margin: 0; padding: 0; list-style: none; }
 .run-flow-tree ol { margin-inline-start: 15px; padding-inline-start: 18px; border-inline-start: 1px solid var(--wb-border); }
+.readonly-graph { min-width: 0; padding: 12px 0; }
+.readonly-graph > p { color: var(--wb-muted); font-size: 12px; line-height: 1.5; }
+.readonly-graph h3 { margin: 14px 0 6px; font-size: 12px; }
+.readonly-graph-members { margin: 0; padding: 0; list-style: none; }
+.readonly-graph-edges { max-width: 100%; overflow-x: auto; }
+.readonly-graph-edges table { width: 100%; border-collapse: collapse; text-align: start; font-size: 11px; }
+.readonly-graph-edges th, .readonly-graph-edges td { padding: 8px; border-bottom: 1px solid var(--wb-border); overflow-wrap: anywhere; }
 .run-flow-node { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; align-items: start; gap: 9px; padding: 10px 0; border-bottom: 1px solid var(--wb-border); }
 .run-flow-marker { width: 8px; height: 8px; margin-top: 3px; border: 2px solid white; border-radius: 50%; background: #8993a1; box-shadow: 0 1px 3px rgb(35 45 58 / 22%), 0 0 0 1px #8993a1; }
 .run-flow-node[data-status="COMPLETED"] .run-flow-marker { background: var(--wb-success); box-shadow: 0 1px 3px rgb(35 45 58 / 18%), 0 0 0 1px var(--wb-success); }

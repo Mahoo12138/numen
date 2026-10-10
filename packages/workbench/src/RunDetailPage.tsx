@@ -353,7 +353,7 @@ export function RunDetailContent({
             <div class="execution-records">
               {detail.executions.map(execution => <ExecutionRecord execution={execution} key={execution.id} onInspect={onInspect} onLocate={onLocate} ownership={ownership} runId={detail.run.id} />)}
             </div>
-          ) : <p class="run-detail-empty">{t('workbench.noExecutionsHaveBeenCreatedForThisRun')}</p>}
+          ) : <p class="run-detail-empty">{t(filterLabel ? 'workbench.noExecutionsMatchCurrentFilter' : 'workbench.noExecutionsHaveBeenCreatedForThisRun')}</p>}
           <PageControls
             canGoNewer={canShowNewerExecutions}
             canGoOlder={!!detail.nextExecutionCursor}

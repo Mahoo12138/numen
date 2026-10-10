@@ -86,12 +86,39 @@ function validateRestorationContent(content: Pick<WorkbenchAutomationRestoreCont
     }
   }
   let nodes = 0
-  const walk = (value: unknown, depth = 0, blockOnly = false): void => {
+  const walk = (value: unknown, depth = 0, blockOnly = false, graphMember = false): void => {
     if (++nodes > 250 || depth > 64) return limit()
     const node = record(value)
     identity(node.id)
     if (blockOnly && node.type !== 'block') return unavailable()
     switch (node.type) {
+      case 'graph': {
+        if (node.version !== 1 || !Array.isArray(node.nodes) || !Array.isArray(node.edges)) return unavailable()
+        if (node.edges.length > 2_000) return limit()
+        const members = new Set<string>()
+        for (const value of node.nodes) {
+          const member = record(value)
+          if (!['capability', 'condition', 'merge'].includes(member.type as string)) return unavailable()
+          walk(value, depth + 1, false, true)
+          members.add(member.id as string)
+        }
+        const edgeIds = new Set<string>()
+        for (const value of node.edges) {
+          const edge = record(value), from = record(edge.from), to = record(edge.to)
+          if (typeof edge.id !== 'string' || !edge.id || edge.id.length > 160 || edgeIds.has(edge.id)
+            || typeof from.nodeId !== 'string' || typeof to.nodeId !== 'string'
+            || typeof from.port !== 'string' || !from.port || typeof to.port !== 'string' || !to.port
+            || from.nodeId !== node.id && !members.has(from.nodeId) || !members.has(to.nodeId)) return unavailable()
+          edgeIds.add(edge.id)
+        }
+        if (node.output !== undefined) expression(node.output)
+        break
+      }
+      case 'condition': if (!graphMember) return unavailable(); expression(node.condition); break
+      case 'merge':
+        if (!graphMember || !['all', 'selected'].includes(node.mode as string) || !Array.isArray(node.inputs)
+          || node.inputs.some(input => typeof input !== 'string' || !input) || new Set(node.inputs).size !== node.inputs.length) return unavailable()
+        break
       case 'block':
         if (!Array.isArray(node.steps)) return unavailable()
         node.steps.forEach(child => walk(child, depth + 1))

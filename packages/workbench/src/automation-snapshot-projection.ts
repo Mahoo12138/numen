@@ -1,4 +1,4 @@
-import type { AutomationExecutionSnapshot, ControlSource, NumenValue, ValueExpr } from '@numenjs/core'
+import { isSupportedAutomationVersion, type AutomationExecutionSnapshot, type ControlSource, type GraphNodeSource, type NumenValue, type ValueExpr } from '@numenjs/core'
 import type { WorkbenchAutomationSnapshotDetail, WorkbenchAutomationSnapshotSourceNode, WorkbenchInspectedValue } from './contracts.js'
 import { inspectExecutionValue } from './execution-inspection.js'
 import { projectRunFlow } from './run-detail-projection.js'
@@ -40,12 +40,13 @@ function knownSchemaFields(snapshot: unknown): Set<string> {
   return new Set(Object.keys(record(encoded?.dict) ?? {}))
 }
 
-function children(node: ControlSource): ControlSource[] {
+function children(node: ControlSource | GraphNodeSource): Array<ControlSource | GraphNodeSource> {
   switch (node.type) {
     case 'block': return node.steps
     case 'if': return [node.then, ...(node.else ? [node.else] : [])]
     case 'parallel': case 'race': return node.branches
     case 'foreach': return [node.body]
+    case 'graph': return node.nodes
     default: return []
   }
 }
@@ -58,7 +59,7 @@ export function projectAutomationSnapshot(snapshot: AutomationExecutionSnapshot,
       ...(snapshot.purpose === 'published' ? { number: snapshot.number } : { sourceDraftVersion: snapshot.sourceDraftVersion }),
       protocolVersion: snapshot.protocolVersion, irVersion: snapshot.irVersion, contentHash: snapshot.contentHash, createdAt: snapshot.createdAt,
     },
-    compatibility: snapshot.protocolVersion === 1 ? 'supported' : 'unsupported-protocol',
+    compatibility: isSupportedAutomationVersion(snapshot.protocolVersion, snapshot.irVersion) ? 'supported' : 'unsupported-protocol',
     flow: { root: { id: '__unsupported-snapshot', type: 'block', title: 'Flow unavailable', detail: 'This Source protocol is not supported for inspection.', status: 'IDLE', executionCount: 0, children: [] }, truncated: false },
     source: { nodes: [], triggers: [], policy: { hasGroupBy: false }, truncated: false },
     presentation: { collapsedNodes: [], hiddenFields: 0, truncated: false }, inputs: [], inputsTruncated: false,
@@ -71,7 +72,7 @@ export function projectAutomationSnapshot(snapshot: AutomationExecutionSnapshot,
     const node = pendingFlow.pop()!
     node.title = text(node.title)
     node.detail = text(node.detail)
-    pendingFlow.push(...node.children)
+    pendingFlow.push(...node.children, ...(node.graph?.nodes ?? []))
   }
   const byteBudget = { remaining: 32_768 }
   const inspected = (value: unknown, schema: unknown): WorkbenchInspectedValue => {
@@ -82,7 +83,7 @@ export function projectAutomationSnapshot(snapshot: AutomationExecutionSnapshot,
     byteBudget.remaining -= bytes
     return projection
   }
-  const pending: Array<{ node: ControlSource; depth: number }> = [{ node: snapshot.source.flow, depth: 0 }]
+  const pending: Array<{ node: ControlSource | GraphNodeSource; depth: number }> = [{ node: snapshot.source.flow, depth: 0 }]
   const ids = new Set<string>()
   while (pending.length && result.source.nodes.length < 250) {
     const { node, depth } = pending.pop()!
@@ -115,12 +116,13 @@ export function projectAutomationSnapshot(snapshot: AutomationExecutionSnapshot,
       if (budget.truncated) { projected.input.truncated = true; result.source.truncated = true }
     } else {
       switch (node.type) {
-        case 'if': projected.expressionFields.push({ field: 'condition', type: expressionTypes.has(node.condition.type) ? node.condition.type : 'unknown' }); break
+        case 'if': case 'condition': projected.expressionFields.push({ field: 'condition', type: expressionTypes.has(node.condition.type) ? node.condition.type : 'unknown' }); break
         case 'wait':
           for (const field of ['until', 'durationMs'] as const) if (node[field]) projected.expressionFields.push({ field, type: expressionTypes.has(node[field]!.type) ? node[field]!.type : 'unknown' })
           break
         case 'foreach': projected.expressionFields.push({ field: 'items', type: expressionTypes.has(node.items.type) ? node.items.type : 'unknown' }); break
         case 'block': if (node.output) projected.expressionFields.push({ field: 'output', type: 'object' }); break
+        case 'graph': if (node.output) projected.expressionFields.push({ field: 'output', type: expressionTypes.has(node.output.type) ? node.output.type : 'unknown' }); break
       }
     }
     result.source.nodes.push(projected)

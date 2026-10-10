@@ -77,6 +77,39 @@ function history(root: Context) {
 }
 
 describe('Explicit restore-to-Draft authoring preparation', () => {
+  it('restores a fixed Graph snapshot with exact ports, expressions and layout after providers are removed', async () => {
+    const { root, automation, second, unload } = await fixture()
+    const source: AutomationSource = { triggers: [], flow: {
+      type: 'graph', id: 'graph-root', version: 1,
+      nodes: [
+        { type: 'condition', id: 'choose', condition: { type: 'literal', value: true } },
+        ...['yes', 'no'].map(id => ({ type: 'capability' as const, id, capability: { id: 'test:restoration', version: 1 }, input: { value: { type: 'literal' as const, value: id } } })),
+        { type: 'merge', id: 'selected', mode: 'selected', inputs: ['accepted', 'declined'] },
+      ],
+      edges: [
+        { id: 'start', from: { nodeId: 'graph-root', port: 'start' }, to: { nodeId: 'choose', port: 'in' } },
+        { id: 'true', from: { nodeId: 'choose', port: 'true' }, to: { nodeId: 'yes', port: 'in' } },
+        { id: 'false', from: { nodeId: 'choose', port: 'false' }, to: { nodeId: 'no', port: 'in' } },
+        { id: 'accepted', from: { nodeId: 'yes', port: 'out' }, to: { nodeId: 'selected', port: 'accepted' } },
+        { id: 'declined', from: { nodeId: 'no', port: 'out' }, to: { nodeId: 'selected', port: 'declined' } },
+      ],
+      output: { type: 'ref', path: 'steps.selected' },
+    } }
+    const presentation: Record<string, NumenValue> = { graphPositions: { choose: { x: 24, y: -12 }, selected: { x: 640, y: 128 } }, futureLayout: ['retained'] }
+    root.automations.saveDraft({ automationId: automation.id, expectedVersion: 2, source, presentation })
+    const snapshot = root.automations.publishDraft(automation.id, 3)
+    expect(snapshot).toMatchObject({ protocolVersion: 2, irVersion: 2 })
+    root.automations.saveDraft({ automationId: automation.id, expectedVersion: 3, source: empty, presentation: {} })
+    unload()
+    const before = history(root)
+    const content = await root.console.query(workbenchAutomationRestoreContentQuery, { automationId: automation.id, snapshotId: snapshot.id, expectedDraftVersion: 4 }, request())
+    expect(content).toMatchObject({ identity: { protocolVersion: 2, irVersion: 2 }, source, presentation })
+    await root.console.action(workbenchSaveAutomationDraftAction, { automationId: automation.id, expectedVersion: 4, source: content.source, presentation: content.presentation }, request())
+    expect(root.automations.getDraft(automation.id)).toMatchObject({ version: 5, source, presentation })
+    expect(root.automations.get(automation.id)?.activeRevisionId).toBe(second.id)
+    expect(history(root)).toEqual(before)
+  })
+
   it('returns exact Source and Presentation for a fixed snapshot without writes, live definitions or decoding unrelated IR', async () => {
     const { root, automation, first, test, source, presentation, prepare, unload } = await fixture()
     unload()

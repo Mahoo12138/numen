@@ -1,4 +1,4 @@
-import type { AutomationSource, NumenValue } from '@numenjs/core'
+import { isSupportedAutomationVersion, type AutomationSource, type NumenValue } from '@numenjs/core'
 import type { WorkbenchAutomationChange } from './contracts.js'
 
 export class AutomationComparisonLimitError extends Error {
@@ -15,6 +15,7 @@ interface ComparisonDocument {
   source: AutomationSource
   presentation: Record<string, NumenValue>
   protocolVersion: number
+  irVersion?: number
 }
 
 type RecordValue = Record<string, unknown>
@@ -170,6 +171,7 @@ const nodeFields: Record<string, string[]> = {
   block: ['type', 'id', 'steps', 'output'], if: ['type', 'id', 'condition', 'then', 'else'], wait: ['type', 'id', 'until', 'durationMs'],
   parallel: ['type', 'id', 'branches'], race: ['type', 'id', 'branches'], foreach: ['type', 'id', 'items', 'body', 'concurrency'],
   capability: ['type', 'id', 'capability', 'connection', 'connections', 'input', 'policy'], extension: ['type', 'id', 'control', 'input'],
+  graph: ['type', 'id', 'version', 'nodes', 'edges', 'output'], condition: ['type', 'id', 'condition'], merge: ['type', 'id', 'mode', 'inputs'],
 }
 
 function parseDocument(document: ComparisonDocument): ParsedDocument {
@@ -184,6 +186,7 @@ function parseDocument(document: ComparisonDocument): ParsedDocument {
     if (depth > 64 || nodes.size >= 250) return limit()
     const node = record(value), id = identity(node.id)
     if (typeof node.type !== 'string' || !Object.hasOwn(nodeFields, node.type) || (blockOnly && node.type !== 'block') || nodes.has(id)) return unavailable()
+    if ((node.type === 'condition' || node.type === 'merge') && (document.protocolVersion !== 2 || slot !== 'graphNodes')) return unavailable()
     nodes.set(id, { value: node, parent, slot })
     const key = JSON.stringify([parent, slot])
     groups.set(key, [...(groups.get(key) ?? []), id])
@@ -197,6 +200,17 @@ function parseDocument(document: ComparisonDocument): ParsedDocument {
       case 'if': walk(node.then, id, 'then', depth + 1, true); if (node.else !== undefined) walk(node.else, id, 'else', depth + 1, true); break
       case 'parallel': case 'race': children(node.branches, 'branches', true); break
       case 'foreach': walk(node.body, id, 'body', depth + 1, true); break
+      case 'graph': {
+        if (document.protocolVersion !== 2 || node.version !== 1 || !Array.isArray(node.nodes)) return unavailable()
+        if (node.nodes.some(member => !['capability', 'condition', 'merge'].includes(record(member).type as string))) return unavailable()
+        children(node.nodes, 'graphNodes')
+        const memberIds = new Set(node.nodes.map(member => identity(record(member).id)))
+        for (const edge of graphEdges(node.edges)) {
+          const from = record(edge.from), to = record(edge.to)
+          if ((!memberIds.has(from.nodeId as string) && from.nodeId !== id) || !memberIds.has(to.nodeId as string)) return unavailable()
+        }
+        break
+      }
     }
   }
   walk(source.flow, undefined, 'root', 0)
@@ -207,6 +221,28 @@ function parseDocument(document: ComparisonDocument): ParsedDocument {
     record(trigger.config); reference(trigger.capability, []); bindings(trigger)
   }
   return { source, nodes, groups, triggers }
+}
+
+function graphEdges(value: unknown): RecordValue[] {
+  if (!Array.isArray(value)) return unavailable()
+  if (value.length > 1_000) return limit()
+  const ids = new Set<string>()
+  return value.map(item => {
+    const edge = record(item), id = graphName(edge.id)
+    if (ids.has(id)) return unavailable()
+    ids.add(id)
+    const endpoint = (value: unknown) => {
+      const item = record(value)
+      return { nodeId: identity(item.nodeId), port: graphName(item.port) }
+    }
+    return { id, from: endpoint(edge.from), to: endpoint(edge.to) }
+  }).sort((a, b) => (a.id as string).localeCompare(b.id as string))
+}
+
+function graphName(value: unknown): string {
+  if (typeof value !== 'string' || !value) return unavailable()
+  if (value.length > 160) return limit()
+  return value
 }
 
 function nodeProjection(node: RecordValue) {
@@ -229,7 +265,23 @@ function nodeProjection(node: RecordValue) {
       // Extension-specific inputs remain a single opaque change, regardless of their field names.
       extensions.push({ input: record(node.input) }); break
     case 'block': if (node.output !== undefined) parameters.set('output', expressionMap(node.output, extensions, ['output'])); break
-    case 'if': field('condition', node.condition, true); break
+    case 'if': case 'condition': field('condition', node.condition, true); break
+    case 'graph':
+      field('output', node.output)
+      parameters.set('graphEdges', graphEdges(node.edges))
+      // Future edge metadata remains opaque without changing public diff payloads.
+      for (const item of [...node.edges as unknown[]].sort((a, b) => graphName(record(a).id).localeCompare(graphName(record(b).id)))) {
+        const edge = record(item)
+        const opaque = { edge: extra(edge, ['id', 'from', 'to']), from: extra(record(edge.from), ['nodeId', 'port']), to: extra(record(edge.to), ['nodeId', 'port']) }
+        if (Object.values(opaque).some(hasKeys)) extensions.push(opaque)
+      }
+      break
+    case 'merge':
+      if (!['all', 'selected'].includes(node.mode as string) || !Array.isArray(node.inputs) || !node.inputs.length) return unavailable()
+      parameters.set('mergeMode', node.mode)
+      parameters.set('mergeInputs', node.inputs.map(graphName).sort())
+      if (new Set(node.inputs).size !== node.inputs.length) return unavailable()
+      break
     case 'wait': field('until', node.until); field('durationMs', node.durationMs); break
     case 'foreach':
       field('items', node.items, true)
@@ -257,7 +309,8 @@ function stableSubsequence(previous: string[], current: string[]): Set<string> {
 
 /** Read-only semantic comparison. Returned metadata never contains authored values or paths. */
 export function compareAutomationDocuments(left: ComparisonDocument, right: ComparisonDocument): WorkbenchAutomationChange[] {
-  if (left.protocolVersion !== 1 || right.protocolVersion !== 1) return unavailable()
+  if (!isSupportedAutomationVersion(left.protocolVersion, left.irVersion ?? left.protocolVersion)
+    || !isSupportedAutomationVersion(right.protocolVersion, right.irVersion ?? right.protocolVersion)) return unavailable()
   const before = parseDocument(left), after = parseDocument(right)
   const changes: WorkbenchAutomationChange[] = []
   const add = (category: WorkbenchAutomationChange['category'], kind: WorkbenchAutomationChange['kind'], field: Field, nodeId?: string): void => {
@@ -273,6 +326,8 @@ export function compareAutomationDocuments(left: ComparisonDocument, right: Comp
   }
   for (const [id] of after.nodes) if (!before.nodes.has(id)) add('structure', 'added', 'node', id)
   for (const [key, group] of after.groups) {
+    // Member array order is not Graph execution order. Only explicit edges determine it.
+    if (group.some(id => after.nodes.get(id)?.slot === 'graphNodes')) continue
     const current = group.filter(id => before.nodes.has(id) && !moved.has(id))
     const previous = (before.groups.get(key) ?? []).filter(id => current.includes(id))
     const stable = stableSubsequence(previous, current)
@@ -287,7 +342,7 @@ export function compareAutomationDocuments(left: ComparisonDocument, right: Comp
     if (moved.has(id)) add('structure', 'moved', 'node', id)
     if (previous.value.type !== node.value.type) { add('structure', 'changed', 'type', id); continue }
     if (node.value.type === 'capability' || node.value.type === 'extension') changed('structure', node.value.type === 'capability' ? 'capability' : 'control', prior.ref, next.ref, id)
-    for (const field of new Set([...prior.parameters.keys(), ...next.parameters.keys()])) changed('parameters', field, prior.parameters.get(field), next.parameters.get(field), id)
+    for (const field of new Set([...prior.parameters.keys(), ...next.parameters.keys()])) changed(['graphEdges', 'mergeInputs', 'mergeMode'].includes(field) ? 'structure' : 'parameters', field, prior.parameters.get(field), next.parameters.get(field), id)
     changed('bindings', 'connections', prior.connection, next.connection, id)
     changed('policies', node.value.type === 'foreach' ? 'concurrency' : 'invocationPolicy', prior.policy, next.policy, id)
     changed('extensions', 'extensionFields', prior.extensions, next.extensions, id)

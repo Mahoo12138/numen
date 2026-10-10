@@ -59,6 +59,7 @@ interface ComparisonDocument {
   source: AutomationSource
   presentation: Record<string, NumenValue>
   protocolVersion: number
+  irVersion: number
   identity: WorkbenchAutomationComparisonIdentity
 }
 
@@ -66,12 +67,13 @@ function resolveDocument(ctx: Context, automationId: string, target: WorkbenchAu
   if (target.kind === 'draft') {
     const draft = ctx.automations.getDraftForInspection(automationId, target.version)
     if (!draft) throw notFound()
-    return { source: draft.source, presentation: draft.presentation, protocolVersion: 1, identity: { kind: 'draft', version: draft.version, updatedAt: draft.updatedAt } }
+    const version = draft.source.flow?.type === 'graph' ? 2 : 1
+    return { source: draft.source, presentation: draft.presentation, protocolVersion: version, irVersion: version, identity: { kind: 'draft', version: draft.version, updatedAt: draft.updatedAt } }
   }
   const snapshot = ctx.automations.getExecutionSnapshotForInspection(target.snapshotId, automationId)
   if (!snapshot) throw notFound()
   return {
-    source: snapshot.source, presentation: snapshot.presentation, protocolVersion: snapshot.protocolVersion,
+    source: snapshot.source, presentation: snapshot.presentation, protocolVersion: snapshot.protocolVersion, irVersion: snapshot.irVersion,
     identity: { kind: 'snapshot', snapshotId: snapshot.id, purpose: snapshot.purpose, createdAt: snapshot.createdAt,
       ...(snapshot.purpose === 'published' ? { number: snapshot.number } : { sourceDraftVersion: snapshot.sourceDraftVersion }),
     },
