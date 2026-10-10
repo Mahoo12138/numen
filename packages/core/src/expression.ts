@@ -36,6 +36,46 @@ export const coreExpressionFunctions: ReadonlyArray<CoreExpressionFunctionDefini
     ],
   },
   {
+    id: 'core:gt',
+    title: 'Greater than',
+    description: 'Return true when the left number is greater than the right number.',
+    outputType: 'boolean',
+    arguments: [
+      { label: 'Left number', valueType: 'number' },
+      { label: 'Right number', valueType: 'number' },
+    ],
+  },
+  {
+    id: 'core:gte',
+    title: 'Greater than or equal',
+    description: 'Return true when the left number is greater than or equal to the right number.',
+    outputType: 'boolean',
+    arguments: [
+      { label: 'Left number', valueType: 'number' },
+      { label: 'Right number', valueType: 'number' },
+    ],
+  },
+  {
+    id: 'core:lt',
+    title: 'Less than',
+    description: 'Return true when the left number is less than the right number.',
+    outputType: 'boolean',
+    arguments: [
+      { label: 'Left number', valueType: 'number' },
+      { label: 'Right number', valueType: 'number' },
+    ],
+  },
+  {
+    id: 'core:lte',
+    title: 'Less than or equal',
+    description: 'Return true when the left number is less than or equal to the right number.',
+    outputType: 'boolean',
+    arguments: [
+      { label: 'Left number', valueType: 'number' },
+      { label: 'Right number', valueType: 'number' },
+    ],
+  },
+  {
     id: 'core:not',
     title: 'Not',
     description: 'Invert one boolean value.',
@@ -87,6 +127,23 @@ export const coreExpressionFunctions: ReadonlyArray<CoreExpressionFunctionDefini
     variadic: { label: 'Number', valueType: 'number' },
   },
   {
+    id: 'core:length',
+    title: 'Length',
+    description: 'Count array items or Unicode code points in text, not visual characters. Only text and arrays are accepted.',
+    outputType: 'number',
+    arguments: [{ label: 'Text or array', valueType: 'unknown' }],
+  },
+  {
+    id: 'core:contains',
+    title: 'Text contains',
+    description: 'Check whether text contains a case-sensitive substring. An empty substring always matches.',
+    outputType: 'boolean',
+    arguments: [
+      { label: 'Text', valueType: 'string' },
+      { label: 'Substring', valueType: 'string' },
+    ],
+  },
+  {
     id: 'core:to-string',
     title: 'Convert to text',
     description: 'Convert one JSON-like value to text explicitly.',
@@ -119,6 +176,18 @@ function booleanArgument(value: NumenValue, name: string): boolean {
   return value
 }
 
+function numberArgument(value: NumenValue, name: string): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new CoreExpressionFunctionError(`${name} expects finite number arguments`)
+  }
+  return value
+}
+
+function stringArgument(value: NumenValue, name: string): string {
+  if (typeof value !== 'string') throw new CoreExpressionFunctionError(`${name} expects string arguments`)
+  return value
+}
+
 export function stringifyCoreExpressionValue(value: NumenValue): string {
   if (typeof value === 'string') return value
   if (value === null) return ''
@@ -133,6 +202,14 @@ export function evaluateCoreExpressionFunction(name: string, args: NumenValue[])
   switch (name) {
     case 'core:eq':
       return JSON.stringify(args[0]) === JSON.stringify(args[1])
+    case 'core:gt':
+      return numberArgument(args[0]!, name) > numberArgument(args[1]!, name)
+    case 'core:gte':
+      return numberArgument(args[0]!, name) >= numberArgument(args[1]!, name)
+    case 'core:lt':
+      return numberArgument(args[0]!, name) < numberArgument(args[1]!, name)
+    case 'core:lte':
+      return numberArgument(args[0]!, name) <= numberArgument(args[1]!, name)
     case 'core:not':
       return !booleanArgument(args[0]!, name)
     case 'core:and':
@@ -149,6 +226,18 @@ export function evaluateCoreExpressionFunction(name: string, args: NumenValue[])
     }
     case 'core:to-string':
       return stringifyCoreExpressionValue(args[0]!)
+    case 'core:length': {
+      const value = args[0]!
+      if (Array.isArray(value)) return value.length
+      if (typeof value === 'string') {
+        let length = 0
+        for (const _codePoint of value) length++
+        return length
+      }
+      throw new CoreExpressionFunctionError('core:length expects text or an array')
+    }
+    case 'core:contains':
+      return stringArgument(args[0]!, name).includes(stringArgument(args[1]!, name))
     default:
       throw new CoreExpressionFunctionError(`expression function is not available: ${name}`)
   }

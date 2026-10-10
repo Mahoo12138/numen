@@ -1,4 +1,4 @@
-import type { AutomationSource, CapabilityDefinition, CapabilityStatus } from '@numenjs/core'
+import { getCoreExpressionFunction, type AutomationSource, type CapabilityDefinition, type CapabilityStatus } from '@numenjs/core'
 import z from 'schemastery'
 import { describe, expect, it } from 'vitest'
 import { AutomationCompileError, compileAutomation } from '../src/index.js'
@@ -192,6 +192,38 @@ describe('automation compiler', () => {
         expect((error as AutomationCompileError).diagnostics).toContainEqual(expect.objectContaining({
           code,
           source: { nodeId: 'wait', fieldPath },
+        }))
+      }
+    }
+  })
+
+  it.each(['core:gt', 'core:gte', 'core:lt', 'core:lte', 'core:length', 'core:contains'])('accepts %s from the shared catalog and locates nested arity errors', name => {
+    const candidate = structuredClone(source)
+    if (candidate.flow.type !== 'block' || candidate.flow.steps[0]?.type !== 'capability') throw Error('fixture')
+    const definition = getCoreExpressionFunction(name)!
+    const args = definition.arguments.map(argument => ({
+      type: 'literal' as const,
+      value: argument.valueType === 'number' ? 1 : 'text',
+    }))
+    const expression = {
+      type: 'call' as const, function: name, arguments: args,
+    }
+    candidate.flow.steps[0].input.message = {
+      type: 'call', function: 'core:to-string', arguments: [expression],
+    }
+    expect(compileAutomation(candidate, resolver).plan.instructions['send-message']).toMatchObject({
+      input: { entries: { message: { arguments: [expression] } } },
+    })
+    for (const invalid of [args.slice(1), [...args, { type: 'literal' as const, value: 'extra' }]]) {
+      expression.arguments = invalid
+      try {
+        compileAutomation(candidate, resolver)
+        throw Error('Expected rejection')
+      } catch (error) {
+        expect(error).toBeInstanceOf(AutomationCompileError)
+        expect((error as AutomationCompileError).diagnostics).toContainEqual(expect.objectContaining({
+          code: 'EXPRESSION_CALL_ARITY_INVALID',
+          source: { nodeId: 'send-message', fieldPath: 'input.message.arguments.0' },
         }))
       }
     }
