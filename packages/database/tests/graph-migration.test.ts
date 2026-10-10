@@ -27,6 +27,11 @@ describe('durable graph member migration', () => {
       expect(() => insert.run(execution.id, 'duplicate-execution', execution.id, 0, 'created', 'updated')).toThrow(/UNIQUE/)
       expect(db.pragma('foreign_key_check')).toEqual([])
       expect(runMigrations(db)).toBe(0)
+      const beforeDowngrade = captureDraftTestV14Rows(db)
+      const schemaBeforeDowngrade = db.prepare('SELECT type, name, sql FROM sqlite_schema ORDER BY type, name').all()
+      expect(() => runMigrations(db, coreMigrations.filter(migration => migration.version <= 15))).toThrow('unsupported database schema version 16; maximum supported is 15')
+      expect(captureDraftTestV14Rows(db)).toEqual(beforeDowngrade)
+      expect(db.prepare('SELECT type, name, sql FROM sqlite_schema ORDER BY type, name').all()).toEqual(schemaBeforeDowngrade)
       // Deleting the run must not strand member facts or block normal retention cleanup.
       db.prepare('DELETE FROM trigger_events WHERE run_id = (SELECT run_id FROM executions WHERE id = ?)').run(execution.id)
       db.prepare('DELETE FROM runs WHERE id = (SELECT run_id FROM executions WHERE id = ?)').run(execution.id)

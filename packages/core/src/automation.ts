@@ -103,7 +103,16 @@ export interface GraphMergeSource {
   inputs: string[]
 }
 
-export type GraphNodeSource = CapabilitySource | GraphConditionSource | GraphMergeSource
+export interface GraphForEachSource {
+  type: 'foreach'
+  id: string
+  items: ValueExpr
+  concurrency?: number
+  /** An explicit output is required and is collected in original input order. */
+  body: GraphSource
+}
+
+export type GraphNodeSource = CapabilitySource | GraphConditionSource | GraphMergeSource | GraphForEachSource
 
 export interface GraphSource {
   type: 'graph'
@@ -199,6 +208,7 @@ export type CoreInstruction =
   }
   | { op: 'graph_condition'; id: string; condition: ValueExpr }
   | { op: 'graph_merge'; id: string; mode: 'all' | 'selected'; inputs: string[] }
+  | { op: 'graph_iterate'; id: string; items: ValueExpr; body: string; concurrency: number }
 
 export interface CorePlan {
   irVersion: number

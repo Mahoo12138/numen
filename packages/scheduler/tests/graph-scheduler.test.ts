@@ -1,5 +1,5 @@
 import { AutomationService } from '@numenjs/automation'
-import { CapabilityRegistry, type AutomationSource, type CapabilityDefinition, type GraphEdge, type GraphNodeSource, type NumenValue, type ValueExpr } from '@numenjs/core'
+import { CapabilityRegistry, type AutomationSource, type CapabilityDefinition, type GraphEdge, type GraphNodeSource, type GraphSource, type NumenValue, type ValueExpr } from '@numenjs/core'
 import { DatabaseService } from '@numenjs/database'
 import { ResourceService } from '@numenjs/resources'
 import { Context } from 'cordis'
@@ -408,4 +408,275 @@ describe('durable graph scheduler', () => {
     } finally { release.resolve(); await task }
   })
 
+})
+
+
+function iterationSource(items: NumenValue[], concurrency = 2): AutomationSource {
+  const body: GraphSource = {
+    type: 'graph', id: 'body', version: 1,
+    nodes: [node('capture', { value: ref('loop.item'), index: ref('loop.index') })],
+    edges: [edge('body', 'capture', 'in', 'start')], output: ref('steps.capture'),
+  }
+  return source([{ type: 'foreach', id: 'each', items: literal(items), concurrency, body }, node('notify', { values: ref('steps.each') })],
+    [edge('graph', 'each'), edge('each', 'notify')], ref('steps.each'))
+}
+
+const iterationRows = (root: Context, runId: string) => root.database.db.prepare(`
+  SELECT iteration.*, scope.instruction_id, body.status AS body_status, body.output_json AS body_output
+  FROM execution_iterations AS iteration JOIN executions AS scope ON scope.id = iteration.iterate_execution_id
+  LEFT JOIN executions AS body ON body.id = iteration.root_execution_id
+  WHERE scope.run_id = ? ORDER BY scope.created_at, scope.id, iteration.item_index
+`).all(runId) as Array<{ iterate_execution_id: string; item_index: number; item_json: string; status: string; root_execution_id: string | null; terminal_execution_id: string | null; instruction_id: string; body_status: string | null; body_output: string | null }>
+
+describe('Graph ForEach scheduler', () => {
+  it('collects by original index after reverse completion and sends one notification', async () => {
+    const releaseFirst = deferred(), secondDone = deferred(), calls: NumenValue[] = []
+    const root = await context(await databasePath(), async input => {
+      calls.push(input.value!)
+      if (input.index === 0) { await secondDone.promise; await releaseFirst.promise }
+      if (input.index === 1) secondDone.resolve()
+      return input
+    })
+    const run = publish(root, iterationSource(['first', 'second'], 2))
+    const task = root.scheduler.dispatchUntilIdle()
+    try {
+      await secondDone.promise
+      await vi.waitFor(() => expect(iterationRows(root, run.id).find(item => item.item_index === 1)?.status).toBe('COMPLETED'))
+      expect(iterationRows(root, run.id).find(item => item.item_index === 0)?.status).toBe('RUNNING')
+      expect(calls).not.toContain('notify')
+      releaseFirst.resolve(); await task
+      expect(outputs(root, run.id).each).toEqual([{ value: 'first', index: 0 }, { value: 'second', index: 1 }])
+      expect(outputs(root, run.id).__complete).toEqual(outputs(root, run.id).each)
+      expect(calls.filter(value => value === 'notify')).toHaveLength(1)
+      expect(iterationRows(root, run.id).every(item => item.root_execution_id && item.terminal_execution_id && item.status === 'COMPLETED')).toBe(true)
+    } finally { releaseFirst.resolve(); await task }
+  })
+
+  it.each([{ items: [] }, { items: [null, null, false, 0, '', []] }])('preserves empty and duplicate input values $items without phantom calls', async ({ items }) => {
+    const calls: Record<string, NumenValue>[] = []
+    const root = await context(await databasePath(), async input => { calls.push(input); return input.value ?? null })
+    const run = publish(root, iterationSource(items))
+    await root.scheduler.dispatchUntilIdle()
+    expect(root.scheduler.getRun(run.id)?.status).toBe('COMPLETED')
+    expect(outputs(root, run.id).each).toEqual(items)
+    expect(calls.filter(input => input.value === 'notify')).toHaveLength(1)
+    expect(calls).toHaveLength(items.length + 1)
+    expect(iterationRows(root, run.id)).toHaveLength(items.length)
+  })
+
+  it('isolates concurrently repeated inner indexes while inheriting exact outer dependency values', async () => {
+    const bothCaptured = deferred(), received: Record<string, NumenValue>[] = []
+    let captures = 0
+    const root = await context(await databasePath(), async input => {
+      if (input.kind === 'capture') { if (++captures === 2) bothCaptured.resolve(); await bothCaptured.promise }
+      if (input.kind === 'work') received.push(input)
+      return input
+    })
+    const innerBody: GraphSource = { type: 'graph', id: 'innerBody', version: 1,
+      nodes: [node('work', { kind: literal('work'), value: ref('loop.item'), index: ref('loop.index'), outer: ref('steps.outerCapture.value'), global: ref('steps.global.value') })],
+      edges: [edge('innerBody', 'work', 'in', 'start')], output: ref('steps.work') }
+    const outerBody: GraphSource = { type: 'graph', id: 'outerBody', version: 1,
+      nodes: [node('outerCapture', { kind: literal('capture'), value: ref('loop.item') }),
+        { type: 'foreach', id: 'inner', items: literal([10, 20]), concurrency: 2, body: innerBody }],
+      edges: [edge('outerBody', 'outerCapture', 'in', 'start'), edge('outerCapture', 'inner')],
+      output: { type: 'object', entries: { outer: ref('loop.item'), values: ref('steps.inner') } } }
+    const run = publish(root, source([node('global', { value: literal('GLOBAL') }),
+      { type: 'foreach', id: 'outer', items: literal(['A', 'B']), concurrency: 2, body: outerBody }, node('notify', { values: ref('steps.outer') })],
+      [edge('graph', 'global'), edge('global', 'outer'), edge('outer', 'notify')], ref('steps.outer')))
+    await root.scheduler.dispatchUntilIdle()
+    expect(root.scheduler.getRun(run.id)?.status).toBe('COMPLETED')
+    expect(outputs(root, run.id).__complete).toEqual(['A', 'B'].map(outer => ({ outer, values: [10, 20].map((value, index) => ({ kind: 'work', value, index, outer, global: 'GLOBAL' })) })))
+    expect(received).toHaveLength(4)
+    const inner = iterationRows(root, run.id).filter(item => item.instruction_id === 'inner')
+    expect(new Set(inner.map(item => item.iterate_execution_id)).size).toBe(2)
+    expect(new Set(inner.map(item => item.root_execution_id)).size).toBe(4)
+  })
+
+  it('fails one item, cancels active and pending siblings, and refuses late resource output', async () => {
+    const slowStarted = deferred(), release = deferred(), calls: NumenValue[] = []
+    let late: NumenValue = null
+    const root = await context(await databasePath(), async input => {
+      calls.push(input.value!)
+      if (input.value === 'slow') { slowStarted.resolve(); await release.promise; return late }
+      if (input.value === 'bad') { await slowStarted.promise; throw new Error('failed item') }
+      return input
+    })
+    const resource = await root.resources.stage({ name: 'late.txt', mediaType: 'text/plain', content: Buffer.from('late') }); late = resource.ref
+    const run = publish(root, iterationSource(['bad', 'slow', 'pending'], 2))
+    await root.scheduler.dispatchUntilIdle()
+    release.resolve(); await new Promise(resolve => setImmediate(resolve))
+    expect(root.scheduler.getRun(run.id)?.status).toBe('FAILED')
+    expect(calls.sort()).toEqual(['bad', 'slow'])
+    expect(iterationRows(root, run.id).map(item => item.status)).toEqual(['FAILED', 'CANCELLED', 'CANCELLED'])
+    expect(root.resources.listOwners(resource.id)).toEqual([])
+    expect(root.scheduler.listExecutions(run.id).find(execution => execution.instructionId === 'each')?.status).toBe('FAILED')
+  })
+
+  it('cancels a loop window and its pending inputs without accepting late results or notifying', async () => {
+    const started = deferred(), release = deferred(), calls: NumenValue[] = []
+    const path = await databasePath()
+    const root = await context(path, async input => { calls.push(input.value!); started.resolve(); await release.promise; return input })
+    const run = publish(root, iterationSource(['one', 'two', 'pending'], 2))
+    const task = root.scheduler.dispatchUntilIdle()
+    await started.promise
+    root.scheduler.cancelRun(run.id)
+    await task
+    release.resolve(); await new Promise(resolve => setImmediate(resolve))
+    expect(root.scheduler.getRun(run.id)?.status).toBe('CANCELLED')
+    expect(iterationRows(root, run.id).every(item => item.status === 'CANCELLED')).toBe(true)
+    expect(calls).not.toContain('notify')
+    const before = iterationRows(root, run.id)
+    await close(root)
+    const invoke = vi.fn(async () => null), restarted = await context(path, invoke)
+    await restarted.scheduler.dispatchUntilIdle()
+    expect(iterationRows(restarted, run.id)).toEqual(before)
+    expect(invoke).not.toHaveBeenCalled()
+  })
+
+  it('recovers completed body scopes awaiting their completion sentinel without repeating body work', async () => {
+    const path = await databasePath(), root = await context(path, undefined, true, 1)
+    const body: GraphSource = { type: 'graph', id: 'emptyBody', version: 1, nodes: [], edges: [], output: ref('loop.item') }
+    const run = publish(root, source([{ type: 'foreach', id: 'each', items: literal(['a', 'b', 'c']), concurrency: 2, body }, node('notify', { values: ref('steps.each') })],
+      [edge('graph', 'each'), edge('each', 'notify')], ref('steps.each')))
+    let window = false
+    for (let turn = 0; turn < 12; turn++) {
+      await expect(root.scheduler.dispatchUntilIdle(1)).rejects.toThrow('exceeded')
+      window = iterationRows(root, run.id).some(item => item.status === 'RUNNING' && item.body_status === 'COMPLETED')
+      if (window) break
+    }
+    expect(window).toBe(true)
+    const priorRoots = iterationRows(root, run.id).filter(item => item.root_execution_id).map(item => item.root_execution_id)
+    await close(root)
+    const calls: NumenValue[] = [], restarted = await context(path, async input => { calls.push(input.value!); return input })
+    await restarted.scheduler.dispatchUntilIdle()
+    expect(restarted.scheduler.getRun(run.id)?.status).toBe('COMPLETED')
+    expect(outputs(restarted, run.id).__complete).toEqual(['a', 'b', 'c'])
+    expect(calls).toEqual(['notify'])
+    for (const id of priorRoots) expect(iterationRows(restarted, run.id).map(item => item.root_execution_id)).toContain(id)
+    expect(new Set(iterationRows(restarted, run.id).map(item => item.root_execution_id)).size).toBe(3)
+  })
+
+  it('commits collected resource references to the loop execution once', async () => {
+    let output: NumenValue = null
+    const root = await context(await databasePath(), async input => input.value === 'notify' ? null : output)
+    const resource = await root.resources.stage({ name: 'collected.txt', mediaType: 'text/plain', content: Buffer.from('collected') }); output = resource.ref
+    const run = publish(root, iterationSource([1, 2]))
+    await root.scheduler.dispatchUntilIdle()
+    const each = root.scheduler.listExecutions(run.id).find(execution => execution.instructionId === 'each')!
+    expect(each.output).toEqual([resource.ref, resource.ref])
+    expect(root.resources.listOwners(resource.id).filter(owner => owner.type === 'execution' && owner.id === each.id)).toHaveLength(1)
+    expect(root.scheduler.getRun(run.id)?.status).toBe('COMPLETED')
+  })
+
+  it.each([true, false])('recovers an interrupted window without repeating completed items (retry safe %s)', async retrySafe => {
+    const path = await databasePath(), oldStarted = deferred(), oldRelease = deferred(), newStarted = deferred(), newRelease = deferred()
+    const firstCalls: NumenValue[] = [], secondCalls: NumenValue[] = []
+    const first = await context(path, async input => {
+      firstCalls.push(input.value!)
+      if (input.value === 'interrupted') { oldStarted.resolve(); await oldRelease.promise; return 'OLD' }
+      return input.value!
+    }, retrySafe)
+    const run = publish(first, iterationSource(['complete', 'interrupted', 'pending'], 1))
+    const firstTask = first.scheduler.dispatchUntilIdle()
+    let secondTask: Promise<number> | undefined
+    try {
+      await oldStarted.promise
+      const before = iterationRows(first, run.id)
+      expect(before.map(item => item.status)).toEqual(['COMPLETED', 'RUNNING', 'PENDING'])
+      const interrupted = first.scheduler.listExecutions(run.id).find(execution => execution.instructionId === 'capture' && execution.loopIndex === 1)!
+      const second = await context(path, async input => {
+        secondCalls.push(input.value!)
+        if (input.value === 'interrupted') { newStarted.resolve(); await newRelease.promise; return 'NEW' }
+        return input.value!
+      }, retrySafe)
+      secondTask = second.scheduler.dispatchUntilIdle()
+      if (retrySafe) await newStarted.promise
+      else await secondTask
+      oldRelease.resolve(); await firstTask
+      expect(firstCalls).toEqual(['complete', 'interrupted'])
+      expect(iterationRows(second, run.id).map(item => item.root_execution_id)).toEqual(before.map(item => item.root_execution_id))
+      expect(second.scheduler.listExecutions(run.id).find(execution => execution.id === interrupted.id)).toMatchObject(retrySafe
+        ? { status: 'RUNNING', generation: 2 }
+        : { status: 'BLOCKED', blockedReason: 'OUTCOME_UNKNOWN' })
+      expect(second.scheduler.getRun(run.id)?.status).toBe('RUNNING')
+      expect(second.scheduler.listAttempts(run.id).filter(attempt => attempt.executionId === interrupted.id).map(attempt => attempt.status))
+        .toEqual(retrySafe ? ['INTERRUPTED', 'RUNNING'] : ['OUTCOME_UNKNOWN'])
+      if (retrySafe) {
+        newRelease.resolve(); await secondTask
+        expect(secondCalls).toEqual(['interrupted', 'pending', 'notify'])
+        expect(outputs(second, run.id).__complete).toEqual(['complete', 'NEW', 'pending'])
+        expect(second.scheduler.getRun(run.id)?.status).toBe('COMPLETED')
+        expect(iterationRows(second, run.id).every(item => item.status === 'COMPLETED')).toBe(true)
+      } else {
+        expect(secondCalls).toEqual([])
+        expect(iterationRows(second, run.id).map(item => item.status)).toEqual(['COMPLETED', 'RUNNING', 'PENDING'])
+        second.scheduler.cancelRun(run.id)
+        await second.scheduler.dispatchUntilIdle()
+        expect(iterationRows(second, run.id).map(item => item.status)).toEqual(['COMPLETED', 'CANCELLED', 'CANCELLED'])
+        expect(second.scheduler.getRun(run.id)?.status).toBe('CANCELLED')
+      }
+    } finally { oldRelease.resolve(); newRelease.resolve(); await Promise.allSettled([firstTask, ...(secondTask ? [secondTask] : [])]) }
+  })
+
+  it('shares execution slots with outer graph work while bounding the active iteration window', async () => {
+    const release = deferred(), calls: NumenValue[] = []
+    let active = 0, peak = 0
+    const root = await context(await databasePath(), async input => {
+      calls.push(input.value!); active++; peak = Math.max(peak, active)
+      await release.promise
+      active--; return input.value!
+    }, true, 3)
+    const graph = iterationSource([0, 1, 2, 3], 2)
+    if (graph.flow.type !== 'graph') throw new Error('graph expected')
+    graph.flow.nodes.push(node('peer'))
+    graph.flow.edges.push(edge('graph', 'peer'))
+    const run = publish(root, graph), task = root.scheduler.dispatchUntilIdle()
+    try {
+      await vi.waitFor(() => expect(calls).toHaveLength(3))
+      expect(calls).toContain('peer')
+      expect(iterationRows(root, run.id).map(item => item.status)).toEqual(['RUNNING', 'RUNNING', 'PENDING', 'PENDING'])
+      release.resolve(); await task
+      expect(peak).toBe(3)
+      expect(root.scheduler.getRun(run.id)?.status).toBe('COMPLETED')
+      expect(outputs(root, run.id).__complete).toEqual([0, 1, 2, 3])
+    } finally { release.resolve(); await task }
+  })
+
+  it('accepts a configured window above the global execution limit', async () => {
+    const root = await context(await databasePath(), async input => input.value!)
+    const run = publish(root, iterationSource([null], 65))
+    await root.scheduler.dispatchUntilIdle()
+    expect(root.scheduler.getRun(run.id)?.status).toBe('COMPLETED')
+    expect(outputs(root, run.id).__complete).toEqual([null])
+  })
+
+  it('propagates an inner failure through both loops and cancels every sibling scope', async () => {
+    const siblingStarted = deferred(), release = deferred(), calls: Record<string, NumenValue>[] = []
+    const root = await context(await databasePath(), async input => {
+      if (input.kind === 'capture') return input.value!
+      calls.push(input)
+      if (input.outer === 'A' && input.value === 'bad') { await siblingStarted.promise; throw new Error('inner failure') }
+      if (input.outer === 'B') siblingStarted.resolve()
+      await release.promise
+      return 'late nested result'
+    })
+    const innerBody: GraphSource = { type: 'graph', id: 'innerBody', version: 1,
+      nodes: [node('work', { value: ref('loop.item'), outer: ref('steps.outerValue') })],
+      edges: [edge('innerBody', 'work', 'in', 'start')], output: ref('steps.work') }
+    const outerBody: GraphSource = { type: 'graph', id: 'outerBody', version: 1,
+      nodes: [node('outerValue', { value: ref('loop.item'), kind: literal('capture') }),
+        { type: 'foreach', id: 'inner', items: literal(['bad', 'slow', 'pending']), concurrency: 2, body: innerBody }],
+      edges: [edge('outerBody', 'outerValue', 'in', 'start'), edge('outerValue', 'inner')], output: ref('steps.inner') }
+    const run = publish(root, source([{ type: 'foreach', id: 'outer', items: literal(['A', 'B']), concurrency: 2, body: outerBody }, node('notify')],
+      [edge('graph', 'outer'), edge('outer', 'notify')], ref('steps.outer')))
+    try {
+      await root.scheduler.dispatchUntilIdle()
+      expect(root.scheduler.getRun(run.id)?.status).toBe('FAILED')
+      expect(iterationRows(root, run.id).filter(item => item.instruction_id === 'outer').map(item => item.status)).toEqual(['FAILED', 'CANCELLED'])
+      expect(iterationRows(root, run.id).every(item => ['FAILED', 'CANCELLED'].includes(item.status))).toBe(true)
+      expect(root.scheduler.listExecutions(run.id).every(execution => ['FAILED', 'CANCELLED', 'COMPLETED'].includes(execution.status))).toBe(true)
+      expect(calls.some(input => ['notify', 'pending'].includes(input.value as string))).toBe(false)
+    } finally { release.resolve(); await new Promise(resolve => setImmediate(resolve)) }
+    expect(root.scheduler.listExecutions(run.id).some(execution => execution.output === 'late nested result')).toBe(false)
+  })
 })

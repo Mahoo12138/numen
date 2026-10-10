@@ -7,6 +7,7 @@ import {
   type AutomationSnapshotFields,
   type DraftTestAutomationSnapshot,
   type AutomationSource,
+  type GraphSource,
   type NumenValue,
   type ControlResolver,
 } from '@numenjs/core'
@@ -244,6 +245,15 @@ function canonicalize(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalize).join(',')}]`
   const object = value as Record<string, unknown>
   return `{${Object.keys(object).sort().map(key => `${JSON.stringify(key)}:${canonicalize(object[key])}`).join(',')}}`
+}
+
+function canonicalGraph(graph: GraphSource): GraphSource {
+  const compareId = (a: { id: string }, b: { id: string }): number => a.id < b.id ? -1 : a.id > b.id ? 1 : 0
+  return {
+    ...graph,
+    nodes: graph.nodes.map(node => node.type === 'foreach' ? { ...node, body: canonicalGraph(node.body) } : node).sort(compareId),
+    edges: [...graph.edges].sort(compareId),
+  }
 }
 
 export class AutomationService extends Service {
@@ -517,10 +527,7 @@ export class AutomationService extends Service {
         // collections for the semantic fingerprint (v1 trees are unchanged).
         source: draft.source.flow.type === 'graph' ? {
           ...draft.source,
-          flow: { ...draft.source.flow,
-            nodes: [...draft.source.flow.nodes].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
-            edges: [...draft.source.flow.edges].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
-          },
+          flow: canonicalGraph(draft.source.flow),
         } : draft.source,
       })).digest('hex'),
     }

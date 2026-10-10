@@ -177,7 +177,7 @@ type GraphScopeInstruction = Extract<CoreInstruction, { op: 'graph_scope' }>
 type GraphEdgeValue = { state: 'pending' | 'skipped' } | { state: 'completed'; value: NumenValue }
 
 const structuredInstructionOps = new Set(['invoke', 'eval', 'branch', 'suspend', 'fork', 'iterate', 'scope_complete', 'join', 'complete', 'fail'])
-const graphInstructionOps = new Set(['graph_scope', 'graph_condition', 'graph_merge'])
+const graphInstructionOps = new Set(['graph_scope', 'graph_condition', 'graph_merge', 'graph_iterate'])
 
 function assertSupportedSnapshot(snapshot: AutomationExecutionSnapshot): void {
   if (!isSupportedAutomationVersion(snapshot.protocolVersion, snapshot.irVersion)
@@ -1131,6 +1131,46 @@ export class SchedulerService extends Service {
     return { run, revision, instruction }
   }
 
+  private appendGraphBindings(
+    scope: Execution,
+    graph: GraphScopeInstruction,
+    revision: AutomationExecutionSnapshot,
+    steps: Record<string, NumenValue>,
+    consumer?: string,
+    visited = new Set<string>(),
+  ): void {
+    if (visited.has(scope.id)) throw new Error('cyclic graph scope ancestry')
+    visited.add(scope.id)
+    const enclosing = scope.scopeExecutionId ? this.getExecutionRow(scope.scopeExecutionId) : undefined
+    if (enclosing && revision.compiledPlan.instructions[enclosing.instruction_id]?.op === 'graph_iterate') {
+      const outer = enclosing.scope_execution_id ? this.getExecutionRow(enclosing.scope_execution_id) : undefined
+      const outerGraph = outer ? revision.compiledPlan.instructions[outer.instruction_id] : undefined
+      if (!outer || outerGraph?.op !== 'graph_scope' || outer.run_id !== scope.runId) throw new Error('graph iteration enclosing scope missing')
+      // Only the hosting iteration's dependency ancestors are visible in its body, from this exact outer instance.
+      this.appendGraphBindings(mapExecution(outer), outerGraph, revision, steps, enclosing.instruction_id, visited)
+    }
+    const allowed = consumer === undefined ? undefined : new Set<string>()
+    if (allowed && consumer) {
+      const pending = [consumer]
+      for (let index = 0; index < pending.length; index++) {
+        for (const edge of graph.edges) {
+          if (edge.to.nodeId !== pending[index] || edge.from.nodeId === graph.id || allowed.has(edge.from.nodeId)) continue
+          allowed.add(edge.from.nodeId)
+          pending.push(edge.from.nodeId)
+        }
+      }
+    }
+    const rows = this.ctx.database.db.prepare(`
+      SELECT child.instruction_id, child.output_json FROM graph_members AS member
+      JOIN executions AS child ON child.id = member.execution_id
+      WHERE member.scope_execution_id = ? AND child.status = 'COMPLETED' AND child.output_json IS NOT NULL
+      ORDER BY child.created_at, child.id
+    `).all(scope.id) as Array<{ instruction_id: string; output_json: string }>
+    for (const row of rows) {
+      if (!row.instruction_id.startsWith('__') && (!allowed || allowed.has(row.instruction_id))) steps[row.instruction_id] = parseJson(row.output_json)
+    }
+  }
+
   private createBindings(run: Run, execution?: Execution): EvaluationBindings {
     const steps: Record<string, NumenValue> = Object.create(null)
     const revision = execution ? this.ctx.automations.getExecutionSnapshot(run.revisionId) : undefined
@@ -1139,31 +1179,18 @@ export class SchedulerService extends Service {
     const parentInstruction = parent ? revision?.compiledPlan.instructions[parent.instruction_id] : undefined
     const graph = ownInstruction?.op === 'graph_scope' ? ownInstruction
       : parentInstruction?.op === 'graph_scope' ? parentInstruction : undefined
-    const graphExecutionId = ownInstruction?.op === 'graph_scope' ? execution?.id : graph ? parent?.id : undefined
-    const allowed = graph && execution && ownInstruction?.op !== 'graph_scope' ? new Set<string>() : undefined
-    if (graph && execution && allowed) {
-      const visit = (nodeId: string) => {
-        for (const edge of graph.edges) {
-          if (edge.to.nodeId !== nodeId || edge.from.nodeId === graph.id || allowed.has(edge.from.nodeId)) continue
-          allowed.add(edge.from.nodeId)
-          visit(edge.from.nodeId)
-        }
-      }
-      visit(execution.instructionId)
+    if (graph && execution && revision) {
+      const scope = ownInstruction?.op === 'graph_scope' ? execution : mapExecution(parent!)
+      this.appendGraphBindings(scope, graph, revision, steps, ownInstruction?.op === 'graph_scope' ? undefined : execution.instructionId)
+    } else {
+      const rows = this.ctx.database.db.prepare(`
+        SELECT instruction_id, output_json FROM executions
+        WHERE run_id = ? AND status = 'COMPLETED' AND output_json IS NOT NULL
+        ORDER BY created_at, id
+      `).all(run.id) as Array<{ instruction_id: string; output_json: string }>
+      for (const row of rows) if (!row.instruction_id.startsWith('__')) steps[row.instruction_id] = parseJson(row.output_json)
     }
-    const rows = graphExecutionId ? this.ctx.database.db.prepare(`
-      SELECT child.instruction_id, child.output_json FROM graph_members AS member
-      JOIN executions AS child ON child.id = member.execution_id
-      WHERE member.scope_execution_id = ? AND child.status = 'COMPLETED' AND child.output_json IS NOT NULL
-      ORDER BY child.created_at, child.id
-    `).all(graphExecutionId) as Array<{ instruction_id: string; output_json: string }> : this.ctx.database.db.prepare(`
-      SELECT instruction_id, output_json FROM executions
-      WHERE run_id = ? AND status = 'COMPLETED' AND output_json IS NOT NULL
-      ORDER BY created_at, id
-    `).all(run.id) as Array<{ instruction_id: string; output_json: string }>
-    for (const row of rows) {
-      if (!row.instruction_id.startsWith('__') && (!allowed || allowed.has(row.instruction_id))) steps[row.instruction_id] = parseJson(row.output_json)
-    }
+
     if (execution && !graph) {
       const ancestors = this.ctx.database.db.prepare(`
         WITH RECURSIVE ancestors(id, parent_execution_id, instruction_id, output_json, status, depth) AS (
@@ -1242,6 +1269,7 @@ export class SchedulerService extends Service {
           this.forkAll(execution, instruction)
           break
         case 'iterate':
+        case 'graph_iterate':
           this.beginIterate(execution, instruction, bindings)
           break
         case 'scope_complete':
@@ -1402,7 +1430,7 @@ export class SchedulerService extends Service {
   }
 
   /** Called under an immediate transaction before claiming or accepting an invocation. */
-  private executionAcceptsWork(execution: Execution, status: 'RUNNABLE' | 'RUNNING'): boolean {
+  private executionAcceptsWork(execution: Execution, status: 'RUNNABLE' | 'RUNNING' | 'WAITING'): boolean {
     const row = this.ctx.database.db.prepare(`
       WITH RECURSIVE scopes(id, scope_execution_id, status, run_id) AS (
         SELECT parent.id, parent.scope_execution_id, parent.status, parent.run_id
@@ -1836,7 +1864,7 @@ export class SchedulerService extends Service {
       const fork = mapExecution(row)
       const { revision, instruction } = this.getRevisionForExecution(fork)
       this.ctx.database.transaction(() => {
-        if (instruction.op === 'iterate') {
+        if (instruction.op === 'iterate' || instruction.op === 'graph_iterate') {
           this.reconcileIterate(fork, instruction, now)
           return
         }
@@ -1873,9 +1901,10 @@ export class SchedulerService extends Service {
     if (members.size !== instruction.members.length || members.has(instruction.id)) throw new Error('invalid graph members')
     for (const member of members) {
       const node = revision.compiledPlan.instructions[member]
-      if (!node || !['invoke', 'graph_condition', 'graph_merge'].includes(node.op)) throw new Error('invalid graph member instruction')
+      if (!node || !['invoke', 'graph_condition', 'graph_merge', 'graph_iterate'].includes(node.op)) throw new Error('invalid graph member instruction')
       if (node.op === 'invoke' && node.next !== undefined) throw new Error('graph member cannot have a sequential successor')
       if (node.op === 'graph_merge' && (new Set(node.inputs).size !== node.inputs.length || !node.inputs.length)) throw new Error('invalid graph merge inputs')
+      if (node.op === 'graph_iterate') this.validateGraphIteration(node, revision)
     }
     const edgeIds = new Set<string>()
     const destinations = new Set<string>()
@@ -2110,15 +2139,24 @@ export class SchedulerService extends Service {
     })
   }
 
+  private validateGraphIteration(instruction: Extract<CoreInstruction, { op: 'graph_iterate' }>, revision: AutomationExecutionSnapshot): void {
+    const body = revision.compiledPlan.instructions[instruction.body]
+    if (!Number.isSafeInteger(instruction.concurrency) || instruction.concurrency < 1) throw new Error('invalid graph iteration concurrency')
+    if (body?.op !== 'graph_scope' || body.output === undefined
+      || !body.next || revision.compiledPlan.instructions[body.next]?.op !== 'scope_complete') throw new Error('graph iteration requires an explicit body output and scope completion')
+  }
+
   private beginIterate(
     execution: Execution,
-    instruction: Extract<CoreInstruction, { op: 'iterate' }>,
+    instruction: Extract<CoreInstruction, { op: 'iterate' | 'graph_iterate' }>,
     bindings: EvaluationBindings,
   ): void {
+    if (instruction.op === 'graph_iterate') this.validateGraphIteration(instruction, this.getRevisionForExecution(execution).revision)
     const items = evaluateExpression(instruction.items, bindings)
     if (!Array.isArray(items)) throw new Error('ForEach items must evaluate to an array')
     const now = new Date().toISOString()
     this.ctx.database.transaction(() => {
+      if (instruction.op === 'graph_iterate' && !this.executionAcceptsWork(execution, 'RUNNABLE')) return
       const result = this.ctx.database.db.prepare(`
         UPDATE executions
         SET status = 'WAITING', blocked_reason = 'ITERATIONS', resolved_input_json = ?, updated_at = ?
@@ -2142,11 +2180,12 @@ export class SchedulerService extends Service {
 
   private reconcileIterate(
     iterate: Execution,
-    instruction: Extract<CoreInstruction, { op: 'iterate' }>,
+    instruction: Extract<CoreInstruction, { op: 'iterate' | 'graph_iterate' }>,
     now: string,
   ): void {
     const current = this.getExecutionRow(iterate.id)
     if (!current || current.status !== 'WAITING' || current.blocked_reason !== 'ITERATIONS') return
+    if (instruction.op === 'graph_iterate' && !this.executionAcceptsWork(iterate, 'WAITING')) return
     const { running } = this.ctx.database.db.prepare(`
       SELECT COUNT(*) AS running FROM execution_iterations
       WHERE iterate_execution_id = ? AND status = 'RUNNING'
@@ -2193,17 +2232,19 @@ export class SchedulerService extends Service {
       FROM execution_iterations WHERE iterate_execution_id = ?
     `).get(iterate.id) as { pending: number | null; running: number | null; total: number }
     if ((counts.pending ?? 0) || (counts.running ?? 0)) return
-    const output = { count: counts.total }
+    const output: NumenValue = instruction.op === 'graph_iterate' ? this.collectGraphIterationResults(iterate, instruction, counts.total) : { count: counts.total }
     const completed = this.ctx.database.db.prepare(`
       UPDATE executions
       SET status = 'COMPLETED', blocked_reason = NULL, output_json = ?, updated_at = ?
       WHERE id = ? AND status = 'WAITING' AND blocked_reason = 'ITERATIONS'
     `).run(JSON.stringify(output), now, iterate.id)
     if (!completed.changes) return
+    if (instruction.op === 'graph_iterate') this.commitOutputResources(iterate, output)
     this.appendEvent(iterate.runId, 'ExecutionIterationCompleted', {
       executionId: iterate.id,
       itemCount: counts.total,
     }, now)
+    if (instruction.op === 'graph_iterate') return
     this.createExecution(
       iterate.runId,
       instruction.join,
@@ -2213,6 +2254,19 @@ export class SchedulerService extends Service {
       iterate.loopItem,
       iterate.loopIndex,
     )
+  }
+
+  private collectGraphIterationResults(iterate: Execution, instruction: Extract<CoreInstruction, { op: 'graph_iterate' }>, total: number): NumenValue[] {
+    const rows = this.ctx.database.db.prepare(`
+      SELECT iteration.item_index, iteration.status, root.instruction_id, root.scope_execution_id, root.scope_branch,
+        root.status AS root_status, root.output_json
+      FROM execution_iterations AS iteration LEFT JOIN executions AS root ON root.id = iteration.root_execution_id
+      WHERE iteration.iterate_execution_id = ? ORDER BY iteration.item_index
+    `).all(iterate.id) as Array<{ item_index: number; status: string; instruction_id: string | null; scope_execution_id: string | null; scope_branch: number | null; root_status: string | null; output_json: string | null }>
+    if (rows.length !== total || rows.some((row, index) => row.item_index !== index || row.status !== 'COMPLETED'
+      || row.instruction_id !== instruction.body || row.scope_execution_id !== iterate.id || row.scope_branch !== index
+      || row.root_status !== 'COMPLETED' || row.output_json === null)) throw new Error('graph iteration results are incomplete or belong to another scope')
+    return rows.map(row => parseJson<NumenValue>(row.output_json!))
   }
 
   private completeScope(execution: Execution): void {
@@ -2240,7 +2294,7 @@ export class SchedulerService extends Service {
         else this.reconcileRaceFork(execution.scopeExecutionId!, execution, now)
         return
       }
-      if (instruction.op === 'iterate') {
+      if (instruction.op === 'iterate' || instruction.op === 'graph_iterate') {
         if (execution.scopeBranch === undefined) return
         const updated = this.ctx.database.db.prepare(`
           UPDATE execution_iterations
@@ -2334,7 +2388,7 @@ export class SchedulerService extends Service {
     if (!forkRow) return true
     const fork = mapExecution(forkRow)
     const { instruction } = this.getRevisionForExecution(fork)
-    if (instruction.op === 'iterate') {
+    if (instruction.op === 'iterate' || instruction.op === 'graph_iterate') {
       if (execution.scopeBranch === undefined) return true
       this.ctx.database.db.prepare(`
         UPDATE execution_iterations

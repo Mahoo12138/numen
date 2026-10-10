@@ -1,4 +1,4 @@
-import { CapabilityRegistry, type AutomationSource, type GraphSource } from '@numenjs/core'
+import { CapabilityRegistry, type AutomationSource, type CapabilitySource, type GraphForEachSource, type GraphSource } from '@numenjs/core'
 import { DatabaseService } from '@numenjs/database'
 import { Context } from 'cordis'
 import { mkdtemp, rm } from 'node:fs/promises'
@@ -22,6 +22,32 @@ const source = (): AutomationSource => ({ triggers: [], flow: {
     { id: 'b-join', from: { nodeId: 'b', port: 'out' }, to: { nodeId: 'join', port: 'second' } },
   ], output: { type: 'ref', path: 'steps.join' },
 } })
+
+function nestedSource(): AutomationSource {
+  const leaf = source().flow as GraphSource
+  leaf.id = 'leaf'
+  for (const edge of leaf.edges) if (edge.from.nodeId === 'graph') edge.from.nodeId = 'leaf'
+  ;(leaf.nodes[0] as CapabilitySource).input.value = { type: 'ref', path: 'loop.item' }
+  ;(leaf.nodes[1] as CapabilitySource).input.value = { type: 'ref', path: 'steps.seed' }
+  const inner: GraphForEachSource = { type: 'foreach', id: 'inner', items: { type: 'ref', path: 'loop.item' }, body: leaf }
+  const body: GraphSource = { type: 'graph', id: 'body', version: 1, nodes: [inner],
+    edges: [{ id: 'body-start', from: { nodeId: 'body', port: 'start' }, to: { nodeId: 'inner', port: 'in' } }],
+    output: { type: 'ref', path: 'steps.inner' } }
+  const each: GraphForEachSource = { type: 'foreach', id: 'each', items: { type: 'literal', value: [['A', 'B'], ['C']] }, body }
+  return { triggers: [], flow: { type: 'graph', id: 'graph', version: 1, nodes: [
+    { type: 'capability', id: 'seed', capability: { id: 'test:value', version: 1 }, input: { value: { type: 'literal', value: 'seed' } } }, each,
+  ], edges: [
+    { id: 'start-seed', from: { nodeId: 'graph', port: 'start' }, to: { nodeId: 'seed', port: 'in' } },
+    { id: 'seed-each', from: { nodeId: 'seed', port: 'out' }, to: { nodeId: 'each', port: 'in' } },
+  ], output: { type: 'ref', path: 'steps.each' } } }
+}
+
+function nestedScopes(candidate: AutomationSource) {
+  const graph = candidate.flow as GraphSource
+  const each = graph.nodes.find(node => node.id === 'each') as GraphForEachSource
+  const inner = each.body.nodes[0] as GraphForEachSource
+  return { graph, each, inner, leaf: inner.body }
+}
 
 async function context(path: string) {
   const ctx = new Context()
@@ -100,5 +126,54 @@ describe('graph snapshot persistence and version compatibility', () => {
         expect(() => root.automations.getExecutionSnapshotContentForInspection(revision.id, automation.id)).toThrow('snapshot content protocol is unavailable')
       }
     } finally { await root.fiber.dispose() }
+  })
+
+  it('normalizes nested Graph member order while retaining iteration and expression semantics in the hash', async () => {
+    const root = await context(':memory:')
+    try {
+      const { automation, draft } = root.automations.create({ name: 'Nested graph hash', source: nestedSource() })
+      const first = root.automations.publishDraft(automation.id, draft.version)
+      const reordered = nestedSource()
+      const { graph, each, leaf } = nestedScopes(reordered)
+      for (const scope of [graph, each.body, leaf]) { scope.nodes.reverse(); scope.edges.reverse() }
+      let version = root.automations.saveDraft({ automationId: automation.id, expectedVersion: draft.version, source: reordered }).version
+      const second = root.automations.publishDraft(automation.id, version)
+      expect(second.contentHash).toBe(first.contentHash)
+      expect(second.source).toEqual(reordered)
+      expect(second.compiledPlan).toEqual(first.compiledPlan)
+      const mutations: Array<(candidate: ReturnType<typeof nestedScopes>) => void> = [
+        ({ each }) => { each.items = { type: 'literal', value: [['C'], ['A', 'B']] } },
+        ({ inner }) => { inner.concurrency = 2 },
+        ({ leaf }) => { leaf.output = { type: 'literal', value: null } },
+        ({ leaf }) => { (leaf.nodes[0] as CapabilitySource).input.value = { type: 'template', parts: ['changed:', { ref: 'loop.item' }] } },
+        ({ leaf }) => { leaf.edges[1]!.from = { nodeId: 'a', port: 'out' } },
+      ]
+      for (const mutate of mutations) {
+        const changed = nestedSource()
+        mutate(nestedScopes(changed))
+        version = root.automations.saveDraft({ automationId: automation.id, expectedVersion: version, source: changed }).version
+        expect(root.automations.publishDraft(automation.id, version).contentHash).not.toBe(first.contentHash)
+      }
+      expect(root.automations.getRevision(first.id)).toEqual(first)
+    } finally { await root.fiber.dispose() }
+  })
+
+  it('round-trips nested body scopes and collection outputs through immutable snapshots and restart', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'numen-nested-graph-snapshot-'))
+    let root = await context(join(directory, 'db.sqlite'))
+    try {
+      const candidate = nestedSource()
+      const { automation, draft } = root.automations.create({ name: 'Nested graph persistence', source: candidate })
+      const revision = root.automations.publishDraft(automation.id, draft.version)
+      const snapshot = root.automations.createDraftTestSnapshot(root.automations.prepareDraftTestSnapshot(automation.id, draft.version))
+      expect(revision.compiledPlan.instructions.inner).toMatchObject({ op: 'graph_iterate', body: 'leaf', items: { type: 'ref', path: 'loop.item' } })
+      expect(revision.compiledPlan.instructions.leaf).toMatchObject({ next: '__inner.iteration.complete' })
+      await root.fiber.dispose()
+      root = await context(join(directory, 'db.sqlite'))
+      for (const expected of [revision, snapshot]) {
+        expect(root.automations.getExecutionSnapshot(expected.id)).toEqual(expected)
+        expect(root.automations.getExecutionSnapshotContentForInspection(expected.id, automation.id)?.source).toEqual(candidate)
+      }
+    } finally { await root.fiber.dispose(); await rm(directory, { recursive: true, force: true }) }
   })
 })

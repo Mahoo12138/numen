@@ -18,6 +18,29 @@ const reservedNames = new Set(['__proto__', 'prototype', 'constructor'])
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value)
 const compareId = (left: { id: string }, right: { id: string }): number => left.id < right.id ? -1 : left.id > right.id ? 1 : 0
 
+interface GraphEnvironment {
+  inLoop: boolean
+  /** Outer outputs proven available before the hosting ForEach can start. */
+  outerOutputs: ReadonlySet<string>
+  declarations: ReadonlySet<string>
+}
+
+function graphDeclarations(graph: GraphSource): Set<string> {
+  const result = new Set<string>()
+  const pending = [graph]
+  while (pending.length) {
+    const scope = pending.pop()!
+    if (typeof scope.id === 'string') result.add(scope.id)
+    if (!Array.isArray(scope.nodes)) continue
+    for (const node of scope.nodes) {
+      if (!record(node)) continue
+      if (typeof node.id === 'string') result.add(node.id)
+      if (node.type === 'foreach' && record(node.body) && node.body.type === 'graph') pending.push(node.body as unknown as GraphSource)
+    }
+  }
+  return result
+}
+
 /** Guard recursive expression validation and graph analysis before touching untrusted draft contents. */
 function boundedSource(value: unknown): boolean {
   const pending: Array<{ value: unknown; depth: number; exit?: boolean }> = [{ value, depth: 0 }]
@@ -38,12 +61,13 @@ function boundedSource(value: unknown): boolean {
   return true
 }
 
-/** Compiles a root graph to a durable graph scope and independent member instructions. */
+/** Compiles graph scopes and explicit iteration bodies without lowering them to trees. */
 export function compileGraph(
   graph: GraphSource,
   source: AutomationSource,
   next: string,
   context: GraphCompilerContext,
+  environment?: GraphEnvironment,
 ): Record<string, CoreInstruction> {
   const instructions: Record<string, CoreInstruction> = {}
   const report = (code: string, message: string, nodeId = graph.id, fieldPath?: string): void => context.report({
@@ -53,6 +77,7 @@ export function compileGraph(
     report('GRAPH_SOURCE_LIMIT_EXCEEDED', 'Graph source exceeds the depth or value limit, or contains cyclic data.')
     return instructions
   }
+  const scope = environment ?? { inLoop: false, outerOutputs: new Set<string>(), declarations: graphDeclarations(graph) }
   if (graph.version !== 1) report('GRAPH_VERSION_UNSUPPORTED', 'Graph version must be 1.', graph.id, 'version')
   if (!memberIdPattern.test(graph.id) || reservedNames.has(graph.id)) {
     report('GRAPH_NODE_ID_INVALID', 'Graph scope id must be addressable as a single steps reference segment.')
@@ -75,8 +100,8 @@ export function compileGraph(
       report('GRAPH_NODE_ID_INVALID', 'Graph node ids must be addressable as a single steps reference segment.', node.id)
     }
     if (!context.registerNode(node.id)) continue
-    if (node.type !== 'capability' && node.type !== 'condition' && node.type !== 'merge') {
-      report('GRAPH_NODE_UNSUPPORTED', 'Graph supports Capability, Condition, and Merge members.', node.id)
+    if (node.type !== 'capability' && node.type !== 'condition' && node.type !== 'merge' && node.type !== 'foreach') {
+      report('GRAPH_NODE_UNSUPPORTED', 'Graph supports Capability, Condition, Merge, and ForEach members.', node.id)
       continue
     }
     nodes.set(node.id, node)
@@ -89,6 +114,20 @@ export function compileGraph(
         report('GRAPH_CONDITION_INVALID', 'Condition literal must be boolean.', node.id, 'condition')
       }
       instructions[node.id] = { op: 'graph_condition', id: node.id, condition: node.condition }
+    } else if (node.type === 'foreach') {
+      context.validateExpression(node.items, node.id, 'items')
+      const concurrency = node.concurrency ?? 1
+      if (!Number.isSafeInteger(concurrency) || concurrency < 1) {
+        report('FOREACH_CONCURRENCY_INVALID', 'ForEach concurrency must be a positive safe integer.', node.id, 'concurrency')
+      }
+      if (node.items?.type === 'literal' && !Array.isArray(node.items.value)) {
+        report('FOREACH_ITEMS_INVALID', 'ForEach items must evaluate to an array.', node.id, 'items')
+      }
+      if (!record(node.body) || node.body.type !== 'graph' || typeof node.body.id !== 'string') {
+        report('GRAPH_FOREACH_BODY_INVALID', 'Graph ForEach requires a Graph body with a stable id.', node.id, 'body')
+      } else if (node.body.output === undefined) {
+        report('GRAPH_FOREACH_OUTPUT_REQUIRED', 'Graph ForEach body requires an explicit output expression.', node.id, 'body.output')
+      }
     } else {
       if (node.mode !== 'all' && node.mode !== 'selected') report('GRAPH_MERGE_MODE_INVALID', 'Merge mode must be all or selected.', node.id, 'mode')
       if (!Array.isArray(node.inputs) || !node.inputs.length || node.inputs.some(name => (
@@ -212,10 +251,12 @@ export function compileGraph(
       if (root === 'input' && source.inputs !== undefined && !Object.hasOwn(source.inputs, id!)) {
         problem('INPUT_REFERENCE_MISSING', `Input ${id} is not declared.`)
       } else if (root === 'loop') {
-        problem('LOOP_REFERENCE_OUT_OF_SCOPE', 'Loop references are unavailable in a root graph.')
+        if (!scope.inLoop || admission) problem('LOOP_REFERENCE_OUT_OF_SCOPE', 'Loop references are available only inside a ForEach body.')
       } else if (root === 'steps') {
-        if (!nodes.has(id!)) problem('STEP_REFERENCE_MISSING', `Referenced graph member ${id} does not exist in this scope.`)
-        else if (admission) problem('STEP_REFERENCE_NOT_READY', 'Step references are unavailable before the graph starts.')
+        if (admission) problem('STEP_REFERENCE_NOT_READY', 'Step references are unavailable before the graph starts.')
+        else if (scope.outerOutputs.has(id!)) return
+        else if (!nodes.has(id!)) problem(scope.declarations.has(id!) ? 'STEP_REFERENCE_OUT_OF_SCOPE' : 'STEP_REFERENCE_MISSING',
+          `Referenced member ${id} is not an available output in this graph scope.`)
         else if (consumer && !ancestors.get(consumer)!.has(id!)) {
           problem('GRAPH_REFERENCE_DEPENDENCY_MISSING', `Reference ${path} requires an explicit dependency path to its consumer.`)
         } else if (!proof.implies(consumer ? active.get(consumer)! : proof.true, active.get(id!)!)) {
@@ -238,9 +279,23 @@ export function compileGraph(
     for (const node of nodes.values()) {
       if (node.type === 'capability') Object.entries(node.input).forEach(([key, value]) => expression(value, node.id, `input.${key}`, node.id))
       else if (node.type === 'condition') expression(node.condition, node.id, 'condition', node.id)
+      else if (node.type === 'foreach') expression(node.items, node.id, 'items', node.id)
     }
     if (graph.output !== undefined) expression(graph.output, graph.id, 'output')
-    if (source.policy?.groupBy) expression(source.policy.groupBy, '__policy', 'policy.groupBy', undefined, true)
+    if (!environment && source.policy?.groupBy) expression(source.policy.groupBy, '__policy', 'policy.groupBy', undefined, true)
+    if (!context.hasErrors()) for (const node of nodes.values()) if (node.type === 'foreach') {
+      if (!context.registerNode(node.body.id)) continue
+      const outerOutputs = new Set(scope.outerOutputs)
+      for (const ancestor of ancestors.get(node.id)!) {
+        if (nodes.has(ancestor) && proof.implies(active.get(node.id)!, active.get(ancestor)!)) outerOutputs.add(ancestor)
+      }
+      const complete = `__${node.id}.iteration.complete`
+      instructions[node.id] = { op: 'graph_iterate', id: node.id, items: node.items, body: node.body.id, concurrency: node.concurrency ?? 1 }
+      instructions[complete] = { op: 'scope_complete', id: complete }
+      Object.assign(instructions, compileGraph(node.body, source, complete, context, {
+        inLoop: true, outerOutputs, declarations: scope.declarations,
+      }))
+    }
   } catch (error) {
     if (!(error instanceof GraphActivationComplexityError)) throw error
     report('GRAPH_ACTIVATION_COMPLEXITY_EXCEEDED', error.message)
