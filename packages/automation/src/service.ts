@@ -1,4 +1,5 @@
 import {
+  isSupportedAutomationVersion,
   type Automation,
   type AutomationDraft,
   type AutomationRevision,
@@ -498,7 +499,7 @@ export class AutomationService extends Service {
       this.ctx.get('controls') as ControlResolver | undefined,
     )
     const semanticSnapshot = {
-      protocolVersion: 1,
+      protocolVersion: compiled.plan.irVersion,
       source: draft.source,
       irVersion: compiled.plan.irVersion,
       compiledPlan: compiled.plan,
@@ -509,7 +510,19 @@ export class AutomationService extends Service {
       automationId: draft.automationId,
       ...semanticSnapshot,
       presentation: draft.presentation,
-      contentHash: createHash('sha256').update(canonicalize(semanticSnapshot)).digest('hex'),
+      contentHash: createHash('sha256').update(canonicalize({
+        ...semanticSnapshot,
+        // A graph's authored array order is not an execution dependency. Keep
+        // the original Source in the snapshot, but normalize graph identity
+        // collections for the semantic fingerprint (v1 trees are unchanged).
+        source: draft.source.flow.type === 'graph' ? {
+          ...draft.source,
+          flow: { ...draft.source.flow,
+            nodes: [...draft.source.flow.nodes].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+            edges: [...draft.source.flow.edges].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+          },
+        } : draft.source,
+      })).digest('hex'),
     }
   }
 
@@ -586,14 +599,14 @@ export class AutomationService extends Service {
     const row = this.ctx.database.db.prepare(`
       SELECT id, automation_id, number, purpose, source_draft_version, protocol_version, ir_version, content_hash, created_at,
         length(CAST(source_json AS BLOB)) + length(CAST(presentation_json AS BLOB)) AS json_bytes,
-        CASE WHEN protocol_version = 1 AND length(CAST(source_json AS BLOB)) + length(CAST(presentation_json AS BLOB)) <= ?
+        CASE WHEN ((protocol_version = 1 AND ir_version = 1) OR (protocol_version = 2 AND ir_version = 2)) AND length(CAST(source_json AS BLOB)) + length(CAST(presentation_json AS BLOB)) <= ?
           THEN source_json END AS source_json,
-        CASE WHEN protocol_version = 1 AND length(CAST(source_json AS BLOB)) + length(CAST(presentation_json AS BLOB)) <= ?
+        CASE WHEN ((protocol_version = 1 AND ir_version = 1) OR (protocol_version = 2 AND ir_version = 2)) AND length(CAST(source_json AS BLOB)) + length(CAST(presentation_json AS BLOB)) <= ?
           THEN presentation_json END AS presentation_json
       FROM automation_revisions WHERE id = ? AND automation_id = ?
     `).get(maximumBytes, maximumBytes, snapshotId, automationId) as (Pick<RevisionRow, 'id' | 'automation_id' | 'number' | 'purpose' | 'source_draft_version' | 'protocol_version' | 'ir_version' | 'content_hash' | 'created_at'> & { source_json: string | null; presentation_json: string | null; json_bytes: number }) | undefined
     if (!row) return
-    if (row.protocol_version !== 1) throw new Error('snapshot content protocol is unavailable')
+    if (!isSupportedAutomationVersion(row.protocol_version, row.ir_version)) throw new Error('snapshot content protocol is unavailable')
     if (row.json_bytes > maximumBytes) throw new AutomationSnapshotInspectionLimitError('snapshot content exceeds its stored data limit')
     if (row.source_json === null || row.presentation_json === null) throw new Error('snapshot content is unavailable')
     const fields = {

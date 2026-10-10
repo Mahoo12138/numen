@@ -114,13 +114,26 @@ Fail
 
 ## 5. Structured Source vs Graph
 
-默认 Source 是结构化程序，不是任意 DAG。
+既有 Structured Source 保持原语义。根流程也可以显式选择 `GraphSource`：
 
-Raw Graph 作为显式高级 Control：
+```ts
+interface GraphSource {
+  type: 'graph'
+  id: string
+  version: 1
+  nodes: (CapabilitySource | GraphConditionSource | GraphMergeSource)[]
+  edges: { id: string; from: { nodeId: string; port: string }; to: { nodeId: string; port: string } }[]
+  output?: ValueExpr
+}
+```
 
-- 默认 DAG
-- cycle 只允许通过明确 Loop/Graph 规则
-- 不让整个系统退化成不可解释 edge graph
+图的 `id/start` 是显式激活入口，只能连普通节点的 `in`。Capability 使用 `in/out`，Condition 使用 `in/true/false`，Merge 使用具名输入与 `out`。Condition 的表达式必须产生布尔值。Graph 与成员 ID 必须是单个引用路径段，不含点；连接 ID 在图内唯一。
+
+边声明依赖，表达式引用不自动补边。普通节点等待全部输入成功；任一必需输入 skip 则跳过该节点。`all` Merge 的每个具名输入恰有一条入边，全部成功后输出名称到值的对象。`selected` Merge 等待所有候选成功或 skip，恰一个成功时透传其值，全 skip 则继续传播 skip。编译器证明候选路径互斥，并拒绝可能读取 skipped 结果的引用；失败不作为 skip。`null` 与 `[]` 都是正常输出。
+
+编译器校验 DAG、起点可达性、端口、引用祖先关系及条件可用性。断线的节点仍可保存为 Draft，但不可测试/发布。当前 G1 仅支持根图及上述三种成员，嵌套图或其他成员会明确诊断。普通数组不会隐式重复调用节点。Graph 输出缺省为 `null`，显式输出只能引用保证可用的成员。
+
+图编译为 `graph_scope`、`graph_condition`、`graph_merge` 和独立 `invoke`，不会转成顺序树或复制共享节点。Graph 固定快照使用 protocol 2 / IR 2；Structured 仍使用 1 / 1，交叉或未知版本组合拒绝执行。节点/边数组排列和 Presentation 不影响语义哈希。当前上限为 1024 个成员、8192 条边；互斥证明有 16384 决策节点和 200000 次运算的预算，超限产生明确诊断，不采用不可靠的回退判断。
 
 ## 6. ValueExpr
 

@@ -10,6 +10,7 @@ import {
   type CapabilityDependency,
   type CapabilityRef,
   type CapabilityStatus,
+  type CapabilitySource,
   type CompileDiagnostic,
   type ContractSnapshotCapability,
   type ControlSource,
@@ -25,6 +26,7 @@ import {
   type ValueExpr,
 } from '@numenjs/core'
 import { validateSourceReferences } from './reference-validation.js'
+import { compileGraph } from './graph-compiler.js'
 
 export interface CapabilityResolver {
   get(ref: CapabilityRef): CapabilityStatus | undefined
@@ -225,7 +227,7 @@ export function compileAutomation(
         }
         break
       case 'ref':
-        if (!refPattern.test(expression.path)) {
+        if (typeof expression.path !== 'string' || !refPattern.test(expression.path)) {
           report({ severity: 'error', code: 'INVALID_REFERENCE', message: `Invalid reference: ${expression.path}`, source: { nodeId, fieldPath } })
         }
         break
@@ -249,8 +251,8 @@ export function compileAutomation(
           break
         }
         expression.parts.forEach((part, index) => {
-          if (typeof part !== 'string' && !refPattern.test(part.ref)) {
-            report({ severity: 'error', code: 'INVALID_REFERENCE', message: `Invalid template reference: ${part.ref}`, source: { nodeId, fieldPath: `${fieldPath}.parts.${index}` } })
+          if (typeof part !== 'string' && (!part || typeof part !== 'object' || typeof part.ref !== 'string' || !refPattern.test(part.ref))) {
+            report({ severity: 'error', code: 'INVALID_REFERENCE', message: 'Invalid template reference.', source: { nodeId, fieldPath: `${fieldPath}.parts.${index}` } })
           }
         })
         break
@@ -420,6 +422,44 @@ export function compileAutomation(
     }
   }
 
+  const compileCapability = (control: CapabilitySource, next?: string): Extract<CoreInstruction, { op: 'invoke' }> | undefined => {
+    const connectionIds = normalizeConnectionIds(control.id, control.connection, control.connections)
+    const input = control.input && typeof control.input === 'object' && !Array.isArray(control.input) ? control.input : {}
+    if (input !== control.input) {
+      report({ severity: 'error', code: 'CAPABILITY_INPUT_INVALID', message: 'Capability input must be an object.', source: { nodeId: control.id, fieldPath: 'input' } })
+    }
+    const validRef = control.capability && typeof control.capability.id === 'string' && Number.isSafeInteger(control.capability.version)
+    if (!validRef) {
+      report({ severity: 'error', code: 'CAPABILITY_REF_INVALID', message: 'Capability reference requires id and integer version.', source: { nodeId: control.id, fieldPath: 'capability' } })
+      return
+    }
+    const definition = resolveCapability(control.capability, control.id, 'step', connectionIds)
+    if (definition) validateCapabilityInput(definition, input, control.id)
+    const policy = control.policy
+    if (policy !== undefined && (!policy || typeof policy !== 'object' || Array.isArray(policy))) {
+      report({ severity: 'error', code: 'INVOCATION_POLICY_INVALID', message: 'Invocation policy must be an object.', source: { nodeId: control.id, fieldPath: 'policy' } })
+    }
+    if (policy?.timeoutMs !== undefined && (!Number.isSafeInteger(policy.timeoutMs) || policy.timeoutMs < 1)) {
+      report({ severity: 'error', code: 'TIMEOUT_INVALID', message: 'policy.timeoutMs must be a positive integer.', source: { nodeId: control.id, fieldPath: 'policy.timeoutMs' } })
+    }
+    if (policy?.retry) {
+      if (!Number.isSafeInteger(policy.retry.maxAttempts) || policy.retry.maxAttempts < 1) {
+        report({ severity: 'error', code: 'RETRY_ATTEMPTS_INVALID', message: 'retry.maxAttempts must be a positive integer.', source: { nodeId: control.id, fieldPath: 'policy.retry.maxAttempts' } })
+      }
+      if (policy.retry.backoffMs !== undefined && (!Number.isSafeInteger(policy.retry.backoffMs) || policy.retry.backoffMs < 0)) {
+        report({ severity: 'error', code: 'RETRY_BACKOFF_INVALID', message: 'retry.backoffMs must be a non-negative integer.', source: { nodeId: control.id, fieldPath: 'policy.retry.backoffMs' } })
+      }
+      if (policy.retry.maxAttempts > 1 && definition && !definition.semantics.retrySafe) {
+        report({ severity: 'error', code: 'RETRY_UNSAFE', message: `${capabilityKey(control.capability)} is not safe to retry.`, source: { nodeId: control.id, fieldPath: 'policy.retry' } })
+      }
+    }
+    return {
+      op: 'invoke', id: control.id, capability: control.capability,
+      ...(Object.keys(connectionIds).length ? { connections: connectionIds } : {}),
+      input: { type: 'object', entries: input }, ...(policy ? { policy } : {}), ...(next ? { next } : {}),
+    }
+  }
+
   const compileControl = (control: ControlSource, next: string, registered = false): string => {
     if (!control || typeof control !== 'object' || typeof control.id !== 'string') {
       report({ severity: 'error', code: 'INVALID_CONTROL', message: 'Control must have a stable id.' })
@@ -428,6 +468,17 @@ export function compileAutomation(
     const controlId = control.id
     if (!registered) registerNode(controlId)
     switch (control.type) {
+      case 'graph': {
+        if (control !== source.flow) {
+          report({ severity: 'error', code: 'GRAPH_SCOPE_UNSUPPORTED', message: 'Graph is supported only as the root flow in this version.', source: { nodeId: control.id } })
+          return next
+        }
+        Object.assign(instructions, compileGraph(control, source, next, {
+          registerNode, report, validateExpression, compileCapability,
+          hasErrors: () => diagnostics.some(item => item.severity === 'error'),
+        }))
+        return control.id
+      }
       case 'extension': {
         const ref = control.control
         if (!ref || typeof ref.id !== 'string' || !Number.isSafeInteger(ref.version) || ref.version < 1) {
@@ -477,49 +528,8 @@ export function compileAutomation(
         return cursor
       }
       case 'capability': {
-        const connectionIds = normalizeConnectionIds(control.id, control.connection, control.connections)
-        const input = control.input && typeof control.input === 'object' && !Array.isArray(control.input)
-          ? control.input
-          : {}
-        if (input !== control.input) {
-          report({ severity: 'error', code: 'CAPABILITY_INPUT_INVALID', message: 'Capability input must be an object.', source: { nodeId: control.id, fieldPath: 'input' } })
-        }
-        const validRef = control.capability
-          && typeof control.capability.id === 'string'
-          && Number.isSafeInteger(control.capability.version)
-        if (!validRef) {
-          report({ severity: 'error', code: 'CAPABILITY_REF_INVALID', message: 'Capability reference requires id and integer version.', source: { nodeId: control.id, fieldPath: 'capability' } })
-          return control.id
-        }
-        const definition = resolveCapability(control.capability, control.id, 'step', connectionIds)
-        if (definition) validateCapabilityInput(definition, input, control.id)
-        const policy = control.policy
-        if (policy !== undefined && (!policy || typeof policy !== 'object' || Array.isArray(policy))) {
-          report({ severity: 'error', code: 'INVOCATION_POLICY_INVALID', message: 'Invocation policy must be an object.', source: { nodeId: control.id, fieldPath: 'policy' } })
-        }
-        if (policy?.timeoutMs !== undefined && (!Number.isSafeInteger(policy.timeoutMs) || policy.timeoutMs < 1)) {
-          report({ severity: 'error', code: 'TIMEOUT_INVALID', message: 'policy.timeoutMs must be a positive integer.', source: { nodeId: control.id, fieldPath: 'policy.timeoutMs' } })
-        }
-        if (policy?.retry) {
-          if (!Number.isSafeInteger(policy.retry.maxAttempts) || policy.retry.maxAttempts < 1) {
-            report({ severity: 'error', code: 'RETRY_ATTEMPTS_INVALID', message: 'retry.maxAttempts must be a positive integer.', source: { nodeId: control.id, fieldPath: 'policy.retry.maxAttempts' } })
-          }
-          if (policy.retry.backoffMs !== undefined && (!Number.isSafeInteger(policy.retry.backoffMs) || policy.retry.backoffMs < 0)) {
-            report({ severity: 'error', code: 'RETRY_BACKOFF_INVALID', message: 'retry.backoffMs must be a non-negative integer.', source: { nodeId: control.id, fieldPath: 'policy.retry.backoffMs' } })
-          }
-          if (policy.retry.maxAttempts > 1 && definition && !definition.semantics.retrySafe) {
-            report({ severity: 'error', code: 'RETRY_UNSAFE', message: `${capabilityKey(control.capability)} is not safe to retry.`, source: { nodeId: control.id, fieldPath: 'policy.retry' } })
-          }
-        }
-        instructions[control.id] = {
-          op: 'invoke',
-          id: control.id,
-          capability: control.capability,
-          ...(Object.keys(connectionIds).length ? { connections: connectionIds } : {}),
-          input: { type: 'object', entries: input },
-          ...(policy ? { policy } : {}),
-          next,
-        }
+        const instruction = compileCapability(control, next)
+        if (instruction) instructions[control.id] = instruction
         return control.id
       }
       case 'if': {
@@ -722,17 +732,20 @@ export function compileAutomation(
   const completeId = '__complete'
   instructions[completeId] = { op: 'complete', id: completeId }
   const entry = compileControl(source.flow, completeId)
+  if (source.flow.type === 'graph') {
+    instructions[completeId] = { op: 'complete', id: completeId, output: { type: 'ref', path: `steps.${source.flow.id}` } }
+  }
 
   if (diagnostics.some(item => item.severity === 'error')) {
     throw new AutomationCompileError(diagnostics)
   }
 
-  const referenceDiagnostics = validateSourceReferences(source, loweredControls)
+  const referenceDiagnostics = source.flow.type === 'graph' ? [] : validateSourceReferences(source, loweredControls)
   if (referenceDiagnostics.length) throw new AutomationCompileError([...diagnostics, ...referenceDiagnostics])
 
   const controlDefinitions = [...usedControls.values()].sort((a, b) => controlKey(a).localeCompare(controlKey(b)))
   return {
-    plan: { irVersion: 1, entry, instructions, ...(usedControls.size ? { sourceMap } : {}) },
+    plan: { irVersion: source.flow.type === 'graph' ? 2 : 1, entry, instructions, ...(usedControls.size ? { sourceMap } : {}) },
     dependencyManifest: {
       ...(usedControls.size ? { controls: controlDefinitions.map(({ id, version }) => ({ id, version })) } : {}),
       capabilities: [...dependencies.values()].sort((a, b) => (

@@ -78,6 +78,44 @@ export interface ExtensionControlSource {
   input: Record<string, ValueExpr>
 }
 
+export interface GraphEndpoint {
+  nodeId: string
+  port: string
+}
+
+export interface GraphEdge {
+  id: string
+  from: GraphEndpoint
+  to: GraphEndpoint
+}
+
+export interface GraphConditionSource {
+  type: 'condition'
+  id: string
+  condition: ValueExpr
+}
+
+export interface GraphMergeSource {
+  type: 'merge'
+  id: string
+  mode: 'all' | 'selected'
+  /** Each named input has exactly one incoming edge. */
+  inputs: string[]
+}
+
+export type GraphNodeSource = CapabilitySource | GraphConditionSource | GraphMergeSource
+
+export interface GraphSource {
+  type: 'graph'
+  id: string
+  version: 1
+  nodes: GraphNodeSource[]
+  /** graph.id/start is the explicit, control-only activation source. */
+  edges: GraphEdge[]
+  /** Evaluated after all members succeed or skip; absent output is null. */
+  output?: ValueExpr
+}
+
 export type CoreControlSource =
   | CapabilitySource
   | BlockSource
@@ -86,6 +124,7 @@ export type CoreControlSource =
   | ParallelSource
   | RaceSource
   | ForEachSource
+  | GraphSource
 
 export type ControlSource = CoreControlSource | ExtensionControlSource
 
@@ -149,6 +188,17 @@ export type CoreInstruction =
   | { op: 'join'; id: string; mode: 'all' | 'first_success' | 'iterate'; next?: string }
   | { op: 'complete'; id: string; output?: ValueExpr }
   | { op: 'fail'; id: string; error: ValueExpr }
+  | {
+    op: 'graph_scope'
+    id: string
+    version: 1
+    members: string[]
+    edges: GraphEdge[]
+    output?: ValueExpr
+    next?: string
+  }
+  | { op: 'graph_condition'; id: string; condition: ValueExpr }
+  | { op: 'graph_merge'; id: string; mode: 'all' | 'selected'; inputs: string[] }
 
 export interface CorePlan {
   irVersion: number

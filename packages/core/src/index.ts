@@ -1,4 +1,5 @@
 export * from './automation.js'
+export * from './automation-version.js'
 export * from './capability.js'
 export * from './execution.js'
 export * from './expression.js'
