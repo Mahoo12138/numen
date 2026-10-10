@@ -1,6 +1,8 @@
 import type { AutomationSource, BlockSource, ControlSource, InvocationPolicy, NumenValue, TriggerSource, ValueExpr } from '@numenjs/core'
 import type { WorkbenchAutomationInsertItem } from './contracts.js'
 import { copyAutomationControl, controlCopyError } from './automation-source-copy.js'
+import { applyGraphSourceCommand, automationSourceNodeChildren, findAutomationNode, replaceAutomationGraph, type AutomationSourceNode, type GraphSourceCommand, type GraphSourceCommandError } from './graph-source-editing.js'
+export { findAutomationNode } from './graph-source-editing.js'
 
 export type AutomationInsertTarget =
   | { kind: 'block'; blockId: string; beforeNodeId?: string }
@@ -8,11 +10,12 @@ export type AutomationInsertTarget =
   | { kind: 'root'; beforeNodeId?: string }
 
 export interface AutomationSourceCommandError {
-  code: 'TARGET_INVALID' | 'NODE_NOT_FOUND' | 'STRUCTURAL_SLOT' | 'DESCENDANT_TARGET' | 'COPY_UNSAFE' | 'INVALID_BRANCH' | 'MIN_BRANCHES'
+  code: 'TARGET_INVALID' | 'NODE_NOT_FOUND' | 'STRUCTURAL_SLOT' | 'DESCENDANT_TARGET' | 'COPY_UNSAFE' | 'INVALID_BRANCH' | 'MIN_BRANCHES' | GraphSourceCommandError['code']
   message: string
 }
 
 export type AutomationSourceCommand =
+  | GraphSourceCommand
   | { type: 'SET_AUTOMATION_INPUTS'; inputs: AutomationSource['inputs'] }
   | { type: 'DELETE_STEP'; nodeId: string }
   | { type: 'MOVE_STEP'; nodeId: string; direction: 'up' | 'down' }
@@ -39,7 +42,7 @@ export interface AutomationSourceCommandResult {
 
 function collectControlIds(source: AutomationSource): Set<string> {
   const ids = new Set(source.triggers.map(trigger => trigger.id))
-  const visit = (control: ControlSource): void => {
+  const visit = (control: AutomationSourceNode): void => {
     ids.add(control.id)
     switch (control.type) {
       case 'block':
@@ -55,6 +58,9 @@ function collectControlIds(source: AutomationSource): Set<string> {
         break
       case 'foreach':
         visit(control.body)
+        break
+      case 'graph':
+        control.nodes.forEach(visit)
         break
       default:
         break
@@ -108,6 +114,7 @@ export function automationInsertTargetError(
     return
   }
   if (target.kind === 'root') {
+    if (source.flow.type === 'graph') return 'Graph members require an explicit Graph command.'
     if (source.flow.type === 'block') return 'The root flow changed. Choose its current block as the target.'
     if (target.beforeNodeId !== undefined && target.beforeNodeId !== source.flow.id) return 'The root insertion position no longer exists.'
     return
@@ -222,6 +229,28 @@ function editControl(
     return { control: edited, changed: edited !== control }
   }
   switch (control.type) {
+    case 'graph': {
+      const index = control.nodes.findIndex(node => node.id === nodeId && node.type === 'capability')
+      if (index >= 0) {
+        const member = control.nodes[index]!
+        if (member.type !== 'capability') break
+        const edited = edit(member)
+        if (edited !== member && edited.type === 'capability') {
+          const nodes = [...control.nodes]; nodes[index] = edited
+          return { control: { ...control, nodes }, changed: true }
+        }
+      }
+      for (let memberIndex = 0; memberIndex < control.nodes.length; memberIndex++) {
+        const member = control.nodes[memberIndex]!
+        if (member.type !== 'foreach') continue
+        const result = editControl(member.body, nodeId, edit)
+        if (result.changed && result.control.type === 'graph') {
+          const nodes = [...control.nodes]; nodes[memberIndex] = { ...member, body: result.control }
+          return { control: { ...control, nodes }, changed: true }
+        }
+      }
+      break
+    }
     case 'block': {
       for (let index = 0; index < control.steps.length; index += 1) {
         const result = editControl(control.steps[index]!, nodeId, edit)
@@ -277,6 +306,18 @@ function setControlExpression(
   field: 'condition' | 'items',
   expression: ValueExpr,
 ): AutomationSource {
+  const graphNode = findAutomationNode(source, nodeId)
+  if ((field === 'condition' && graphNode?.type === 'condition') || (field === 'items' && graphNode?.type === 'foreach' && graphNode.body.type === 'graph')) {
+    if (JSON.stringify(graphNode.type === 'condition' ? graphNode.condition : graphNode.items) === JSON.stringify(expression)) return source
+    const pending: AutomationSourceNode[] = [source.flow]
+    while (pending.length) {
+      const node = pending.pop()!
+      if (node.type === 'graph' && node.nodes.some(member => member === graphNode)) return replaceAutomationGraph(source, node.id, graph => ({ ...graph,
+        nodes: graph.nodes.map(member => member === graphNode ? { ...member, [field]: structuredClone(expression) } : member),
+      }))
+      pending.push(...automationSourceNodeChildren(node))
+    }
+  }
   const result = editControl(source.flow, nodeId, control => {
     if (field === 'condition' && control.type === 'if') {
       return JSON.stringify(control.condition) === JSON.stringify(expression)
@@ -429,7 +470,7 @@ export function automationStepEditOptions(source: AutomationSource, nodeId: stri
   const triggerIndex = nodeId ? source.triggers.findIndex(trigger => trigger.id === nodeId) : -1
   const position = nodeId ? sequencePosition(source, nodeId) : undefined
   return {
-    canDelete: triggerIndex >= 0 || !!position || (source.flow.type !== 'block' && source.flow.id === nodeId),
+    canDelete: triggerIndex >= 0 || !!position || (source.flow.type !== 'block' && source.flow.type !== 'graph' && source.flow.id === nodeId),
     canMoveTo: triggerIndex >= 0 || !!position,
     canCopy: !!nodeId && automationNodeCopyError(source, nodeId) === undefined,
     canMoveUp: triggerIndex > 0 || (!!position && position.index > 0),
@@ -458,6 +499,7 @@ function editSequence(source: AutomationSource, nodeId: string, direction?: 'up'
   }
   const position = sequencePosition(source, nodeId)
   if (!position) {
+    if (source.flow.type === 'graph' && source.flow.id === nodeId) return fail(source, 'STRUCTURAL_SLOT', 'The Graph Start is a required scope boundary.')
     if (!direction && source.flow.id === nodeId && source.flow.type !== 'block') {
       return { source: { ...source, flow: { type: 'block', id: availableId(collectControlIds(source), 'flow'), steps: [] } }, selectedNodeId: undefined, removedNodeIds: subtreeIds(source.flow) }
     }
@@ -642,6 +684,7 @@ export function applyAutomationSourceCommand(
   source: AutomationSource,
   command: AutomationSourceCommand,
 ): AutomationSourceCommandResult {
+  if (command.type.startsWith('GRAPH_')) return applyGraphSourceCommand(source, command as GraphSourceCommand)
   switch (command.type) {
     case 'SET_AUTOMATION_INPUTS': {
       const { inputs: _inputs, ...rest } = source
@@ -679,37 +722,13 @@ export function applyAutomationSourceCommand(
       source: setWaitExpression(source, command.nodeId, command.field, command.expression),
     }
   }
+  return { source }
 }
 
 export function findAutomationControl(source: AutomationSource, nodeId: string): ControlSource | undefined {
-  let found: ControlSource | undefined
-  const visit = (control: ControlSource): void => {
-    if (found) return
-    if (control.id === nodeId) {
-      found = control
-      return
-    }
-    switch (control.type) {
-      case 'block':
-        control.steps.forEach(visit)
-        break
-      case 'if':
-        visit(control.then)
-        if (control.else) visit(control.else)
-        break
-      case 'parallel':
-      case 'race':
-        control.branches.forEach(visit)
-        break
-      case 'foreach':
-        visit(control.body)
-        break
-      default:
-        break
-    }
-  }
-  visit(source.flow)
-  return found
+  const node = findAutomationNode(source, nodeId)
+  if (node?.type === 'condition' || node?.type === 'merge' || (node?.type === 'foreach' && node.body.type === 'graph')) return undefined
+  return node as ControlSource | undefined
 }
 
 export function findAutomationTrigger(source: AutomationSource, nodeId: string): TriggerSource | undefined {
@@ -719,6 +738,6 @@ export function findAutomationTrigger(source: AutomationSource, nodeId: string):
 export function automationSourceHasNode(source: AutomationSource, nodeId: string | undefined): boolean {
   return !!nodeId && (
     source.triggers.some(trigger => trigger.id === nodeId)
-    || !!findAutomationControl(source, nodeId)
+    || !!findAutomationNode(source, nodeId)
   )
 }

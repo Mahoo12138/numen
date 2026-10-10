@@ -25,7 +25,7 @@ import {
   type AutomationInsertTarget,
   type AutomationSourceCommand,
 } from './automation-source-editing.js'
-import { collapsedAutomationNodes, reconcileAutomationPresentation } from './automation-presentation.js'
+import { collapsedAutomationNodes, reconcileAutomationPresentation, setAutomationGraphPositions, type AutomationGraphPositions } from './automation-presentation.js'
 import type { WorkbenchConsoleClient } from './types.js'
 
 export type AutomationDraftSavePhase =
@@ -97,6 +97,7 @@ export type AutomationDraftDocumentAction =
   | { type: 'SERVER'; automationId: string; draft: WorkbenchAutomationDraft }
   | { type: 'SELECT_NODE'; nodeId?: string; reveal?: boolean; revealWithinNodeId?: string }
   | { type: 'EDIT'; command: AutomationSourceCommand; copiedPresentation?: Record<string, NumenValue> }
+  | { type: 'SET_GRAPH_POSITIONS'; graphId: string; positions: AutomationGraphPositions; expectedSource?: AutomationSource }
   | ({ type: 'REPLACE_FROM_SNAPSHOT' } & ReplaceAutomationDraftFromSnapshotInput)
   | { type: 'COLLAPSE'; nodeId: string; collapsed: boolean }
   | { type: 'COLLAPSE_MANY'; nodeIds: string[]; collapsed: boolean }
@@ -268,6 +269,13 @@ export function reduceAutomationDraftDocument(
       if (!changed) return state
       return changedState(state,
         { ...state.document, presentation: { ...state.document.presentation, collapsedNodes: [...collapsed] } },
+        [...state.undoStack.slice(-(historyLimit - 1)), snapshot(state.document, state.selectedNodeId)], [], state.selectedNodeId)
+    }
+    case 'SET_GRAPH_POSITIONS': {
+      if (!state.document || !canChangeDocument(state) || (action.expectedSource && state.document.source !== action.expectedSource)) return state
+      const presentation = setAutomationGraphPositions(state.document.presentation, state.document.source, action.graphId, action.positions)
+      if (!presentation || presentation === state.document.presentation) return state
+      return changedState(state, { ...state.document, presentation },
         [...state.undoStack.slice(-(historyLimit - 1)), snapshot(state.document, state.selectedNodeId)], [], state.selectedNodeId)
     }
     case 'EDIT': {
@@ -497,6 +505,7 @@ export interface AutomationDraftDocumentModel {
   clipboard?: { mode: 'copy' | 'cut'; nodeId: string } | undefined
   collapsedNodes: string[]
   edit(command: AutomationSourceCommand): boolean
+  setGraphPositions(positions: AutomationGraphPositions, graphId: string, expectedSource?: AutomationSource): boolean
   replaceFromSnapshot(input: ReplaceAutomationDraftFromSnapshotInput): boolean
   insert(item: WorkbenchAutomationInsertItem, target: AutomationInsertTarget): boolean
   copyStep(nodeId: string): void
@@ -635,6 +644,12 @@ export function useAutomationDraftDocument({
     if (state.value === before) return false
     clipboard.value = undefined
     return true
+  }
+  const setGraphPositions = (positions: AutomationGraphPositions, graphId: string, expectedSource?: AutomationSource): boolean => {
+    if (toValue(automationId) !== state.value.document?.automationId) return false
+    const before = state.value.document
+    dispatch({ type: 'SET_GRAPH_POSITIONS', positions, graphId, ...(expectedSource ? { expectedSource } : {}) })
+    return !!before && state.value.document !== before
   }
   const insert = (item: WorkbenchAutomationInsertItem, target: AutomationInsertTarget) => edit({ type: 'INSERT', item, target })
   const copyStep = (nodeId: string) => {
@@ -788,6 +803,7 @@ export function useAutomationDraftDocument({
     moveStep: (nodeId, direction) => dispatch({ type: 'EDIT', command: { type: 'MOVE_STEP', nodeId, direction } }),
     insert,
     edit,
+    setGraphPositions,
     replaceFromSnapshot,
     copyStep,
     cutStep,
