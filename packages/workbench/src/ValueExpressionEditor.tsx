@@ -29,8 +29,10 @@ import { useAutomationFieldDraft } from './automation-field-draft.js'
 import { MagicVariablePicker } from './MagicVariablePicker.js'
 import type { SchemaLiteralRenderer } from './SchemaRenderers.js'
 import { defineSetupComponent } from './vue-component.js'
+import { CollectionExpressionEditor } from './CollectionExpressionEditor.js'
+import { collectionLiteral, toCollectionExpression } from './collection-expression.js'
 
-export type EditableValueMode = 'literal' | 'reference' | 'template' | 'expression'
+export type EditableValueMode = 'literal' | 'reference' | 'template' | 'expression' | 'object' | 'array'
 export type ValueMode = EditableValueMode | 'preserved'
 
 const referencePattern = /^(run|trigger|input|steps|vars|loop|error)(\.[a-zA-Z0-9_$-]+)+$/
@@ -40,6 +42,7 @@ export function valueExpressionMode(expression: ValueExpr | undefined): ValueMod
   if (expression?.type === 'ref') return 'reference'
   if (expression?.type === 'template') return 'template'
   if (expression?.type === 'call') return 'expression'
+  if (expression?.type === 'object' || expression?.type === 'array') return expression.type
   if (expression && expression.type !== 'literal') return 'preserved'
   return 'literal'
 }
@@ -154,7 +157,9 @@ function modeExpression(
   field: WorkbenchAutomationInputField,
   mode: EditableValueMode,
   variables: MagicVariableCandidate[] = [],
+  current?: ValueExpr,
 ): ValueExpr | undefined {
+  if (mode === 'object' || mode === 'array') return toCollectionExpression(current, mode)
   if (mode === 'reference') {
     const firstDirect = variables.find(variable => !variable.unavailableReason && variable.compatibility === 'direct')
     return firstDirect ? magicVariableExpression(firstDirect) : { type: 'ref', path: 'trigger.value' }
@@ -164,6 +169,8 @@ function modeExpression(
     const definition = compatibleFunctions(field)[0]
     return definition ? createCallExpression(field, definition) : undefined
   }
+  const existing = collectionLiteral(current)
+  if (existing && (current?.type === 'object' || current?.type === 'array')) return existing
   const value = defaultLiteral(field)
   return value === undefined ? undefined : { type: 'literal', value }
 }
@@ -172,6 +179,7 @@ function fieldDescription(field: WorkbenchAutomationInputField, mode: ValueMode)
   if (mode === 'reference') return t('workbench.inspector.referenceHelp')
   if (mode === 'template') return t('workbench.inspector.templateHelp')
   if (mode === 'expression') return t('workbench.inspector.expressionHelp')
+  if (mode === 'object' || mode === 'array') return t('workbench.collection.help')
   if (mode === 'preserved') return t('workbench.inspector.preservedHelp')
   return field.description
 }
@@ -334,10 +342,12 @@ const TemplateEditor = defineSetupComponent<ValueExpressionFieldProps>('Template
   }
 })
 
-function CallExpressionEditor(props: Readonly<ValueExpressionFieldProps> & {
+type CallExpressionProps = ValueExpressionFieldProps & {
   expression: Extract<ValueExpr, { type: 'call' }>
   depth: number
-}) {
+}
+
+function renderCallExpression(props: Readonly<CallExpressionProps>) {
   const definitions = compatibleFunctions(props.field)
   const definition = getCoreExpressionFunction(props.expression.function)
   const selectable = definition && !definitions.some(item => item.id === definition.id)
@@ -436,6 +446,10 @@ function CallExpressionEditor(props: Readonly<ValueExpressionFieldProps> & {
   )
 }
 
+const CallExpressionEditor = defineSetupComponent<CallExpressionProps>('CallExpressionEditor',
+  ['nodeId', 'field', 'expression', 'problem', 'canEdit', 'schemaUI', 'source', 'variableCatalog', 'variables', 'focusRequest', 'depth', 'discardEpoch', 'onDraftStateChange', 'confirmDiscard', 'onChange'],
+  props => () => renderCallExpression(props))
+
 function renderValueExpressionField(props: Readonly<ValueExpressionFieldProps>): VNodeChild {
   const mode = valueExpressionMode(props.expression)
   const problemId = inputProblemId(props.nodeId, props.field.name)
@@ -460,6 +474,8 @@ function renderValueExpressionField(props: Readonly<ValueExpressionFieldProps>):
   else if (mode === 'template') editor = <TemplateEditor {...props} key={props.discardEpoch ?? 0} variables={variables} />
   else if (mode === 'expression' && props.expression?.type === 'call') {
     editor = <CallExpressionEditor {...props} depth={props.depth ?? 0} expression={props.expression} />
+  } else if (props.expression?.type === 'object' || props.expression?.type === 'array') {
+    editor = <CollectionExpressionEditor {...props} key={props.discardEpoch ?? 0} depth={props.depth ?? 0} expression={props.expression} />
   } else if (mode === 'preserved') {
     editor = <div class="inspector-schema-notice"><AlertCircle size={15} /><span>{t('workbench.theCurrentStructuredExpressionIsPreservedButHasNoVisualEditor')}</span></div>
   } else if (LiteralRenderer) {
@@ -489,7 +505,7 @@ function renderValueExpressionField(props: Readonly<ValueExpressionFieldProps>):
       if (next === mode) return
       if (props.confirmDiscard && !props.confirmDiscard()) return
       props.onDraftStateChange?.({ dirty: false, invalid: false })
-      props.onChange(modeExpression(props.field, next, variables))
+      props.onChange(modeExpression(props.field, next, variables, props.expression))
     }}
     supportsExpression={functions.length > 0}
     {...(description ? { description } : {})}
@@ -542,8 +558,10 @@ const FieldShell = defineSetupComponent<FieldShellProps>('FieldShell', ['field',
           <SelectMenu ariaLabel={t('workbench.value0ValueMode', { value0: field.label })} class="schema-value-mode" disabled={!canEdit}
             onChange={value => onModeChange(value as EditableValueMode)} value={mode} options={[
               { value: 'literal', label: t('workbench.literal') }, { value: 'reference', label: t('workbench.reference') },
-              ...(field.type === 'string' ? [{ value: 'template', label: t('workbench.template') }] : []),
+              ...(targetValueTypes(field).has('string') ? [{ value: 'template', label: t('workbench.template') }] : []),
               ...(props.supportsExpression || mode === 'expression' ? [{ value: 'expression', label: t('workbench.expression') }] : []),
+              ...(targetValueTypes(field).has('object') || mode === 'object' ? [{ value: 'object', label: t('workbench.collection.object') }] : []),
+              ...(targetValueTypes(field).has('array') || mode === 'array' ? [{ value: 'array', label: t('workbench.collection.array') }] : []),
               ...(mode === 'preserved' ? [{ value: 'preserved', label: t('workbench.structuredValue'), disabled: true }] : []),
             ]} />
           <span class="schema-value-control">{context.slots.default?.()}</span>

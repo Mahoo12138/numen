@@ -724,6 +724,27 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .structured-call-add:disabled, .structured-call-remove:disabled, .structured-call-extra button:disabled { cursor: default; opacity: .45; }
 .structured-call-extra { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px; padding: 7px 0; border-bottom: 1px solid var(--wb-border); }
 .structured-call-extra code { overflow-wrap: anywhere; color: var(--wb-faint); font-size: 9px; }
+.schema-field:has(.collection-expression-editor) > .schema-field-row { grid-template-columns: minmax(0, 1fr); gap: 5px; }
+.schema-field:has(.collection-expression-editor) > .schema-field-row > .schema-value-editor { grid-template-columns: minmax(0, 1fr); gap: 7px; }
+.schema-field:has(.collection-expression-editor) > .schema-field-row > .schema-value-editor > .schema-value-mode { width: 108px; }
+.schema-field:has(.collection-expression-editor) > .inspector-field-help,
+.schema-field:has(.collection-expression-editor) > .inspector-field-error { margin-left: 0; }
+.collection-expression-editor { display: grid; min-width: 0; gap: 10px; border-top: 1px solid var(--wb-border); padding-top: 8px; }
+.collection-member { display: grid; min-width: 0; gap: 6px; padding-bottom: 10px; border-bottom: 1px solid var(--wb-border); }
+.collection-member-toolbar { display: flex; align-items: start; gap: 6px; min-width: 0; }
+.collection-member-toolbar > span { flex: 1; color: var(--wb-muted); font-size: 11px; padding-top: 5px; }
+.collection-member-name { flex: 1; min-width: 0; }
+.collection-member-name input { width: 100%; font-size: 11px; }
+.collection-member-name .inspector-field-error { margin: 4px 0 0; }
+.collection-member-actions { display: flex; gap: 3px; }
+.collection-member-actions button { width: 26px; height: 26px; padding: 0; }
+.collection-member > .schema-field { min-width: 0; padding: 0; }
+.collection-member > .schema-field > .schema-field-row { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+.collection-member > .schema-field > .schema-field-row > .schema-value-editor { grid-template-columns: minmax(0, 1fr); gap: 5px; }
+.collection-member > .schema-field > .schema-field-row > .schema-value-editor > .schema-value-mode { width: 108px; }
+.collection-member > .schema-field > .inspector-field-help,
+.collection-member > .schema-field > .inspector-field-error { margin-left: 0; }
+.collection-empty { color: var(--wb-muted); font-size: 11px; margin: 0; }
 .magic-variable-editor { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 32px; align-items: start; gap: 4px; min-width: 0; }
 .magic-variable-editor > input, .magic-variable-editor > textarea { width: 100%; }
 .magic-variable-trigger { display: grid; width: 32px; height: 32px; place-items: center; border: 1px solid var(--wb-border-strong); border-radius: 4px; background: white; color: var(--wb-muted); cursor: pointer; }

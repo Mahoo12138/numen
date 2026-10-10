@@ -171,6 +171,8 @@ Rename 仅影响 UI label，不影响 Ref。
 
 表达式只读当前 Run Context。
 
+核心纯函数由 `packages/core/src/expression.ts` 的同一目录提供给编辑器、编译器与运行时。数值比较 `core:gt/gte/lt/lte` 只接受两个有限数字，不隐式转换字符串。`core:length` 接受文本或数组：数组返回项数，文本按 Unicode code point 计数（不是 UTF-16 单元或视觉字符）。`core:contains` 接受两个字符串并进行区分大小写的子串匹配，空子串匹配成功。函数名、参数数目在编译时校验；动态实参的类型错误由运行时报告，不用默认值掩盖。
+
 ## 9. 类型系统
 
 Schemastery 用于：

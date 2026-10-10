@@ -121,6 +121,14 @@ Connection binding 与 input value 分离。
 
 Execution Policy 仅编辑 Runtime 支持的 `timeoutMs`、`retry.maxAttempts` 与 `retry.backoffMs`，解释默认超时、总尝试次数和退避。Capability 未声明 `retrySafe` 时不提供新增重试配置；已有不安全重试可移除。Compiler 和 Runtime 仍负责最终校验，编辑器不提供“失败后继续”等未实现语义。
 
+### 对象与数组成员映射
+
+对象/数组字段可显式切换到 Object/Array 模式，逐个编辑成员；每个成员继续使用 Literal、Reference、Template、Call 或嵌套集合的统一 ValueExpr。成员 Literal 使用 JSON，字符串需加引号。兼容的字面量对象/数组转为成员模式时保留原值；全静态集合可无损转回 Literal，动态映射不会在编辑器中求值。
+
+对象支持添加、重命名和删除字段；重复名保留为本地错误，不覆盖既有字段。数组支持添加、删除与上下移动。删除、重命名或重排可能替换尚未提交的成员输入时，沿用文档输入保护；一次完成的操作进入一次 Undo/Redo。显示名称和原始 JSON 键分别保留，空键和特殊 Unicode 键不被静默改写。
+
+集合与 Call 共享递归深度预算，超过 8 层的内容保留但不展开编辑。Schema 目前只提供顶层契约，成员使用通用值编辑，不能据此宣称嵌套字段已通过静态类型验证。服务端编译和 Capability 契约仍负责权威校验。
+
 ## 9. Magic Variables
 
 Variable Picker 来源：
