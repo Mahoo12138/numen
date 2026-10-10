@@ -95,7 +95,10 @@ describe('Large immutable Graph inspection pipeline', () => {
       const defaultRun = await root.console.query(workbenchRunDetailQuery, { runId: run.id, executionLimit: 50, eventLimit: 1 }, request())
       expect(defaultRun.flow.truncated).toBe(true)
       expect(Buffer.byteLength(JSON.stringify(defaultRun))).toBeLessThanOrEqual(131_072)
-      const detail = await root.console.query(workbenchRunDetailQuery, { runId: run.id, sourceNodeId: 'node300', executionLimit: 1, eventLimit: 1 }, request())
+      const filtered = await root.console.query(workbenchRunDetailQuery, { runId: run.id, sourceNodeId: 'node300', executionLimit: 1, eventLimit: 1 }, request())
+      expect(filtered.flow).toEqual(defaultRun.flow)
+      expect(filtered.executions).toMatchObject([{ sourceNodeId: 'node300', operation: 'invoke', status: 'COMPLETED' }])
+      const detail = await root.console.query(workbenchRunDetailQuery, { runId: run.id, sourceNodeId: 'node300', flowNodeId: 'node300', executionLimit: 1, eventLimit: 1 }, request())
       expect(detail.flow).toMatchObject({ focusedNodeId: 'node300', truncated: false, root: { children: [{ id: 'node300', status: 'COMPLETED', executionCount: 1 }] } })
       expect(detail.executions).toMatchObject([{ sourceNodeId: 'node300', operation: 'invoke', status: 'COMPLETED' }])
       const value = await root.console.query(workbenchExecutionDataQuery, { runId: run.id, executionId: detail.executions[0]!.id }, request())
@@ -121,6 +124,29 @@ describe('Large immutable Graph inspection pipeline', () => {
     } finally { live.mockRestore() }
   })
 
+  it('keeps sibling source navigation while filtering Executions and only narrows an explicit Flow point read', async () => {
+    const { root } = await fixture()
+    const { automation } = root.automations.create({ name: 'Sibling navigation', source: { triggers: [],
+      flow: { type: 'block', id: 'root', steps: [action('http-fetch'), action('classified-text')] } } })
+    const snapshot = root.automations.publishDraft(automation.id, 1)
+    const run = root.scheduler.startRevisionTest(automation.id, snapshot.id, {}, null, 'sibling-navigation-request')
+    await root.scheduler.dispatchUntilIdle()
+    const query = (extra: Record<string, unknown> = {}) => root.console.query(workbenchRunDetailQuery,
+      { runId: run.id, executionLimit: 25, eventLimit: 1, ...extra }, request())
+    const overview = await query(), filtered = await query({ sourceNodeId: 'http-fetch' })
+    expect(filtered.executions).toMatchObject([{ sourceNodeId: 'http-fetch' }])
+    expect(filtered.flow).toEqual(overview.flow)
+    expect(filtered.flow.root.children[0]?.children.map(node => node.id)).toEqual(['http-fetch', 'classified-text'])
+    const sibling = await query({ sourceNodeId: 'classified-text' })
+    expect(sibling.executions).toMatchObject([{ sourceNodeId: 'classified-text' }])
+    expect(sibling.flow).toEqual(overview.flow)
+    const pointed = await query({ sourceNodeId: 'classified-text', flowNodeId: 'http-fetch' })
+    expect(pointed.executions).toMatchObject([{ sourceNodeId: 'classified-text' }])
+    expect(pointed.flow).toMatchObject({ focusedNodeId: 'http-fetch', root: { children: [{ id: 'http-fetch' }] } })
+    expect(pointed.flow.root.children).toHaveLength(1)
+    for (const flowNodeId of ['', 'n'.repeat(161)]) await expect(query({ flowNodeId })).rejects.toThrow()
+  })
+
   it('compares and restores nested Graph foreach while inspecting the exact inner execution', async () => {
     const { root, unload } = await fixture()
     const body: GraphSource = { type: 'graph', id: 'body', version: 1, nodes: [{ ...action('work'), input: { safe: ref('loop.item'), secret: literal('PRIVATE_INNER_CANARY') } }],
@@ -142,7 +168,7 @@ describe('Large immutable Graph inspection pipeline', () => {
     const comparison = await root.console.query(workbenchAutomationComparisonQuery, { automationId: automation.id,
       left: { kind: 'snapshot', snapshotId: first.id }, right: { kind: 'snapshot', snapshotId: second.id } }, request())
     expect(comparison.changes).toEqual([{ category: 'policies', kind: 'changed', field: 'concurrency', nodeId: 'each' }, { category: 'parameters', kind: 'changed', field: 'output', nodeId: 'body' }])
-    const detail = await root.console.query(workbenchRunDetailQuery, { runId: run.id, sourceNodeId: 'work', executionLimit: 1, eventLimit: 1 }, request())
+    const detail = await root.console.query(workbenchRunDetailQuery, { runId: run.id, sourceNodeId: 'work', flowNodeId: 'work', executionLimit: 1, eventLimit: 1 }, request())
     expect(detail.flow.root.children[0]).toMatchObject({ id: 'work', status: 'COMPLETED', executionCount: 2 })
     expect(detail.nextExecutionCursor).toBeTruthy()
     const value = await root.console.query(workbenchExecutionDataQuery, { runId: run.id, executionId: detail.executions[0]!.id }, request())

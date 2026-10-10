@@ -64,6 +64,7 @@ interface WorkbenchRunsProviderInput extends RunListFilters {
 interface WorkbenchRunDetailProviderInput {
   runId: string
   sourceNodeId?: string
+  flowNodeId?: string
   executionId?: string
   executionLimit: number
   executionCursor: ExecutionListCursor | undefined
@@ -149,6 +150,7 @@ export const workbenchRunDetailQuery: ConsoleQueryDefinition<Record<string, unkn
   input: z.object({
     runId: z.string().required(),
     sourceNodeId: automationSourceNodeIdSchema,
+    flowNodeId: automationSourceNodeIdSchema,
     executionId: z.string().max(200),
     executionLimit: z.number().step(1).min(1).max(50).required(),
     executionCursor: executionCursorInput,
@@ -303,7 +305,7 @@ export function workbenchRunsProviderPlugin(ctx: Context): void {
           diagnostics,
           events,
           encodeCursor,
-          input.sourceNodeId,
+          input.flowNodeId,
         )
         let maximumNodes = 250
         while (Buffer.byteLength(JSON.stringify(result), 'utf8') > 131_072 && maximumNodes > 1) {

@@ -102,7 +102,10 @@ export const workbenchRunDetailQueryRef = {
 
 export interface WorkbenchRunDetailQueryInput {
   runId: string
+  /** Filter Execution diagnostics without changing the Flow overview. */
   sourceNodeId?: string
+  /** Explicitly point-read a Source node in the immutable Flow. */
+  flowNodeId?: string
   executionId?: string
   executionLimit: number
   executionCursor?: string
