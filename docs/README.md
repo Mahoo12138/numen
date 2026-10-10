@@ -73,6 +73,7 @@
 - [20. 通用组件与 npm 发布](20-components-and-publishing.md)
 - [23. Draft 固定快照试运行设计建议](23-draft-test-snapshot-design.md)
 - [24. Draft 快照决策与迁移影响清单（已批准）](24-draft-test-snapshot-decision.md)
+- [25. 图式工作流编辑器：G0 决策稿与交付计划（待确认）](25-graph-workflow-editor-decision.md)
 - [N0–N4 整体验收与本地公共包消费检查（2026-10-10）](verification/n0-n4-acceptance-2026-10-10.md)
 - [N2-01 固定快照查看验收](verification/version-workspace-2026-10-08.md)
 - [N2-02 固定版本语义比较验收](verification/semantic-comparison-2026-10-08.md)
