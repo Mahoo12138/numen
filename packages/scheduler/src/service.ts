@@ -4,6 +4,7 @@ import { AutomationArchivedError, AutomationNotFoundError, AutomationRevisionNot
 import { ConnectionBindingError, ConnectionRuntimeUnavailableError, type ConnectionService } from '@numenjs/connections'
 import {
   capabilityKey,
+  isSupportedAutomationVersion,
   resolveAutomationInputs,
   isNumenValue,
   isResourceRef,
@@ -11,8 +12,10 @@ import {
   type AutomationExecutionSnapshot,
   type CancellationReason,
   type ContractSnapshotCapability,
+  type ControlSource,
   type CoreInstruction,
   type Execution,
+  type GraphEdge,
   type NumenValue,
   type Run,
   type RunEvent,
@@ -106,9 +109,19 @@ export interface RunInstructionExecutionSummary {
   latestUpdatedAt: string
 }
 
+export interface RunGraphMemberSummary {
+  scopeExecutionId: string
+  nodeId: string
+  executionId?: string
+  status: Execution['status'] | 'PENDING' | 'SKIPPED'
+  blockedReason?: string
+  updatedAt: string
+}
+
 export interface RunInspection {
   context: EvaluationBindings
   instructionExecutions: RunInstructionExecutionSummary[]
+  graphMembers: RunGraphMemberSummary[]
 }
 
 interface RunRow {
@@ -147,6 +160,49 @@ interface ExecutionRow {
   generation: number
   created_at: string
   updated_at: string
+}
+
+interface GraphMemberRow {
+  scope_execution_id: string
+  node_id: string
+  execution_id: string | null
+  skipped: number
+  updated_at: string
+  status: Execution['status'] | null
+  output_json: string | null
+  blocked_reason: string | null
+}
+
+type GraphScopeInstruction = Extract<CoreInstruction, { op: 'graph_scope' }>
+type GraphEdgeValue = { state: 'pending' | 'skipped' } | { state: 'completed'; value: NumenValue }
+
+const structuredInstructionOps = new Set(['invoke', 'eval', 'branch', 'suspend', 'fork', 'iterate', 'scope_complete', 'join', 'complete', 'fail'])
+const graphInstructionOps = new Set(['graph_scope', 'graph_condition', 'graph_merge'])
+
+function assertSupportedSnapshot(snapshot: AutomationExecutionSnapshot): void {
+  if (!isSupportedAutomationVersion(snapshot.protocolVersion, snapshot.irVersion)
+    || snapshot.compiledPlan.irVersion !== snapshot.irVersion) {
+    throw new Error(`unsupported execution snapshot protocol/IR ${snapshot.protocolVersion}/${snapshot.irVersion}/${snapshot.compiledPlan.irVersion}`)
+  }
+  for (const instruction of Object.values(snapshot.compiledPlan.instructions)) {
+    if (!instruction || (!structuredInstructionOps.has(instruction.op)
+      && !(snapshot.irVersion === 2 && graphInstructionOps.has(instruction.op)))) {
+      throw new Error(`unsupported execution instruction ${instruction?.op} for IR ${snapshot.irVersion}`)
+    }
+  }
+  if (snapshot.irVersion === 1) {
+    const pending: ControlSource[] = [snapshot.source.flow]
+    while (pending.length) {
+      const control = pending.pop()!
+      switch (control.type) {
+        case 'graph': throw new Error('Graph source requires protocol/IR 2')
+        case 'block': pending.push(...control.steps); break
+        case 'if': pending.push(control.then); if (control.else) pending.push(control.else); break
+        case 'parallel': case 'race': pending.push(...control.branches); break
+        case 'foreach': pending.push(control.body); break
+      }
+    }
+  }
 }
 
 interface AttemptRow {
@@ -316,6 +372,7 @@ export class SchedulerService extends Service {
     this.recoverCancellations()
     this.recoverInterruptedWork()
     this.recoverStructuredScopes()
+    this.reconcileGraphScopes()
     this.ready = true
     let timer: NodeJS.Timeout | undefined
     if (this.autoDispatch) {
@@ -637,6 +694,7 @@ export class SchedulerService extends Service {
     return {
       context: this.createBindings(run),
       instructionExecutions: [...summaries.values()],
+      graphMembers: this.listGraphMembers(runId),
     }
   }
 
@@ -734,6 +792,26 @@ export class SchedulerService extends Service {
       WHERE executions.run_id = ? AND executions.id = ? AND attempts.id = ?
     `).get(runId, executionId, attemptId) as AttemptRow | undefined
     return row ? { id: row.id, executionId: row.execution_id, number: row.number, status: row.status } : undefined
+  }
+
+  listGraphMembers(runId: string): RunGraphMemberSummary[] {
+    const rows = this.ctx.database.db.prepare(`
+      SELECT members.*, child.status, child.blocked_reason,
+        child.updated_at AS execution_updated_at, scope.status AS scope_status,
+        scope.updated_at AS scope_updated_at
+      FROM graph_members AS members
+      JOIN executions AS scope ON scope.id = members.scope_execution_id
+      LEFT JOIN executions AS child ON child.id = members.execution_id
+      WHERE scope.run_id = ? ORDER BY scope.created_at, scope.id, members.node_id
+    `).all(runId) as Array<GraphMemberRow & { execution_updated_at: string | null; scope_status: Execution['status']; scope_updated_at: string }>
+    return rows.map(row => ({
+      scopeExecutionId: row.scope_execution_id,
+      nodeId: row.node_id,
+      ...(row.execution_id ? { executionId: row.execution_id } : {}),
+      status: row.skipped ? 'SKIPPED' : row.status ?? (['CANCELLED', 'FAILED', 'TIMED_OUT'].includes(row.scope_status) ? 'CANCELLED' : 'PENDING'),
+      ...(row.blocked_reason ? { blockedReason: row.blocked_reason } : {}),
+      updatedAt: row.execution_updated_at ?? (row.skipped ? row.updated_at : row.scope_updated_at),
+    }))
   }
 
   listExecutions(runId: string): Execution[] {
@@ -893,8 +971,9 @@ export class SchedulerService extends Service {
       const cancelled = this.reconcileCancellations()
       const resumed = this.resumeDueTimers()
       const unblocked = this.reconcileBlockedExecutions()
-      if (cancelled || resumed || unblocked) {
-        transitions += cancelled + resumed + unblocked
+      const graphs = this.reconcileGraphScopes()
+      if (cancelled || resumed || unblocked || graphs) {
+        transitions += cancelled + resumed + unblocked + graphs
         progressed = true
       }
       if (this.admitOneRun()) {
@@ -1001,6 +1080,10 @@ export class SchedulerService extends Service {
       this.failQueuedRun(row.id, { code: 'REVISION_MISSING', revisionId: row.revision_id })
       return true
     }
+    try { assertSupportedSnapshot(revision) } catch (error) {
+      this.failQueuedRun(row.id, errorValue(error))
+      return true
+    }
     const now = new Date().toISOString()
     return this.ctx.database.transaction(() => {
       const result = this.ctx.database.db.prepare(`
@@ -1049,16 +1132,39 @@ export class SchedulerService extends Service {
   }
 
   private createBindings(run: Run, execution?: Execution): EvaluationBindings {
-    const steps: Record<string, NumenValue> = {}
-    const rows = this.ctx.database.db.prepare(`
+    const steps: Record<string, NumenValue> = Object.create(null)
+    const revision = execution ? this.ctx.automations.getExecutionSnapshot(run.revisionId) : undefined
+    const parent = execution?.scopeExecutionId ? this.getExecutionRow(execution.scopeExecutionId) : undefined
+    const ownInstruction = execution ? revision?.compiledPlan.instructions[execution.instructionId] : undefined
+    const parentInstruction = parent ? revision?.compiledPlan.instructions[parent.instruction_id] : undefined
+    const graph = ownInstruction?.op === 'graph_scope' ? ownInstruction
+      : parentInstruction?.op === 'graph_scope' ? parentInstruction : undefined
+    const graphExecutionId = ownInstruction?.op === 'graph_scope' ? execution?.id : graph ? parent?.id : undefined
+    const allowed = graph && execution && ownInstruction?.op !== 'graph_scope' ? new Set<string>() : undefined
+    if (graph && execution && allowed) {
+      const visit = (nodeId: string) => {
+        for (const edge of graph.edges) {
+          if (edge.to.nodeId !== nodeId || edge.from.nodeId === graph.id || allowed.has(edge.from.nodeId)) continue
+          allowed.add(edge.from.nodeId)
+          visit(edge.from.nodeId)
+        }
+      }
+      visit(execution.instructionId)
+    }
+    const rows = graphExecutionId ? this.ctx.database.db.prepare(`
+      SELECT child.instruction_id, child.output_json FROM graph_members AS member
+      JOIN executions AS child ON child.id = member.execution_id
+      WHERE member.scope_execution_id = ? AND child.status = 'COMPLETED' AND child.output_json IS NOT NULL
+      ORDER BY child.created_at, child.id
+    `).all(graphExecutionId) as Array<{ instruction_id: string; output_json: string }> : this.ctx.database.db.prepare(`
       SELECT instruction_id, output_json FROM executions
       WHERE run_id = ? AND status = 'COMPLETED' AND output_json IS NOT NULL
       ORDER BY created_at, id
     `).all(run.id) as Array<{ instruction_id: string; output_json: string }>
     for (const row of rows) {
-      if (!row.instruction_id.startsWith('__')) steps[row.instruction_id] = parseJson(row.output_json)
+      if (!row.instruction_id.startsWith('__') && (!allowed || allowed.has(row.instruction_id))) steps[row.instruction_id] = parseJson(row.output_json)
     }
-    if (execution) {
+    if (execution && !graph) {
       const ancestors = this.ctx.database.db.prepare(`
         WITH RECURSIVE ancestors(id, parent_execution_id, instruction_id, output_json, status, depth) AS (
           SELECT id, parent_execution_id, instruction_id, output_json, status, 0
@@ -1100,6 +1206,7 @@ export class SchedulerService extends Service {
   private async execute(execution: Execution): Promise<void> {
     try {
       const { run, revision, instruction } = this.getRevisionForExecution(execution)
+      assertSupportedSnapshot(revision)
       const bindings = this.createBindings(run, execution)
       switch (instruction.op) {
         case 'invoke': {
@@ -1110,6 +1217,18 @@ export class SchedulerService extends Service {
           await this.invokeCapability(execution, instruction, bindings, contract)
           break
         }
+        case 'graph_scope':
+          this.beginGraphScope(execution, instruction)
+          break
+        case 'graph_condition': {
+          const condition = evaluateExpression(instruction.condition, bindings)
+          if (typeof condition !== 'boolean') throw new Error('graph condition must evaluate to boolean')
+          this.completeInternal(execution, undefined, condition)
+          break
+        }
+        case 'graph_merge':
+          this.completeInternal(execution, undefined, this.graphMergeOutput(execution, instruction))
+          break
         case 'branch': {
           const condition = evaluateExpression(instruction.condition, bindings)
           if (typeof condition !== 'boolean') throw new Error('branch condition must evaluate to boolean')
@@ -1185,14 +1304,16 @@ export class SchedulerService extends Service {
     const attemptId = id('attempt')
     let attemptNumber = 0
     const now = new Date().toISOString()
-    const claimed = this.ctx.database.transaction(() => {
+    const claimedGeneration = this.ctx.database.transaction(() => {
+      if (!this.executionAcceptsWork(execution, 'RUNNABLE')) return
       const result = this.ctx.database.db.prepare(`
         UPDATE executions
         SET status = 'RUNNING', resolved_input_json = ?, blocked_reason = NULL,
             generation = generation + 1, updated_at = ?
-        WHERE id = ? AND status = 'RUNNABLE'
-      `).run(JSON.stringify(resolvedInput), now, execution.id)
-      if (!result.changes) return false
+        WHERE id = ? AND status = 'RUNNABLE' AND generation = ?
+        RETURNING generation
+      `).get(JSON.stringify(resolvedInput), now, execution.id, execution.generation) as { generation: number } | undefined
+      if (!result) return
       const { number } = this.ctx.database.db.prepare(`
         SELECT COALESCE(MAX(number), 0) + 1 AS number FROM attempts WHERE execution_id = ?
       `).get(execution.id) as { number: number }
@@ -1203,9 +1324,10 @@ export class SchedulerService extends Service {
         ) VALUES (?, ?, ?, 'RUNNING', ?, ?)
       `).run(attemptId, execution.id, number, capabilityKey(instruction.capability), now)
       this.appendEvent(execution.runId, 'AttemptStarted', { attemptId, executionId: execution.id, number }, now)
-      return true
+      return result.generation
     })
-    if (!claimed) return
+    if (claimedGeneration === undefined) return
+    const invocation = { ...execution, generation: claimedGeneration }
 
     const run = this.getRun(execution.runId)
     const logMetadata = {
@@ -1226,13 +1348,14 @@ export class SchedulerService extends Service {
         })), controller, timeoutMs)
       const validatedOutput = status.definition.output(output)
       if (!isNumenValue(validatedOutput)) throw new Error('capability output is not a Numen value')
-      this.completeInvocation(execution, attemptId, instruction.next, validatedOutput)
-      withLogContext(logMetadata, () => this.ctx.logger('scheduler').info('Attempt completed'))
+      if (this.completeInvocation(invocation, attemptId, instruction.next, validatedOutput)) {
+        withLogContext(logMetadata, () => this.ctx.logger('scheduler').info('Attempt completed'))
+      }
     } catch (error) {
       if (error instanceof InvocationCancelledError) return
       const timedOut = error instanceof InvocationTimeoutError
-      this.settleFailedInvocation(
-        execution,
+      const accepted = this.settleFailedInvocation(
+        invocation,
         attemptId,
         attemptNumber,
         instruction,
@@ -1240,7 +1363,7 @@ export class SchedulerService extends Service {
         timedOut ? 'TIMED_OUT' : 'FAILED',
         errorValue(error),
       )
-      withLogContext(logMetadata, () => this.ctx.logger('scheduler').warn(timedOut ? 'Attempt timed out' : 'Attempt failed'))
+      if (accepted) withLogContext(logMetadata, () => this.ctx.logger('scheduler').warn(timedOut ? 'Attempt timed out' : 'Attempt failed'))
     } finally {
       this.activeInvocations.delete(execution.id)
     }
@@ -1278,20 +1401,54 @@ export class SchedulerService extends Service {
     }
   }
 
-  private completeInvocation(execution: Execution, attemptId: string, next: string | undefined, output: NumenValue): void {
+  /** Called under an immediate transaction before claiming or accepting an invocation. */
+  private executionAcceptsWork(execution: Execution, status: 'RUNNABLE' | 'RUNNING'): boolean {
+    const row = this.ctx.database.db.prepare(`
+      WITH RECURSIVE scopes(id, scope_execution_id, status, run_id) AS (
+        SELECT parent.id, parent.scope_execution_id, parent.status, parent.run_id
+        FROM executions AS child JOIN executions AS parent ON parent.id = child.scope_execution_id
+        WHERE child.id = ?
+        UNION
+        SELECT parent.id, parent.scope_execution_id, parent.status, parent.run_id
+        FROM executions AS parent JOIN scopes ON parent.id = scopes.scope_execution_id
+      )
+      SELECT 1 FROM executions AS current JOIN runs ON runs.id = current.run_id
+      WHERE current.id = ? AND current.run_id = ? AND current.status = ? AND current.generation = ?
+        AND runs.status = 'RUNNING'
+        AND NOT EXISTS (SELECT 1 FROM scopes WHERE run_id != current.run_id
+          OR status NOT IN ('RUNNABLE', 'RUNNING', 'WAITING', 'BLOCKED'))
+    `).get(execution.id, execution.id, execution.runId, status, execution.generation)
+    return !!row
+  }
+
+  private invocationAcceptsResult(execution: Execution, attemptId: string): boolean {
+    if (!this.executionAcceptsWork(execution, 'RUNNING')) return false
+    return !!this.ctx.database.db.prepare(`
+      SELECT 1 FROM attempts
+      WHERE id = ? AND execution_id = ? AND status = 'RUNNING'
+        AND number = (SELECT MAX(number) FROM attempts WHERE execution_id = ?)
+    `).get(attemptId, execution.id, execution.id)
+  }
+
+  private completeInvocation(execution: Execution, attemptId: string, next: string | undefined, output: NumenValue): boolean {
     const now = new Date().toISOString()
-    this.ctx.database.transaction(() => {
-      this.ctx.database.db.prepare(`
-        UPDATE attempts SET status = 'SUCCEEDED', finished_at = ? WHERE id = ? AND status = 'RUNNING'
-      `).run(now, attemptId)
+    return this.ctx.database.transaction(() => {
+      if (!this.invocationAcceptsResult(execution, attemptId)) return false
+      const attempt = this.ctx.database.db.prepare(`
+        UPDATE attempts SET status = 'SUCCEEDED', finished_at = ?
+        WHERE id = ? AND execution_id = ? AND status = 'RUNNING'
+      `).run(now, attemptId, execution.id)
+      if (!attempt.changes) return false
       const result = this.ctx.database.db.prepare(`
         UPDATE executions SET status = 'COMPLETED', output_json = ?, updated_at = ?
-        WHERE id = ? AND status = 'RUNNING'
-      `).run(JSON.stringify(output), now, execution.id)
-      if (!result.changes) return
+        WHERE id = ? AND status = 'RUNNING' AND generation = ?
+      `).run(JSON.stringify(output), now, execution.id, execution.generation)
+      // A missed Execution CAS must also roll back the Attempt transition.
+      if (!result.changes) throw new Error('invocation generation changed during completion')
       this.commitOutputResources(execution, output)
       this.appendEvent(execution.runId, 'ExecutionCompleted', { executionId: execution.id, output }, now)
       if (next) this.createSuccessor(execution, next)
+      return true
     })
   }
 
@@ -1303,34 +1460,34 @@ export class SchedulerService extends Service {
     retrySafe: boolean,
     attemptStatus: 'FAILED' | 'TIMED_OUT',
     error: NumenValue,
-  ): void {
+  ): boolean {
     const now = new Date().toISOString()
     const retry = instruction.policy?.retry
     const canRetry = retrySafe && attemptNumber < (retry?.maxAttempts ?? 1)
     const outcomeUnknown = attemptStatus === 'TIMED_OUT' && !retrySafe
     const attemptEvent = attemptStatus === 'TIMED_OUT' ? 'AttemptTimedOut' : 'AttemptFailed'
-    this.ctx.database.transaction(() => {
+    return this.ctx.database.transaction(() => {
+      if (!this.invocationAcceptsResult(execution, attemptId)) return false
       const attemptResult = this.ctx.database.db.prepare(`
         UPDATE attempts SET status = ?, error_json = ?, finished_at = ?
-        WHERE id = ? AND status = 'RUNNING'
-      `).run(attemptStatus, JSON.stringify(error), now, attemptId)
-      if (!attemptResult.changes) return
+        WHERE id = ? AND execution_id = ? AND status = 'RUNNING'
+      `).run(attemptStatus, JSON.stringify(error), now, attemptId, execution.id)
+      if (!attemptResult.changes) return false
       this.appendEvent(execution.runId, attemptEvent, { attemptId, executionId: execution.id, error }, now)
 
       if (outcomeUnknown) {
         const result = this.ctx.database.db.prepare(`
           UPDATE executions
           SET status = 'BLOCKED', blocked_reason = 'OUTCOME_UNKNOWN', output_json = ?, updated_at = ?
-          WHERE id = ? AND status = 'RUNNING'
-        `).run(JSON.stringify(error), now, execution.id)
-        if (result.changes) {
-          this.appendEvent(execution.runId, 'ExecutionBlocked', {
-            executionId: execution.id,
-            reason: 'OUTCOME_UNKNOWN',
-            details: { attemptId, error },
-          }, now)
-        }
-        return
+          WHERE id = ? AND status = 'RUNNING' AND generation = ?
+        `).run(JSON.stringify(error), now, execution.id, execution.generation)
+        if (!result.changes) throw new Error('invocation generation changed during failure settlement')
+        this.appendEvent(execution.runId, 'ExecutionBlocked', {
+          executionId: execution.id,
+          reason: 'OUTCOME_UNKNOWN',
+          details: { attemptId, error },
+        }, now)
+        return true
       }
 
       if (canRetry) {
@@ -1339,25 +1496,24 @@ export class SchedulerService extends Service {
         const result = this.ctx.database.db.prepare(`
           UPDATE executions
           SET status = 'WAITING', blocked_reason = 'RETRY_BACKOFF', wake_at = ?, output_json = ?, updated_at = ?
-          WHERE id = ? AND status = 'RUNNING'
-        `).run(wakeAt, JSON.stringify(error), now, execution.id)
-        if (result.changes) {
-          this.appendEvent(execution.runId, 'ExecutionRetryScheduled', {
-            executionId: execution.id,
-            attemptId,
-            nextAttempt: attemptNumber + 1,
-            wakeAt,
-          }, now)
-        }
-        return
+          WHERE id = ? AND status = 'RUNNING' AND generation = ?
+        `).run(wakeAt, JSON.stringify(error), now, execution.id, execution.generation)
+        if (!result.changes) throw new Error('invocation generation changed during failure settlement')
+        this.appendEvent(execution.runId, 'ExecutionRetryScheduled', {
+          executionId: execution.id,
+          attemptId,
+          nextAttempt: attemptNumber + 1,
+          wakeAt,
+        }, now)
+        return true
       }
 
       const executionStatus = attemptStatus === 'TIMED_OUT' ? 'TIMED_OUT' : 'FAILED'
       const result = this.ctx.database.db.prepare(`
         UPDATE executions SET status = ?, output_json = ?, updated_at = ?
-        WHERE id = ? AND status = 'RUNNING'
-      `).run(executionStatus, JSON.stringify(error), now, execution.id)
-      if (!result.changes) return
+        WHERE id = ? AND status = 'RUNNING' AND generation = ?
+      `).run(executionStatus, JSON.stringify(error), now, execution.id, execution.generation)
+      if (!result.changes) throw new Error('invocation generation changed during failure settlement')
       const runFailed = this.handleStructuredFailure(execution, now, error)
       if (runFailed) {
         this.ctx.database.db.prepare(`
@@ -1370,6 +1526,7 @@ export class SchedulerService extends Service {
         error,
       }, now)
       if (runFailed) this.appendEvent(execution.runId, 'RunFailed', { executionId: execution.id, error }, now)
+      return true
     })
   }
 
@@ -1701,6 +1858,215 @@ export class SchedulerService extends Service {
     }
   }
 
+  private graphMemberRows(scopeExecutionId: string): Map<string, GraphMemberRow> {
+    const rows = this.ctx.database.db.prepare(`
+      SELECT members.*, child.status, child.output_json, child.blocked_reason
+      FROM graph_members AS members LEFT JOIN executions AS child ON child.id = members.execution_id
+      WHERE members.scope_execution_id = ? ORDER BY members.node_id
+    `).all(scopeExecutionId) as GraphMemberRow[]
+    return new Map(rows.map(row => [row.node_id, row]))
+  }
+
+  private validateGraphScope(instruction: GraphScopeInstruction, revision: AutomationExecutionSnapshot): void {
+    if (instruction.version !== 1) throw new Error('unsupported graph scope version')
+    const members = new Set(instruction.members)
+    if (members.size !== instruction.members.length || members.has(instruction.id)) throw new Error('invalid graph members')
+    for (const member of members) {
+      const node = revision.compiledPlan.instructions[member]
+      if (!node || !['invoke', 'graph_condition', 'graph_merge'].includes(node.op)) throw new Error('invalid graph member instruction')
+      if (node.op === 'invoke' && node.next !== undefined) throw new Error('graph member cannot have a sequential successor')
+      if (node.op === 'graph_merge' && (new Set(node.inputs).size !== node.inputs.length || !node.inputs.length)) throw new Error('invalid graph merge inputs')
+    }
+    const edgeIds = new Set<string>()
+    const destinations = new Set<string>()
+    for (const edge of instruction.edges) {
+      if (edgeIds.has(edge.id)) throw new Error('duplicate graph edge')
+      edgeIds.add(edge.id)
+      const target = revision.compiledPlan.instructions[edge.to.nodeId]
+      if (!members.has(edge.to.nodeId) || !target) throw new Error('invalid graph edge target')
+      const source = revision.compiledPlan.instructions[edge.from.nodeId]
+      const start = edge.from.nodeId === instruction.id && edge.from.port === 'start'
+      if (!start && (!members.has(edge.from.nodeId) || !source
+        || (source.op === 'graph_condition' ? !['true', 'false'].includes(edge.from.port) : edge.from.port !== 'out'))) throw new Error('invalid graph edge source')
+      if (target.op === 'graph_merge') {
+        const destination = JSON.stringify([edge.to.nodeId, edge.to.port])
+        if (start || !target.inputs.includes(edge.to.port) || destinations.has(destination)) throw new Error('invalid graph merge edge')
+        destinations.add(destination)
+      } else if (edge.to.port !== 'in') throw new Error('invalid graph input port')
+    }
+    for (const member of members) {
+      const incoming = instruction.edges.filter(edge => edge.to.nodeId === member)
+      const node = revision.compiledPlan.instructions[member]!
+      if (!incoming.length || (node.op === 'graph_merge' && incoming.length !== node.inputs.length)) throw new Error('graph member inputs are not connected')
+    }
+  }
+
+  private beginGraphScope(execution: Execution, instruction: GraphScopeInstruction): void {
+    const { revision } = this.getRevisionForExecution(execution)
+    this.validateGraphScope(instruction, revision)
+    const now = new Date().toISOString()
+    this.ctx.database.transaction(() => {
+      const result = this.ctx.database.db.prepare(`
+        UPDATE executions SET status = 'WAITING', blocked_reason = 'GRAPH_MEMBERS', updated_at = ?
+        WHERE id = ? AND status = 'RUNNABLE'
+          AND EXISTS (SELECT 1 FROM runs WHERE id = ? AND status = 'RUNNING')
+      `).run(now, execution.id, execution.runId)
+      if (!result.changes) return
+      const insert = this.ctx.database.db.prepare(`
+        INSERT INTO graph_members (scope_execution_id, node_id, created_at, updated_at) VALUES (?, ?, ?, ?)
+      `)
+      for (const member of instruction.members) insert.run(execution.id, member, now, now)
+      this.appendEvent(execution.runId, 'ExecutionGraphStarted', { executionId: execution.id, members: instruction.members }, now)
+    })
+  }
+
+  private graphEdgeValue(edge: GraphEdge, instruction: GraphScopeInstruction, members: Map<string, GraphMemberRow>, revision: AutomationExecutionSnapshot): GraphEdgeValue {
+    if (edge.from.nodeId === instruction.id && edge.from.port === 'start') return { state: 'completed', value: null }
+    const member = members.get(edge.from.nodeId)
+    if (!member) throw new Error('graph source member is missing')
+    if (member.skipped) return { state: 'skipped' }
+    if (member.status !== 'COMPLETED') return { state: 'pending' }
+    // SQL NULL means no result was persisted. JSON "null" is a completed value.
+    if (member.output_json === null) throw new Error('completed graph member has no persisted output')
+    const value = parseJson<NumenValue>(member.output_json)
+    if (revision.compiledPlan.instructions[edge.from.nodeId]?.op === 'graph_condition') {
+      if (typeof value !== 'boolean') throw new Error('persisted graph condition is not boolean')
+      if (edge.from.port !== String(value)) return { state: 'skipped' }
+    }
+    return { state: 'completed', value }
+  }
+
+  private graphMergeOutput(execution: Execution, instruction: Extract<CoreInstruction, { op: 'graph_merge' }>): NumenValue {
+    if (!execution.scopeExecutionId) throw new Error('graph merge scope missing')
+    const scopeRow = this.getExecutionRow(execution.scopeExecutionId)
+    if (!scopeRow) throw new Error('graph merge scope missing')
+    const { revision, instruction: scope } = this.getRevisionForExecution(mapExecution(scopeRow))
+    if (scope.op !== 'graph_scope') throw new Error('graph merge parent is not a graph scope')
+    const members = this.graphMemberRows(scopeRow.id)
+    const values = scope.edges.filter(edge => edge.to.nodeId === instruction.id)
+      .map(edge => ({ name: edge.to.port, result: this.graphEdgeValue(edge, scope, members, revision) }))
+    if (values.length !== instruction.inputs.length || values.some(value => value.result.state === 'pending')) throw new Error('graph merge inputs are not ready')
+    const completed = values.filter((value): value is { name: string; result: { state: 'completed'; value: NumenValue } } => value.result.state === 'completed')
+    if (instruction.mode === 'selected') {
+      if (completed.length !== 1) throw new Error('selected graph merge requires exactly one successful input')
+      return completed[0]!.result.value
+    }
+    if (completed.length !== values.length || new Set(completed.map(value => value.name)).size !== values.length) throw new Error('graph merge inputs are not uniquely complete')
+    return Object.fromEntries(completed.map(value => [value.name, value.result.value]))
+  }
+
+  private reconcileGraphScopes(): number {
+    const rows = this.ctx.database.db.prepare(`
+      SELECT executions.* FROM executions JOIN runs ON runs.id = executions.run_id
+      WHERE executions.status = 'WAITING' AND executions.blocked_reason = 'GRAPH_MEMBERS' AND runs.status = 'RUNNING'
+      ORDER BY executions.created_at, executions.id
+    `).all() as ExecutionRow[]
+    let transitions = 0
+    for (const row of rows) {
+      const execution = mapExecution(row)
+      try {
+        const { revision, instruction } = this.getRevisionForExecution(execution)
+        assertSupportedSnapshot(revision)
+        if (instruction.op !== 'graph_scope') throw new Error('graph scope instruction missing')
+        transitions += this.reconcileGraphScope(execution, instruction, revision)
+      } catch (error) {
+        this.failGraphScope(execution, errorValue(error))
+        transitions += 1
+      }
+    }
+    return transitions
+  }
+
+  private reconcileGraphScope(execution: Execution, instruction: GraphScopeInstruction, revision: AutomationExecutionSnapshot): number {
+    return this.ctx.database.transaction(() => {
+      const current = this.getExecutionRow(execution.id)
+      if (current?.status !== 'WAITING' || current.blocked_reason !== 'GRAPH_MEMBERS' || this.getRun(execution.runId)?.status !== 'RUNNING') return 0
+      this.validateGraphScope(instruction, revision)
+      const members = this.graphMemberRows(execution.id)
+      if (members.size !== instruction.members.length || instruction.members.some(member => !members.has(member))) throw new Error('persisted graph members do not match the immutable plan')
+      if ([...members.values()].some(member => member.status && ['FAILED', 'TIMED_OUT', 'CANCELLED'].includes(member.status))) throw new Error('graph child terminated unsuccessfully')
+      const now = new Date().toISOString()
+      let transitions = 0
+      let changed = true
+      while (changed) {
+        changed = false
+        for (const [nodeId, member] of members) {
+          if (member.skipped || member.execution_id) continue
+          const node = revision.compiledPlan.instructions[nodeId]!
+          const incoming = instruction.edges.filter(edge => edge.to.nodeId === nodeId)
+          const values = incoming.map(edge => this.graphEdgeValue(edge, instruction, members, revision))
+          let skip: boolean
+          if (node.op === 'graph_merge' && node.mode === 'selected') {
+            if (values.some(value => value.state === 'pending')) continue
+            const completed = values.filter(value => value.state === 'completed').length
+            if (completed > 1) throw new Error('selected graph merge received multiple successful inputs')
+            skip = completed === 0
+          } else {
+            skip = values.some(value => value.state === 'skipped')
+            if (!skip && values.some(value => value.state === 'pending')) continue
+          }
+          if (skip) {
+            const result = this.ctx.database.db.prepare(`
+              UPDATE graph_members SET skipped = 1, updated_at = ?
+              WHERE scope_execution_id = ? AND node_id = ? AND skipped = 0 AND execution_id IS NULL
+            `).run(now, execution.id, nodeId)
+            if (!result.changes) continue
+            member.skipped = 1
+            this.appendEvent(execution.runId, 'GraphMemberSkipped', { scopeExecutionId: execution.id, nodeId }, now)
+          } else {
+            // Unique member identity and its Execution are committed in one immediate transaction.
+            const childId = this.createExecution(execution.runId, nodeId, execution.id, execution.id, undefined, execution.loopItem, execution.loopIndex)
+            const result = this.ctx.database.db.prepare(`
+              UPDATE graph_members SET execution_id = ?, updated_at = ?
+              WHERE scope_execution_id = ? AND node_id = ? AND skipped = 0 AND execution_id IS NULL
+            `).run(childId, now, execution.id, nodeId)
+            if (!result.changes) throw new Error('graph member was already dispatched')
+            member.execution_id = childId
+            member.status = 'RUNNABLE'
+          }
+          changed = true
+          transitions += 1
+        }
+      }
+      const remaining = [...members.values()].filter(member => !member.skipped && member.status !== 'COMPLETED')
+      if (remaining.length) {
+        if (remaining.every(member => member.execution_id === null)) throw new Error('graph dependencies cannot become ready')
+        return transitions
+      }
+      const output = instruction.output ? evaluateExpression(instruction.output, this.createBindings(this.getRun(execution.runId)!, execution)) : null
+      const completed = this.ctx.database.db.prepare(`
+        UPDATE executions SET status = 'COMPLETED', blocked_reason = NULL, output_json = ?, updated_at = ?
+        WHERE id = ? AND status = 'WAITING' AND blocked_reason = 'GRAPH_MEMBERS'
+      `).run(JSON.stringify(output), now, execution.id)
+      if (!completed.changes) return transitions
+      this.commitOutputResources(execution, output)
+      this.appendEvent(execution.runId, 'ExecutionGraphCompleted', { executionId: execution.id, output }, now)
+      if (instruction.next) this.createSuccessor(execution, instruction.next)
+      else {
+        this.ctx.database.db.prepare(`UPDATE runs SET status = 'COMPLETED', finished_at = ? WHERE id = ? AND status = 'RUNNING'`).run(now, execution.runId)
+        this.appendEvent(execution.runId, 'RunCompleted', { output }, now)
+      }
+      return transitions + 1
+    })
+  }
+
+  private failGraphScope(execution: Execution, error: NumenValue): void {
+    const now = new Date().toISOString()
+    this.ctx.database.transaction(() => {
+      const result = this.ctx.database.db.prepare(`
+        UPDATE executions SET status = 'FAILED', blocked_reason = NULL, output_json = ?, updated_at = ?
+        WHERE id = ? AND status = 'WAITING' AND blocked_reason = 'GRAPH_MEMBERS'
+      `).run(JSON.stringify(error), now, execution.id)
+      if (!result.changes) return
+      this.cancelScopeExecutions(execution.id, execution.runId, 'PARENT', now)
+      this.appendEvent(execution.runId, 'ExecutionGraphFailed', { executionId: execution.id, error }, now)
+      if (this.handleStructuredFailure(execution, now, error)) {
+        this.ctx.database.db.prepare(`UPDATE runs SET status = 'FAILED', finished_at = ? WHERE id = ? AND status = 'RUNNING'`).run(now, execution.runId)
+        this.appendEvent(execution.runId, 'RunFailed', { executionId: execution.id, error }, now)
+      }
+    })
+  }
+
   private createSuccessor(execution: Execution, instructionId: string): string {
     return this.createExecution(
       execution.runId,
@@ -1994,6 +2360,15 @@ export class SchedulerService extends Service {
           error,
         }, now)
       }
+      return this.handleStructuredFailure(fork, now, error)
+    }
+    if (instruction.op === 'graph_scope') {
+      this.cancelScopeExecutions(fork.id, execution.runId, 'PARENT', now)
+      this.ctx.database.db.prepare(`
+        UPDATE executions SET status = 'FAILED', blocked_reason = NULL, output_json = ?, updated_at = ?
+        WHERE id = ? AND status IN ('RUNNABLE', 'RUNNING', 'WAITING', 'BLOCKED')
+      `).run(JSON.stringify(error), now, fork.id)
+      this.appendEvent(execution.runId, 'ExecutionGraphFailed', { executionId: fork.id, failedExecutionId: execution.id, error }, now)
       return this.handleStructuredFailure(fork, now, error)
     }
     if (instruction.op !== 'fork') return true

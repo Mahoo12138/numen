@@ -22,7 +22,7 @@ describe('DatabaseService', () => {
       db.prepare('INSERT INTO connections (id, name, adapter_id, adapter_version, config_json, enabled, generation, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 0, 1, ?, ?)')
         .run('conn_existing', 'Existing', 'legacy:adapter', 2, '{}', 'now', 'now')
       const before = db.prepare('SELECT * FROM automation_drafts').get()
-      expect(runMigrations(db)).toBe(3)
+      expect(runMigrations(db)).toBe(4)
       expect(db.prepare('SELECT * FROM automation_drafts').get()).toEqual(before)
       expect(db.prepare('SELECT COUNT(*) AS count FROM automation_draft_copy_requests').get()).toEqual({ count: 0 })
       expect(db.prepare('SELECT COUNT(*) AS count FROM manual_run_requests').get()).toEqual({ count: 0 })
@@ -54,7 +54,8 @@ describe('DatabaseService', () => {
     expect(tables).toContain('resource_owners')
     expect(tables).toContain('resource_leases')
     expect(tables).toContain('execution_iterations')
-    expect(root.database.health()).toMatchObject({ ready: true, migrationVersion: 15 })
+    expect(tables).toContain('graph_members')
+    expect(root.database.health()).toMatchObject({ ready: true, migrationVersion: 16 })
     expect(runMigrations(root.database.db)).toBe(0)
 
     await root.fiber.dispose()
@@ -65,7 +66,7 @@ describe('DatabaseService', () => {
     await root.plugin(DatabaseService, { path: ':memory:' })
 
     expect(() => runMigrations(root.database.db, [{
-      version: 16,
+      version: 17,
       name: 'broken',
       up(database) {
         database.exec('CREATE TABLE should_rollback (id TEXT);')

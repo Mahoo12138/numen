@@ -4,6 +4,7 @@ import { coreMigrations, runMigrations, type Migration } from '../src/migrations
 import { captureDraftTestV14Rows, draftTestV14Ids as ids, populateDraftTestV14Fixture } from './fixtures/draft-test-v14.js'
 
 const legacyMigrations = coreMigrations.filter(migration => migration.version <= 14)
+const snapshotMigrations = coreMigrations.filter(migration => migration.version <= 15)
 const snapshotMigration = coreMigrations.find(migration => migration.version === 15)!
 
 function legacyRows(database: Database.Database) {
@@ -33,8 +34,8 @@ describe('Draft test execution snapshot migration', () => {
     const database = new Database(':memory:')
     try {
       database.pragma('foreign_keys = ON')
-      expect(runMigrations(database)).toBe(15)
-      expect(runMigrations(database)).toBe(0)
+      expect(runMigrations(database, snapshotMigrations)).toBe(15)
+      expect(runMigrations(database, snapshotMigrations)).toBe(0)
       expect(database.pragma('foreign_keys', { simple: true })).toBe(1)
       expect(database.pragma('foreign_key_check')).toEqual([])
       const number = (database.pragma('table_info(automation_revisions)') as Array<{ name: string; notnull: number }>).find(column => column.name === 'number')
@@ -51,7 +52,7 @@ describe('Draft test execution snapshot migration', () => {
       const indexes = database.prepare("SELECT name, tbl_name, sql FROM sqlite_schema WHERE type = 'index' ORDER BY name").all()
       const runForeignKeys = database.pragma('foreign_key_list(runs)')
       const triggerForeignKeys = database.pragma('foreign_key_list(trigger_events)')
-      expect(runMigrations(database)).toBe(1)
+      expect(runMigrations(database, snapshotMigrations)).toBe(1)
       expect(legacyRows(database)).toEqual(before)
       expect(database.prepare('SELECT purpose, source_draft_version, base_revision_id FROM automation_revisions').all())
         .toEqual(Array.from({ length: 3 }, () => ({ purpose: 'published', source_draft_version: null, base_revision_id: null })))
@@ -62,7 +63,7 @@ describe('Draft test execution snapshot migration', () => {
       expect(database.pragma('foreign_key_check')).toEqual([])
       expect(database.pragma('integrity_check', { simple: true })).toBe('ok')
       const migrated = captureDraftTestV14Rows(database)
-      expect(runMigrations(database)).toBe(0)
+      expect(runMigrations(database, snapshotMigrations)).toBe(0)
       expect(captureDraftTestV14Rows(database)).toEqual(migrated)
     } finally { database.close() }
   })
@@ -82,7 +83,7 @@ describe('Draft test execution snapshot migration', () => {
       const revision = database.prepare('SELECT * FROM automation_revisions').get()
       const draft = database.prepare('SELECT * FROM automation_drafts').get()
       const run = database.prepare('SELECT * FROM runs').get()
-      expect(runMigrations(database)).toBe(3)
+      expect(runMigrations(database, snapshotMigrations)).toBe(3)
       expect(database.prepare('SELECT * FROM automation_revisions').get()).toEqual({ ...revision as object, purpose: 'published', source_draft_version: null, base_revision_id: null })
       expect(database.prepare('SELECT * FROM automation_drafts').get()).toEqual(draft)
       expect(database.prepare('SELECT * FROM runs').get()).toEqual(run)
@@ -94,7 +95,7 @@ describe('Draft test execution snapshot migration', () => {
     const database = new Database(':memory:')
     try {
       populateDraftTestV14Fixture(database)
-      runMigrations(database)
+      runMigrations(database, snapshotMigrations)
       insertSnapshot(database, 'snapshot_first', {})
       insertSnapshot(database, 'snapshot_second', {})
       const invalid = [
@@ -137,7 +138,7 @@ describe('Draft test execution snapshot migration', () => {
       expect(database.pragma('foreign_key_check')).toEqual([])
       if (failure === 'legacy-constraint') database.prepare('UPDATE automation_revisions SET number = 1 WHERE id = ?').run(ids.revision1)
       if (failure === 'marker') database.exec('DROP TRIGGER fail_snapshot_marker')
-      expect(runMigrations(database)).toBe(1)
+      expect(runMigrations(database, snapshotMigrations)).toBe(1)
       expect(database.pragma('foreign_key_check')).toEqual([])
     } finally { database.close() }
   })
@@ -146,7 +147,7 @@ describe('Draft test execution snapshot migration', () => {
     const database = new Database(':memory:')
     try {
       populateDraftTestV14Fixture(database)
-      runMigrations(database)
+      runMigrations(database, snapshotMigrations)
       const before = captureDraftTestV14Rows(database)
       expect(() => runMigrations(database, legacyMigrations)).toThrow('unsupported database schema version 15')
       expect(captureDraftTestV14Rows(database)).toEqual(before)
@@ -166,12 +167,12 @@ describe('Draft test execution snapshot migration', () => {
         return originalPrepare(sql)
       })
       try {
-        expect(() => runMigrations(database)).toThrow(`requires SQLite 3.53 or later; found ${version}`)
+        expect(() => runMigrations(database, snapshotMigrations)).toThrow(`requires SQLite 3.53 or later; found ${version}`)
       } finally { spy.mockRestore() }
       expect(captureDraftTestV14Rows(database)).toEqual(before)
       expect(schema(database)).toEqual(beforeSchema)
       expect(database.pragma('foreign_keys', { simple: true })).toBe(1)
-      expect(runMigrations(database)).toBe(1)
+      expect(runMigrations(database, snapshotMigrations)).toBe(1)
     } finally { database.close() }
   })
 })

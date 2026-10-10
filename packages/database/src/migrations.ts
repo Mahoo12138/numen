@@ -380,6 +380,24 @@ export const coreMigrations: readonly Migration[] = [
       `)
     },
   },
+  {
+    version: 16,
+    name: 'durable-graph-members',
+    up(database) {
+      database.exec(`
+        CREATE TABLE graph_members (
+          scope_execution_id TEXT NOT NULL REFERENCES executions(id) ON DELETE CASCADE,
+          node_id TEXT NOT NULL,
+          execution_id TEXT UNIQUE REFERENCES executions(id) ON DELETE CASCADE,
+          skipped INTEGER NOT NULL DEFAULT 0 CHECK (skipped IN (0, 1)),
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY (scope_execution_id, node_id),
+          CHECK (execution_id IS NULL OR skipped = 0)
+        );
+      `)
+    },
+  },
 ]
 
 export function runMigrations(
