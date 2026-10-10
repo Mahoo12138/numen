@@ -49,17 +49,35 @@ function nestedScopes(candidate: AutomationSource) {
   return { graph, each, inner, leaf: inner.body }
 }
 
-async function context(path: string) {
+async function context(path: string, minimumOutputLength?: number) {
   const ctx = new Context()
   await ctx.plugin(DatabaseService, { path })
   await ctx.plugin(CapabilityRegistry)
   ctx.capabilities.define(ctx, { id: 'test:value', version: 1, kind: 'query', title: 'Value',
-    input: z.object({ value: z.string().required() }), output: z.string(), semantics: { sideEffect: false, idempotent: true, retrySafe: true } })
+    input: z.object({ value: z.string().required() }), output: minimumOutputLength === undefined ? z.string() : z.string().min(minimumOutputLength), semantics: { sideEffect: false, idempotent: true, retrySafe: true } })
   await ctx.plugin(AutomationService)
   return ctx
 }
 
 describe('graph snapshot persistence and version compatibility', () => {
+  it('keeps Graph fingerprints stable across Schema UIDs but changes them for contract constraints', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'numen-graph-contract-hash-'))
+    let root = await context(join(directory, 'db.sqlite'))
+    try {
+      const { automation } = root.automations.create({ name: 'Stable contract fingerprint', source: source() })
+      const before = root.automations.publishDraft(automation.id, 1)
+      await root.fiber.dispose()
+      root = await context(join(directory, 'db.sqlite'))
+      const restarted = root.automations.prepareDraftTestSnapshot(automation.id, 1)
+      expect(restarted.contractSnapshot).not.toEqual(before.contractSnapshot)
+      expect(restarted.contentHash).toBe(before.contentHash)
+      await root.fiber.dispose()
+      root = await context(join(directory, 'db.sqlite'), 2)
+      expect(root.automations.prepareDraftTestSnapshot(automation.id, 1).contentHash).not.toBe(before.contentHash)
+      expect(root.automations.getExecutionSnapshot(before.id)).toEqual(before)
+    } finally { await root.fiber.dispose(); await rm(directory, { recursive: true, force: true }) }
+  })
+
   it('keeps old activated revisions, writes immutable graph v2 snapshots, and restores exact content after restart', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'numen-graph-snapshot-'))
     let root = await context(join(directory, 'db.sqlite'))

@@ -398,6 +398,24 @@ export const coreMigrations: readonly Migration[] = [
       `)
     },
   },
+  {
+    version: 17,
+    name: 'immutable-output-samples-and-local-tests',
+    up(database) {
+      database.exec(`
+        CREATE TABLE automation_output_samples (
+          id TEXT PRIMARY KEY,
+          automation_id TEXT NOT NULL REFERENCES automations(id) ON DELETE CASCADE,
+          node_id TEXT NOT NULL,
+          sample_json TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        );
+        CREATE INDEX automation_output_samples_node_idx ON automation_output_samples(automation_id, node_id, created_at, id);
+        ALTER TABLE automation_revisions ADD COLUMN local_test_json TEXT CHECK (local_test_json IS NULL OR purpose = 'draft-test');
+        ALTER TABLE executions ADD COLUMN sample_id TEXT;
+      `)
+    },
+  },
 ]
 
 export function runMigrations(

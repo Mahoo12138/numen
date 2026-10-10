@@ -65,6 +65,8 @@ export interface Execution {
   status: ExecutionStatus
   resolvedInput?: NumenValue
   output?: NumenValue
+  /** Present only for a test substitution; no Provider Attempt was made. */
+  sampleId?: string
   wakeAt?: string
   blockedReason?: string
   generation: number

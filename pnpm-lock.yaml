@@ -86,7 +86,6 @@ importers:
       cordis:
         specifier: 4.0.0-rc.8
         version: 4.0.0-rc.8(patch_hash=3d4000827fa49a241290f4d9fa50be51ca166f1f60e7c2d7c18ddcc71e3758f6)(@cordisjs/plugin-loader@1.0.0-rc.5)
-    devDependencies:
       schemastery:
         specifier: ^3.18.0
         version: 3.18.0

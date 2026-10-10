@@ -8,3 +8,5 @@ export * from './control.js'
 export * from './registration.js'
 
 export * from './automation-inputs.js'
+export * from './local-test.js'
+export * from './evaluator.js'

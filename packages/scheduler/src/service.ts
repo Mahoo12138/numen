@@ -16,6 +16,7 @@ import {
   type CoreInstruction,
   type Execution,
   type GraphEdge,
+  type LocalTestRequest,
   type NumenValue,
   type Run,
   type RunEvent,
@@ -106,6 +107,7 @@ export interface RunEventPage {
 export interface RunInstructionExecutionSummary {
   instructionId: string
   statusCounts: Record<Execution['status'], number>
+  sampledExecutionCount?: number
   latestUpdatedAt: string
 }
 
@@ -155,6 +157,7 @@ interface ExecutionRow {
   status: Execution['status']
   resolved_input_json: string | null
   output_json: string | null
+  sample_id: string | null
   wake_at: string | null
   blocked_reason: string | null
   generation: number
@@ -177,17 +180,28 @@ type GraphScopeInstruction = Extract<CoreInstruction, { op: 'graph_scope' }>
 type GraphEdgeValue = { state: 'pending' | 'skipped' } | { state: 'completed'; value: NumenValue }
 
 const structuredInstructionOps = new Set(['invoke', 'eval', 'branch', 'suspend', 'fork', 'iterate', 'scope_complete', 'join', 'complete', 'fail'])
-const graphInstructionOps = new Set(['graph_scope', 'graph_condition', 'graph_merge', 'graph_iterate'])
+const graphInstructionOps = new Set(['graph_scope', 'graph_condition', 'graph_merge', 'graph_iterate', 'graph_value'])
 
 function assertSupportedSnapshot(snapshot: AutomationExecutionSnapshot): void {
   if (!isSupportedAutomationVersion(snapshot.protocolVersion, snapshot.irVersion)
     || snapshot.compiledPlan.irVersion !== snapshot.irVersion) {
     throw new Error(`unsupported execution snapshot protocol/IR ${snapshot.protocolVersion}/${snapshot.irVersion}/${snapshot.compiledPlan.irVersion}`)
   }
+  if (snapshot.purpose === 'draft-test' && snapshot.localTest
+    && (snapshot.protocolVersion !== 2 || snapshot.irVersion !== 2 || snapshot.localTest.version !== 1)) {
+    throw new Error('unsupported local test snapshot protocol or scope version')
+  }
   for (const instruction of Object.values(snapshot.compiledPlan.instructions)) {
     if (!instruction || (!structuredInstructionOps.has(instruction.op)
       && !(snapshot.irVersion === 2 && graphInstructionOps.has(instruction.op)))) {
       throw new Error(`unsupported execution instruction ${instruction?.op} for IR ${snapshot.irVersion}`)
+    }
+    if (instruction.op === 'graph_value') {
+      const sample = snapshot.purpose === 'draft-test' && snapshot.localTest?.version === 1
+        ? snapshot.localTest.samples.find(item => item.id === instruction.sampleId && item.nodeId === instruction.id) : undefined
+      if (snapshot.protocolVersion !== 2 || !sample || canonicalize(sample.value) !== canonicalize(instruction.value)) {
+        throw new Error('sample substitutions require an explicit immutable local test snapshot')
+      }
     }
   }
   if (snapshot.irVersion === 1) {
@@ -290,6 +304,7 @@ function mapExecution(row: ExecutionRow): Execution {
     status: row.status,
     ...(row.resolved_input_json ? { resolvedInput: parseJson(row.resolved_input_json) } : {}),
     ...(row.output_json ? { output: parseJson(row.output_json) } : {}),
+    ...(row.sample_id ? { sampleId: row.sample_id } : {}),
     ...(row.wake_at ? { wakeAt: row.wake_at } : {}),
     ...(row.blocked_reason ? { blockedReason: row.blocked_reason } : {}),
     generation: row.generation,
@@ -410,12 +425,29 @@ export class SchedulerService extends Service {
   }
 
   /** Accepts a fixed saved Draft without publishing it or changing activation. */
-  async startDraftTest(
+  startDraftTest(
     automationId: string,
     expectedDraftVersion: number,
     input: Record<string, NumenValue>,
     trigger: NumenValue,
     requestId: string,
+  ): Promise<Run> {
+    return this.startTest(automationId, expectedDraftVersion, input, trigger, requestId)
+  }
+
+  startLocalTest(input: LocalTestRequest & { previewHash: string; requestId: string }): Promise<Run> {
+    const { previewHash, requestId, ...request } = structuredClone(input)
+    if (!/^[a-f0-9]{64}$/.test(previewHash)) throw new TypeError('A reviewed local test preview is required.')
+    return this.startTest(request.automationId, request.expectedDraftVersion, request.input, request.trigger, requestId, { request, previewHash })
+  }
+
+  private async startTest(
+    automationId: string,
+    expectedDraftVersion: number,
+    input: Record<string, NumenValue>,
+    trigger: NumenValue,
+    requestId: string,
+    localTest?: { request: LocalTestRequest; previewHash: string },
   ): Promise<Run> {
     if (!Number.isSafeInteger(expectedDraftVersion) || expectedDraftVersion < 1) throw new TypeError('invalid expected Draft version')
     if (!/^[a-zA-Z0-9_-]{16,80}$/.test(requestId)) throw new TypeError('invalid manual Run request id')
@@ -424,7 +456,8 @@ export class SchedulerService extends Service {
     const rawInput = structuredClone(input)
     const acceptedTrigger = structuredClone(trigger)
     const contentHash = createHash('sha256').update(canonicalize({
-      mode: 'draft-test', automationId, expectedDraftVersion, input: rawInput, trigger: acceptedTrigger,
+      mode: localTest ? 'local-test' : 'draft-test', automationId, expectedDraftVersion, input: rawInput, trigger: acceptedTrigger,
+      ...(localTest ? { localTest } : {}),
     })).digest('hex')
     const recoverAccepted = (): Run | undefined => {
       const previous = this.ctx.database.db.prepare(
@@ -440,7 +473,8 @@ export class SchedulerService extends Service {
     if (previous) return previous
 
     try {
-      const prepared = this.ctx.automations.prepareDraftTestSnapshot(automationId, expectedDraftVersion)
+      const prepared = localTest ? this.ctx.automations.prepareLocalTestSnapshot(localTest.request, localTest.previewHash)
+        : this.ctx.automations.prepareDraftTestSnapshot(automationId, expectedDraftVersion)
       const resolvedInput = resolveAutomationInputs(prepared.source, rawInput)
       const snapshotResources = collectSnapshotResourceIds(prepared)
       const runResources = collectRunResourceIds(resolvedInput, acceptedTrigger)
@@ -471,7 +505,7 @@ export class SchedulerService extends Service {
           INSERT INTO manual_run_requests (request_id, content_hash, run_id) VALUES (?, ?, ?)
         `).run(requestId, contentHash, acceptedRunId)
         this.appendEvent(acceptedRunId, 'RunAccepted', {
-          source: 'draft-test', snapshotId: snapshot.id, revisionId: snapshot.id,
+          source: localTest ? 'local-test' : 'draft-test', snapshotId: snapshot.id, revisionId: snapshot.id,
           sourceDraftVersion: snapshot.sourceDraftVersion, requestId, contentHash,
         }, now, false)
         created = true
@@ -671,7 +705,8 @@ export class SchedulerService extends Service {
     })
     const summaries = new Map<string, RunInstructionExecutionSummary>()
     const rows = this.ctx.database.db.prepare(`
-      SELECT instruction_id, status, COUNT(*) AS count, MAX(updated_at) AS latest_updated_at
+      SELECT instruction_id, status, COUNT(*) AS count, MAX(updated_at) AS latest_updated_at,
+        SUM(CASE WHEN sample_id IS NOT NULL THEN 1 ELSE 0 END) AS sampled_count
       FROM executions WHERE run_id = ?
       GROUP BY instruction_id, status
       ORDER BY instruction_id, status
@@ -679,6 +714,7 @@ export class SchedulerService extends Service {
       instruction_id: string
       status: Execution['status']
       count: number
+      sampled_count: number
       latest_updated_at: string
     }>
     for (const row of rows) {
@@ -688,6 +724,7 @@ export class SchedulerService extends Service {
         latestUpdatedAt: row.latest_updated_at,
       }
       summary.statusCounts[row.status] = row.count
+      if (row.sampled_count) summary.sampledExecutionCount = (summary.sampledExecutionCount ?? 0) + row.sampled_count
       if (row.latest_updated_at > summary.latestUpdatedAt) summary.latestUpdatedAt = row.latest_updated_at
       summaries.set(row.instruction_id, summary)
     }
@@ -775,7 +812,7 @@ export class SchedulerService extends Service {
     // Bound JSON before parsing it. Loop values and errors are not part of this inspection surface.
     const row = this.ctx.database.db.prepare(`
       SELECT id, run_id, instruction_id, parent_execution_id, scope_execution_id, scope_branch,
-        NULL AS loop_item_json, loop_index, status, wake_at, blocked_reason, generation, created_at, updated_at,
+        NULL AS loop_item_json, loop_index, status, wake_at, blocked_reason, generation, sample_id, created_at, updated_at,
         CASE WHEN length(CAST(resolved_input_json AS BLOB)) <= ? THEN resolved_input_json ELSE NULL END AS resolved_input_json,
         CASE WHEN length(CAST(output_json AS BLOB)) <= ? THEN output_json ELSE NULL END AS output_json,
         length(CAST(resolved_input_json AS BLOB)) > ? AS input_omitted,
@@ -1256,6 +1293,9 @@ export class SchedulerService extends Service {
         case 'graph_merge':
           this.completeInternal(execution, undefined, this.graphMergeOutput(execution, instruction))
           break
+        case 'graph_value':
+          this.completeSample(execution, instruction)
+          break
         case 'branch': {
           const condition = evaluateExpression(instruction.condition, bindings)
           if (typeof condition !== 'boolean') throw new Error('branch condition must evaluate to boolean')
@@ -1569,6 +1609,17 @@ export class SchedulerService extends Service {
       this.commitOutputResources(execution, output)
       this.appendEvent(execution.runId, 'ExecutionCompleted', { executionId: execution.id, output }, now)
       if (next) this.createSuccessor(execution, next)
+    })
+  }
+
+  private completeSample(execution: Execution, instruction: Extract<CoreInstruction, { op: 'graph_value' }>): void {
+    const now = new Date().toISOString()
+    this.ctx.database.transaction(() => {
+      if (!this.executionAcceptsWork(execution, 'RUNNABLE')) return
+      const result = this.ctx.database.db.prepare(`UPDATE executions SET status = 'COMPLETED', output_json = ?, sample_id = ?, updated_at = ?
+        WHERE id = ? AND status = 'RUNNABLE'`).run(JSON.stringify(instruction.value), instruction.sampleId, now, execution.id)
+      if (!result.changes) return
+      this.appendEvent(execution.runId, 'ExecutionSampled', { executionId: execution.id, nodeId: instruction.id, sampleId: instruction.sampleId }, now)
     })
   }
 
@@ -1901,7 +1952,7 @@ export class SchedulerService extends Service {
     if (members.size !== instruction.members.length || members.has(instruction.id)) throw new Error('invalid graph members')
     for (const member of members) {
       const node = revision.compiledPlan.instructions[member]
-      if (!node || !['invoke', 'graph_condition', 'graph_merge', 'graph_iterate'].includes(node.op)) throw new Error('invalid graph member instruction')
+      if (!node || !['invoke', 'graph_condition', 'graph_merge', 'graph_iterate', 'graph_value'].includes(node.op)) throw new Error('invalid graph member instruction')
       if (node.op === 'invoke' && node.next !== undefined) throw new Error('graph member cannot have a sequential successor')
       if (node.op === 'graph_merge' && (new Set(node.inputs).size !== node.inputs.length || !node.inputs.length)) throw new Error('invalid graph merge inputs')
       if (node.op === 'graph_iterate') this.validateGraphIteration(node, revision)

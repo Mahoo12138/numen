@@ -5,6 +5,24 @@ import { assertDraftTestRequestValues, collectRunResourceIds, collectSnapshotRes
 const literal = (name: string): ValueExpr => ({ type: 'literal', value: { $resource: name } })
 
 describe('Draft test static resource discovery', () => {
+  it('discovers root and nested Graph source values and every Graph IR expression', () => {
+    const source: AutomationSource = { triggers: [], flow: { type: 'graph', id: 'graph', version: 1, edges: [], output: literal('root-output'), nodes: [
+      { type: 'condition', id: 'condition', condition: literal('source-condition') },
+      { type: 'foreach', id: 'each', items: literal('source-items'), body: { type: 'graph', id: 'body', version: 1, edges: [], output: literal('body-output'), nodes: [
+        { type: 'capability', id: 'work', capability: { id: 'test:work', version: 1 }, input: { file: literal('body-input') } },
+      ] } },
+    ] } }
+    const compiledPlan: CorePlan = { irVersion: 2, entry: 'graph', instructions: {
+      graph: { op: 'graph_scope', id: 'graph', version: 1, members: [], edges: [], output: literal('ir-output') },
+      condition: { op: 'graph_condition', id: 'condition', condition: literal('ir-condition') },
+      each: { op: 'graph_iterate', id: 'each', items: literal('ir-items'), body: 'body', concurrency: 1 },
+      sample: { op: 'graph_value', id: 'sample', sampleId: 'sample', value: { $resource: 'defensive-sample' } },
+    } }
+    expect(collectSnapshotResourceIds({ source, compiledPlan, presentation: {} })).toEqual(new Set([
+      'root-output', 'source-condition', 'source-items', 'body-output', 'body-input', 'ir-output', 'ir-condition', 'ir-items', 'defensive-sample',
+    ]))
+  })
+
   it('covers supported nested Source and IR fields, lowered-only constants, Presentation and resolved Run values', () => {
     const source: AutomationSource = {
       inputs: { file: { type: 'object', default: { $resource: 'default' } } },

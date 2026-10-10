@@ -3,6 +3,7 @@ import {
   type AutomationSource,
   type ControlSource,
   type CorePlan,
+  type LocalTestScope,
   type NumenValue,
   type ValueExpr,
 } from '@numenjs/core'
@@ -84,6 +85,17 @@ class ResourceReferenceCollector {
       case 'wait': this.expression(control.until, depth + 1); this.expression(control.durationMs, depth + 1); break
       case 'parallel': case 'race': for (const branch of control.branches) this.control(branch, depth + 1); break
       case 'foreach': this.expression(control.items, depth + 1); this.control(control.body, depth + 1); break
+      case 'graph':
+        this.expression(control.output, depth + 1)
+        for (const node of control.nodes) {
+          if (node.type === 'capability') this.control(node, depth + 1)
+          else if (node.type === 'condition') this.expression(node.condition, depth + 1)
+          else if (node.type === 'foreach') {
+            this.expression(node.items, depth + 1)
+            this.control(node.body, depth + 1)
+          }
+        }
+        break
     }
   }
 
@@ -104,10 +116,13 @@ class ResourceReferenceCollector {
         case 'eval': this.expression(instruction.expression); break
         case 'branch': this.expression(instruction.condition); break
         case 'suspend': this.expression(instruction.config.until); this.expression(instruction.config.durationMs); break
-        case 'iterate': this.expression(instruction.items); break
+        case 'iterate': case 'graph_iterate': this.expression(instruction.items); break
+        case 'graph_condition': this.expression(instruction.condition); break
+        case 'graph_scope': this.expression(instruction.output); break
+        case 'graph_value': this.value(instruction.value); break
         case 'complete': this.expression(instruction.output); break
         case 'fail': this.expression(instruction.error); break
-        case 'fork': case 'join': case 'scope_complete': break
+        case 'fork': case 'join': case 'scope_complete': case 'graph_merge': break
       }
     }
   }
@@ -118,11 +133,17 @@ export function collectSnapshotResourceIds(snapshot: {
   source: AutomationSource
   compiledPlan: CorePlan
   presentation: Record<string, NumenValue>
+  localTest?: LocalTestScope
 }): Set<string> {
   const collector = new ResourceReferenceCollector()
   collector.source(snapshot.source)
   collector.plan(snapshot.compiledPlan)
   collector.value(snapshot.presentation)
+  if (snapshot.localTest) {
+    collector.value(snapshot.localTest.request.input)
+    collector.value(snapshot.localTest.request.trigger)
+    for (const sample of snapshot.localTest.samples) collector.value(sample.value)
+  }
   if (Buffer.byteLength(JSON.stringify(snapshot), 'utf8') > draftTestAcceptanceLimits.maxSnapshotBytes) {
     throw new TypeError('draft test snapshot exceeds the acceptance size limit')
   }

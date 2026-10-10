@@ -209,6 +209,8 @@ export type CoreInstruction =
   | { op: 'graph_condition'; id: string; condition: ValueExpr }
   | { op: 'graph_merge'; id: string; mode: 'all' | 'selected'; inputs: string[] }
   | { op: 'graph_iterate'; id: string; items: ValueExpr; body: string; concurrency: number }
+  /** A frozen output substitution; valid only in an explicitly scoped test snapshot. */
+  | { op: 'graph_value'; id: string; value: NumenValue; sampleId: string }
 
 export interface CorePlan {
   irVersion: number
@@ -314,6 +316,7 @@ export interface DraftTestAutomationSnapshot extends AutomationSnapshotFields {
   purpose: 'draft-test'
   sourceDraftVersion: number
   baseRevisionId?: string
+  localTest?: import('./local-test.js').LocalTestScope
 }
 
 export type AutomationExecutionSnapshot = AutomationRevision | DraftTestAutomationSnapshot

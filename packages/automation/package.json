@@ -16,9 +16,7 @@
   },
   "dependencies": {
     "@numenjs/core": "workspace:*",
-    "@numenjs/database": "workspace:*"
-  },
-  "devDependencies": {
+    "@numenjs/database": "workspace:*",
     "schemastery": "^3.18.0"
   }
 }

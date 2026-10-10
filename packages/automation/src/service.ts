@@ -10,11 +10,17 @@ import {
   type GraphSource,
   type NumenValue,
   type ControlResolver,
+  type LocalTestPreview,
+  type LocalTestRequest,
+  type OutputSample,
+  type OutputSampleSummary,
 } from '@numenjs/core'
 import '@numenjs/database'
 import { Service, type Context } from 'cordis'
 import { createHash, randomUUID } from 'node:crypto'
 import { compileAutomation, type ConnectionResolver } from './compiler.js'
+import { buildLocalTest, LocalTestError } from './local-test.js'
+import { assertSampleValue, dataHash, importSample, OutputSampleError, persistSample, readSample, sampleContract, stableSchema } from './output-samples.js'
 
 export class AutomationNotFoundError extends Error {
   override name = 'AutomationNotFoundError'
@@ -155,6 +161,7 @@ interface RevisionRow {
   contract_snapshot_json: string
   content_hash: string
   created_at: string
+  local_test_json: string | null
 }
 
 declare module 'cordis' {
@@ -229,7 +236,8 @@ function mapExecutionSnapshot(row: RevisionRow): AutomationExecutionSnapshot {
   }
   if (row.purpose === 'draft-test' && row.number === null
     && typeof row.source_draft_version === 'number' && Number.isSafeInteger(row.source_draft_version) && row.source_draft_version > 0) {
-    return { ...fields, ...provenance, purpose: 'draft-test', sourceDraftVersion: row.source_draft_version }
+    return { ...fields, ...provenance, purpose: 'draft-test', sourceDraftVersion: row.source_draft_version,
+      ...(row.local_test_json ? { localTest: parseJson(row.local_test_json) } : {}) }
   }
   throw new Error(`invalid automation execution snapshot: ${row.id}`)
 }
@@ -529,6 +537,15 @@ export class AutomationService extends Service {
           ...draft.source,
           flow: canonicalGraph(draft.source.flow),
         } : draft.source,
+        // Schema UIDs vary across Registry instances; a reviewed Graph preview
+        // remains valid when the same contracts are registered after restart.
+        ...(draft.source.flow.type === 'graph' ? { contractSnapshot: {
+          ...compiled.contractSnapshot,
+          capabilities: compiled.contractSnapshot.capabilities.map(contract => ({ ...contract,
+            inputSchema: stableSchema(contract.inputSchema), outputSchema: stableSchema(contract.outputSchema) })),
+          ...(compiled.contractSnapshot.controls ? { controls: compiled.contractSnapshot.controls.map(contract => ({ ...contract,
+            inputSchema: stableSchema(contract.inputSchema) })) } : {}),
+        } } : {}),
       })).digest('hex'),
     }
   }
@@ -546,23 +563,103 @@ export class AutomationService extends Service {
     }
   }
 
+  createOutputSample(input: { automationId: string; expectedDraftVersion: number; nodeId: string; value: NumenValue }): OutputSample {
+    return this.ctx.database.transaction(() => {
+      const prepared = this.prepareDraftTestSnapshot(input.automationId, input.expectedDraftVersion)
+      return persistSample(this.ctx, input.automationId, input.nodeId, sampleContract(prepared, input.nodeId), input.value,
+        { kind: 'manual', draftVersion: input.expectedDraftVersion })
+    })
+  }
+
+  importOutputSample(input: { automationId: string; executionId: string }): OutputSample {
+    return this.ctx.database.transaction(() => {
+      const automation = this.get(input.automationId)
+      if (!automation) throw new AutomationNotFoundError('Automation not found.')
+      this.requireNotArchived(automation)
+      return importSample(this.ctx, input)
+    })
+  }
+
+  listOutputSamples(automationId: string, nodeId?: string, page?: { offset: number; limit: number }): OutputSampleSummary[] {
+    const offset = page?.offset ?? 0, limit = page?.limit ?? 1000
+    if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 1000) throw new TypeError('invalid sample metadata page')
+    // Page identities before touching sample JSON so later values are not decoded for this read.
+    const rows = this.ctx.database.db.prepare(`WITH sample_page AS MATERIALIZED (
+      SELECT id FROM automation_output_samples WHERE automation_id = ? AND (? IS NULL OR node_id = ?)
+      ORDER BY created_at, id LIMIT ? OFFSET ?
+    ) SELECT json_remove(sample.sample_json, '$.value', '$.contract') AS sample_json
+      FROM sample_page JOIN automation_output_samples AS sample ON sample.id = sample_page.id ORDER BY sample.created_at, sample.id`)
+      .all(automationId, nodeId ?? null, nodeId ?? null, limit, offset) as Array<{ sample_json: string }>
+    return rows.map(row => parseJson<OutputSampleSummary>(row.sample_json))
+  }
+
+  getOutputSample(automationId: string, sampleId: string): OutputSample | undefined {
+    return readSample(this.ctx, automationId, sampleId)
+  }
+
+  deleteOutputSample(automationId: string, sampleId: string): boolean {
+    return this.ctx.database.db.prepare('DELETE FROM automation_output_samples WHERE id = ? AND automation_id = ?').run(sampleId, automationId).changes > 0
+  }
+
+  private buildLocalTest(request: LocalTestRequest) {
+    if (!Array.isArray(request.sampleIds) || request.sampleIds.length > 1024 || new Set(request.sampleIds).size !== request.sampleIds.length
+      || request.sampleIds.some(id => typeof id !== 'string' || id.length > 200)) {
+      throw new LocalTestError('LOCAL_TEST_SAMPLES', 'Choose at most 1024 unique sample ids.')
+    }
+    assertSampleValue(request.input, true)
+    assertSampleValue(request.trigger, true)
+    const prepared = this.prepareDraftTestSnapshot(request.automationId, request.expectedDraftVersion)
+    // Check persisted byte lengths before decoding selected samples or duplicating
+    // them into the plan, immutable scope, and preview response.
+    const sampleBytes = request.sampleIds.length ? (this.ctx.database.db.prepare(`SELECT COALESCE(SUM(length(CAST(sample_json AS BLOB))), 0) AS bytes
+      FROM automation_output_samples WHERE automation_id = ? AND id IN (${request.sampleIds.map(() => '?').join(',')})`)
+      .get(request.automationId, ...request.sampleIds) as { bytes: number }).bytes : 0
+    if (Buffer.byteLength(JSON.stringify(prepared), 'utf8') + 3 * sampleBytes + 3 * Buffer.byteLength(JSON.stringify(request), 'utf8') > 8 * 1024 * 1024) {
+      throw new LocalTestError('LOCAL_TEST_LIMIT', 'Local test snapshot and selected samples exceed the eight MiB aggregate limit.')
+    }
+    const samples = request.sampleIds.map(id => {
+      const sample = readSample(this.ctx, request.automationId, id)
+      if (!sample) throw new OutputSampleError('SAMPLE_NOT_FOUND', 'A selected sample was deleted or is unavailable.')
+      return sample
+    })
+    return { prepared, ...buildLocalTest(prepared, request, samples) }
+  }
+
+  previewLocalTest(request: LocalTestRequest): LocalTestPreview {
+    return this.buildLocalTest(structuredClone(request)).preview
+  }
+
+  prepareLocalTestSnapshot(request: LocalTestRequest, previewHash?: string): PreparedDraftTestSnapshot {
+    const { prepared, preview, plan } = this.buildLocalTest(structuredClone(request))
+    if (previewHash !== undefined && preview.previewHash !== previewHash) throw new LocalTestError('LOCAL_TEST_PREVIEW_STALE', 'Local test preview is stale; review the current calls and substitutions.')
+    const localTest = preview.scope
+    return { ...prepared, compiledPlan: plan, localTest,
+      contentHash: dataHash({ sourceContentHash: prepared.contentHash, plan, localTest }) }
+  }
+
   /** May be nested in the Scheduler's synchronous acceptance transaction. */
   createDraftTestSnapshot(prepared: PreparedDraftTestSnapshot): DraftTestAutomationSnapshot {
     return this.ctx.database.transaction(() => {
       this.requireDraftTestVersion(prepared.automationId, prepared.sourceDraftVersion)
+      if (prepared.localTest) {
+        const current = this.prepareLocalTestSnapshot(prepared.localTest.request)
+        if (current.contentHash !== prepared.contentHash || dataHash(current) !== dataHash(prepared)) {
+          throw new LocalTestError('LOCAL_TEST_PREVIEW_STALE', 'Local test data or contracts changed before acceptance.')
+        }
+      }
       const snapshotId = `snap_${randomUUID().replaceAll('-', '')}`
       this.ctx.database.db.prepare(`
         INSERT INTO automation_revisions (
           id, automation_id, number, protocol_version, source_json, presentation_json,
           ir_version, compiled_plan_json, dependency_manifest_json,
-          contract_snapshot_json, content_hash, created_at, purpose, source_draft_version, base_revision_id
-        ) VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft-test', ?, ?)
+          contract_snapshot_json, content_hash, created_at, purpose, source_draft_version, base_revision_id, local_test_json
+        ) VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft-test', ?, ?, ?)
       `).run(
         snapshotId, prepared.automationId, prepared.protocolVersion,
         JSON.stringify(prepared.source), JSON.stringify(prepared.presentation), prepared.irVersion,
         JSON.stringify(prepared.compiledPlan), JSON.stringify(prepared.dependencyManifest),
         JSON.stringify(prepared.contractSnapshot), prepared.contentHash, new Date().toISOString(),
-        prepared.sourceDraftVersion, prepared.baseRevisionId ?? null,
+        prepared.sourceDraftVersion, prepared.baseRevisionId ?? null, prepared.localTest ? JSON.stringify(prepared.localTest) : null,
       )
       const snapshot = this.getExecutionSnapshot(snapshotId)!
       if (snapshot.purpose !== 'draft-test') throw new Error('expected Draft test snapshot')
@@ -592,7 +689,7 @@ export class AutomationService extends Service {
     const row = this.ctx.database.db.prepare(`
       SELECT length(CAST(source_json AS BLOB)) + length(CAST(presentation_json AS BLOB))
         + length(CAST(compiled_plan_json AS BLOB)) + length(CAST(dependency_manifest_json AS BLOB))
-        + length(CAST(contract_snapshot_json AS BLOB)) AS json_bytes
+        + length(CAST(contract_snapshot_json AS BLOB)) + COALESCE(length(CAST(local_test_json AS BLOB)), 0) AS json_bytes
       FROM automation_revisions WHERE id = ? AND automation_id = ?
     `).get(snapshotId, automationId) as { json_bytes: number } | undefined
     if (!row) return
