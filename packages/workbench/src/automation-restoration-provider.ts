@@ -4,6 +4,7 @@ import type { Context } from 'cordis'
 import z from 'schemastery'
 import { automationIdSchema } from './automation-schemas.js'
 import { workbenchAutomationRestoreContentQueryRef, type WorkbenchAutomationRestoreContent, type WorkbenchAutomationRestoreContentQueryInput } from './contracts.js'
+import { maximumInspectedSourceNodes } from './automation-source-inspection.js'
 
 export const workbenchAutomationRestoreContentQuery: ConsoleQueryDefinition<WorkbenchAutomationRestoreContentQueryInput, WorkbenchAutomationRestoreContent> = {
   ...workbenchAutomationRestoreContentQueryRef, kind: 'query', title: 'Prepare immutable Automation content for Draft restoration',
@@ -87,7 +88,7 @@ function validateRestorationContent(content: Pick<WorkbenchAutomationRestoreCont
   }
   let nodes = 0
   const walk = (value: unknown, depth = 0, blockOnly = false, graphMember = false): void => {
-    if (++nodes > 250 || depth > 64) return limit()
+    if (++nodes > maximumInspectedSourceNodes || depth > 64) return limit()
     const node = record(value)
     identity(node.id)
     if (blockOnly && node.type !== 'block') return unavailable()
@@ -98,7 +99,7 @@ function validateRestorationContent(content: Pick<WorkbenchAutomationRestoreCont
         const members = new Set<string>()
         for (const value of node.nodes) {
           const member = record(value)
-          if (!['capability', 'condition', 'merge'].includes(member.type as string)) return unavailable()
+          if (!['capability', 'condition', 'merge', 'foreach'].includes(member.type as string)) return unavailable()
           walk(value, depth + 1, false, true)
           members.add(member.id as string)
         }
@@ -129,7 +130,9 @@ function validateRestorationContent(content: Pick<WorkbenchAutomationRestoreCont
         if (!Array.isArray(node.branches)) return unavailable()
         node.branches.forEach(child => walk(child, depth + 1, true)); break
       case 'foreach':
-        expression(node.items); walk(node.body, depth + 1, true)
+        expression(node.items)
+        if (graphMember && (record(node.body).type !== 'graph' || record(node.body).output === undefined)) return unavailable()
+        walk(node.body, depth + 1, !graphMember)
         if (node.concurrency !== undefined && typeof node.concurrency !== 'number') return unavailable()
         break
       case 'wait': if (node.until !== undefined) expression(node.until); if (node.durationMs !== undefined) expression(node.durationMs); break

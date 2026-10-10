@@ -2,6 +2,7 @@ import type { AutomationSource, NumenValue } from '@numenjs/core'
 import z from 'schemastery'
 
 export const automationIdSchema = z.string().pattern(/^auto_[a-f0-9]{32}$/).required()
+export const automationSourceNodeIdSchema = z.string().min(1).max(160)
 
 export const automationIdentityFields = {
   id: z.string().required(),

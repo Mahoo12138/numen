@@ -1,6 +1,6 @@
 import type { AutomationSource, ControlSource, NumenValue, ValueExpr } from '@numenjs/core'
 import { describe, expect, it } from 'vitest'
-import { AutomationComparisonLimitError, AutomationComparisonUnavailableError, compareAutomationDocuments } from '../src/automation-comparison.js'
+import { AutomationComparisonLimitError, AutomationComparisonUnavailableError, compareAutomationDocumentPage, compareAutomationDocuments } from '../src/automation-comparison.js'
 
 const literal = (value: NumenValue): ValueExpr => ({ type: 'literal', value })
 const wait = (id: string): ControlSource => ({ type: 'wait', id, durationMs: literal(10) })
@@ -12,6 +12,32 @@ const action = (id: string): ControlSource => ({ type: 'capability', id, capabil
 const mutable = (value: unknown) => value as Record<string, any>
 
 describe('Bounded Automation semantic comparison', () => {
+  it('pages every change beyond 1,000 results without returning authored values or duplicate pages', () => {
+    const before = source(Array.from({ length: 300 }, (_, index) => action(`node-${index}`)))
+    const after = structuredClone(before)
+    for (const node of mutable(after.flow).steps) {
+      node.input.secret = literal('PRIVATE_NEW_VALUE')
+      node.connections.default = 'PRIVATE_NEW_CONNECTION'
+      node.policy.timeoutMs = 100
+      node.future = 'PRIVATE_NEW_EXTENSION'
+    }
+    const collected = []
+    let offset = 0
+    do {
+      const page = compareAutomationDocumentPage(document(before), document(after), offset)
+      expect(page.totalChanges).toBe(1_200)
+      expect(page.changes.length).toBeLessThanOrEqual(250)
+      expect(JSON.stringify(page)).not.toContain('PRIVATE_')
+      collected.push(...page.changes)
+      if (page.nextChangeOffset === undefined) break
+      expect(page.nextChangeOffset).toBeGreaterThan(offset)
+      offset = page.nextChangeOffset
+    } while (true)
+    expect(collected).toHaveLength(1_200)
+    expect(new Set(collected.map(change => `${change.nodeId}:${change.category}`)).size).toBe(1_200)
+    expect(collected.at(-1)?.nodeId).toBe('node-299')
+  })
+
   it('moves a subtree once amid additions, deletions and parameter edits without moving its descendants', () => {
     const a = source([block('container', [wait('kept-child'), action('parameter-step')]), wait('kept-sibling'), wait('removed'), { type: 'if', id: 'condition', condition: literal(true), then: block('then') }])
     const b = structuredClone(a)
@@ -198,7 +224,9 @@ describe('Bounded Automation semantic comparison', () => {
 
   it('accepts exact node and flow-depth bounds and rejects one extra rather than emitting a partial diff', () => {
     expect(compare(source(Array.from({ length: 249 }, (_, index) => wait(`wait-${index}`))), source())).toHaveLength(249)
-    expect(() => compare(source(Array.from({ length: 250 }, (_, index) => wait(`wait-${index}`))), source())).toThrow(AutomationComparisonLimitError)
+    const wide = source(Array.from({ length: 9_999 }, (_, index) => wait(`wait-${index}`)))
+    expect(compare(wide, wide)).toEqual([])
+    expect(() => compare(source(Array.from({ length: 10_000 }, (_, index) => wait(`wait-${index}`))), source())).toThrow(AutomationComparisonLimitError)
     const deep = (depth: number): AutomationSource => {
       let node = wait('leaf')
       for (let index = 0; index < depth; index++) node = block(`depth-${index}`, [node])

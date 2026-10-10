@@ -22,6 +22,7 @@ import type {
   WorkbenchRunFlowStatus,
   WorkbenchRunTimelineEvent,
 } from './contracts.js'
+import { findInspectionSourceNode } from './automation-source-inspection.js'
 
 export function projectWorkbenchRunDetail(
   run: Run,
@@ -31,13 +32,15 @@ export function projectWorkbenchRunDetail(
   diagnostics: RunExecutionDiagnosticsPage,
   events: RunEventPage,
   encodeExecutionCursor: (cursor: NonNullable<RunExecutionDiagnosticsPage['nextCursor']>) => string,
+  sourceNodeId?: string,
 ): WorkbenchRunDetail {
   const supportedRevision = revision && isSupportedAutomationVersion(revision.protocolVersion, revision.irVersion) ? revision : undefined
   const capabilityTitles = new Map(
     (supportedRevision?.contractSnapshot.capabilities ?? []).map(capability => [capabilityKey(capability), capability.title]),
   )
   const instructions = supportedRevision?.compiledPlan.instructions ?? {}
-  const flow = projectRunFlow(revision, inspection.instructionExecutions, inspection.graphMembers)
+  const focusedNodeId = supportedRevision && sourceNodeId && findInspectionSourceNode(supportedRevision.source.flow, sourceNodeId) ? sourceNodeId : undefined
+  const flow = projectRunFlow(revision, inspection.instructionExecutions, inspection.graphMembers, focusedNodeId)
   const counts = diagnostics.statusCounts
   return {
     run: {
@@ -75,6 +78,7 @@ export function projectWorkbenchRunDetail(
         id: execution.id,
         instructionId: execution.instructionId,
         ...(sourceNodeId ? { sourceNodeId } : {}),
+        ...(execution.sampleId ? { sampleId: execution.sampleId } : {}),
         title: instructionTitle(instruction, execution.instructionId, capabilityTitles),
         operation: instruction?.op ?? 'unknown',
         status: execution.status,
@@ -109,20 +113,11 @@ export function projectWorkbenchRunDetail(
   }
 }
 
-/** Resolve against the actual, visible immutable Source tree, never an instruction-name convention. */
+/** Resolve against immutable Source independently of the current visible Flow page. */
 export function sourceNodeIdForExecution(revision: AutomationExecutionSnapshot | undefined, instructionId: string): string | undefined {
   if (!revision || !isSupportedAutomationVersion(revision.protocolVersion, revision.irVersion)) return
   const candidate = revision.compiledPlan.sourceMap?.[instructionId]?.nodeId ?? instructionId
-  const pending: Array<ControlSource | GraphNodeSource> = [revision.source.flow]
-  for (let count = 0; pending.length && count < 250; count++) {
-    const node = pending.pop()!
-    if (node.id === candidate) return candidate
-    const children = node.type === 'block' ? node.steps
-      : node.type === 'if' ? [node.then, ...(node.else ? [node.else] : [])]
-        : node.type === 'foreach' ? [node.body]
-          : node.type === 'parallel' || node.type === 'race' ? node.branches : node.type === 'graph' ? node.nodes : []
-    pending.push(...children.slice().reverse())
-  }
+  return findInspectionSourceNode(revision.source.flow, candidate)?.id
 }
 
 const flowStatusPriority: WorkbenchRunFlowStatus[] = [
@@ -133,6 +128,8 @@ export function projectRunFlow(
   revision: AutomationExecutionSnapshot | undefined,
   summaries: RunInstructionExecutionSummary[],
   graphMembers: RunGraphMemberSummary[] = [],
+  sourceNodeId?: string,
+  maximumNodes = 250,
 ): WorkbenchRunDetail['flow'] {
   if (!revision || !isSupportedAutomationVersion(revision.protocolVersion, revision.irVersion)) {
     return {
@@ -159,13 +156,16 @@ export function projectRunFlow(
     if (!existing) byInstruction.set(id, { ...summary, instructionId: id, statusCounts: { ...summary.statusCounts } })
     else {
       for (const status of Object.keys(summary.statusCounts) as Array<keyof typeof summary.statusCounts>) existing.statusCounts[status] += summary.statusCounts[status]
+      if (summary.sampledExecutionCount) existing.sampledExecutionCount = (existing.sampledExecutionCount ?? 0) + summary.sampledExecutionCount
       if (summary.latestUpdatedAt > existing.latestUpdatedAt) existing.latestUpdatedAt = summary.latestUpdatedAt
     }
   }
-  const budget = { remaining: 250, truncated: false }
+  const budget = { remaining: maximumNodes, truncated: false }
   const membersByNode = new Map<string, RunGraphMemberSummary[]>()
   for (const member of graphMembers) membersByNode.set(member.nodeId, [...(membersByNode.get(member.nodeId) ?? []), member])
-  const source = projectFlowNode(revision.source.flow, byInstruction, capabilityTitles, budget, membersByNode)!
+  const selected = sourceNodeId ? findInspectionSourceNode(revision.source.flow, sourceNodeId) : revision.source.flow
+  if (!selected) throw new Error('Source node is not present in this immutable snapshot')
+  const source = projectFlowNode(selected, byInstruction, capabilityTitles, budget, membersByNode)!
   const root: WorkbenchRunFlowNode = {
     id: '__flow',
     type: 'block',
@@ -173,9 +173,10 @@ export function projectRunFlow(
     detail: revision.purpose === 'draft-test' ? `Draft test · Draft v${revision.sourceDraftVersion} · IR ${revision.irVersion}` : `Revision ${revision.number} · IR ${revision.irVersion}`,
     status: source.status,
     executionCount: source.executionCount,
+    ...(source.sampledExecutionCount ? { sampledExecutionCount: source.sampledExecutionCount } : {}),
     children: [source],
   }
-  return { root, truncated: budget.truncated }
+  return { root, truncated: budget.truncated, ...(sourceNodeId ? { focusedNodeId: sourceNodeId } : {}) }
 }
 
 function projectFlowNode(
@@ -230,6 +231,7 @@ function projectFlowNode(
   }
   const status = highestFlowStatus([directStatus, ...memberStates.map(member => graphMemberStatus(member.status)), ...children.map(child => child.status), ...(graph?.nodes.map(node => node.status) ?? [])])
   const blockedReason = memberStates.find(member => member.status === 'BLOCKED' && member.blockedReason)?.blockedReason
+  const sampledExecutionCount = (summary?.sampledExecutionCount ?? 0) + [...children, ...(graph?.nodes ?? [])].reduce((total, child) => total + (child.sampledExecutionCount ?? 0), 0)
   return {
     id: control.id,
     type: control.type,
@@ -237,6 +239,7 @@ function projectFlowNode(
     detail: flowNodeDetail(control),
     status,
     executionCount: totalExecutions(summary) + [...children, ...(graph?.nodes ?? [])].reduce((total, child) => total + child.executionCount, 0),
+    ...(sampledExecutionCount ? { sampledExecutionCount } : {}),
     children,
     ...(graph ? { graph } : {}),
     ...(blockedReason ? { blockedReason } : {}),
@@ -356,7 +359,7 @@ function instructionTitle(
     case 'branch': return 'Condition'
     case 'suspend': return instruction.source === 'timer' ? 'Wait' : 'Suspension'
     case 'fork': return instruction.mode === 'all' ? 'Parallel branches' : 'Race branches'
-    case 'iterate': return 'For each'
+    case 'iterate': case 'graph_iterate': return 'For each'
     case 'join': return instruction.mode === 'iterate' ? 'Iteration join' : 'Branch join'
     case 'scope_complete': return 'Scope complete'
     case 'complete': return 'Run complete'
@@ -365,6 +368,7 @@ function instructionTitle(
     case 'graph_scope': return 'Graph scope'
     case 'graph_condition': return 'Graph condition'
     case 'graph_merge': return 'Graph merge'
+    case 'graph_value': return 'Sample output'
   }
 }
 

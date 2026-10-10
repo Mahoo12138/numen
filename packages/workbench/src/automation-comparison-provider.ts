@@ -3,7 +3,7 @@ import { ConsoleProcedureError, type ConsoleQueryDefinition, type ConsoleRequest
 import type { AutomationSource, NumenValue } from '@numenjs/core'
 import type { Context } from 'cordis'
 import z from 'schemastery'
-import { AutomationComparisonLimitError, AutomationComparisonUnavailableError, compareAutomationDocuments } from './automation-comparison.js'
+import { AutomationComparisonLimitError, AutomationComparisonUnavailableError, compareAutomationDocumentPage } from './automation-comparison.js'
 import { automationIdSchema } from './automation-schemas.js'
 import {
   workbenchAutomationComparisonQueryRef, workbenchAutomationComparisonStateQueryRef,
@@ -19,7 +19,8 @@ const targetSchema = z.union([
 export const workbenchAutomationComparisonQuery: ConsoleQueryDefinition<WorkbenchAutomationComparisonQueryInput, WorkbenchAutomationComparison> = {
   ...workbenchAutomationComparisonQueryRef, kind: 'query', title: 'Compare fixed Automation documents',
   description: 'Bounded semantic changes between an exact saved Draft version and a snapshot, or two immutable snapshots. Values remain opaque.',
-  input: z.object({ automationId: automationIdSchema, left: targetSchema, right: targetSchema }),
+  input: z.object({ automationId: automationIdSchema, left: targetSchema, right: targetSchema,
+    changeOffset: z.number().step(1).min(0).max(Number.MAX_SAFE_INTEGER), changeLimit: z.number().step(1).min(1).max(250) }),
   output: z.any<WorkbenchAutomationComparison>(),
 }
 
@@ -90,7 +91,8 @@ export function workbenchAutomationComparisonProviderPlugin(ctx: Context): void 
         if (!automation) throw notFound()
         const left = resolveDocument(ctx, automation.id, input.left)
         const right = resolveDocument(ctx, automation.id, input.right)
-        return boundedResult({ automationId: automation.id, automationName: automation.name, left: left.identity, right: right.identity, changes: compareAutomationDocuments(left, right) })
+        return boundedResult({ automationId: automation.id, automationName: automation.name, left: left.identity, right: right.identity,
+          ...compareAutomationDocumentPage(left, right, input.changeOffset, input.changeLimit) })
       } catch (error) { return sanitizeFailure(error) }
     },
   })

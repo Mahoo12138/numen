@@ -1,3 +1,4 @@
+import { localTestProviderPlugin } from './local-test-provider.js'
 import { workbenchConnectionUsageProviderPlugin } from './connection-usage-provider.js'
 import { workbenchAutomationSnapshotProviderPlugin } from './automation-snapshot-provider.js'
 import { workbenchAutomationComparisonProviderPlugin } from './automation-comparison-provider.js'
@@ -27,6 +28,7 @@ export type WorkbenchConfig = WorkbenchRuntimeConfig
 /** Consumers declare their own dependencies so unavailable features wait independently. */
 export function workbenchPlugin(ctx: Context, config: WorkbenchConfig = {}): void {
   ctx.plugin(workbenchRuntimePlugin, config)
+  ctx.plugin(localTestProviderPlugin)
   ctx.plugin(workbenchManagementProviderPlugin)
   ctx.plugin(workbenchPluginOwnershipProviderPlugin)
   ctx.plugin(workbenchSystemProviderPlugin)

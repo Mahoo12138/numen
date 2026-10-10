@@ -28,12 +28,15 @@ export function provideExecutionData(ctx: Context): void {
         const revision = ctx.automations.getExecutionSnapshot(run.revisionId)
         const instruction = revision?.compiledPlan.instructions[stored.execution.instructionId]
         const contract = instruction?.op === 'invoke' ? revision?.contractSnapshot.capabilities.find(item =>
-          item.id === instruction.capability.id && item.version === instruction.capability.version) : undefined
+          item.id === instruction.capability.id && item.version === instruction.capability.version)
+          : instruction?.op === 'graph_value' && revision?.purpose === 'draft-test' && stored.execution.sampleId === instruction.sampleId
+            ? revision.localTest?.samples.find(sample => sample.id === instruction.sampleId && sample.nodeId === instruction.id)?.contract : undefined
         const sourceNodeId = sourceNodeIdForExecution(revision, stored.execution.instructionId)
         const result: WorkbenchExecutionData = {
           runId: run.id,
           executionId: stored.execution.id,
           ...(sourceNodeId ? { sourceNodeId } : {}),
+          ...(stored.execution.sampleId ? { sampleId: stored.execution.sampleId } : {}),
           provenance: 'execution-current',
           ...(attempt ? { attempt: { id: attempt.id, number: attempt.number } } : {}),
           input: inspectExecutionValue(stored.execution.resolvedInput, contract?.inputSchema, stored.inputOmitted),

@@ -1,6 +1,6 @@
-import { automationIdSchema } from './automation-schemas.js'
+import { automationIdSchema, automationSourceNodeIdSchema } from './automation-schemas.js'
 import { provideManualRuns } from './manual-run-provider.js'
-import '@numenjs/automation'
+import { AutomationSnapshotInspectionLimitError } from '@numenjs/automation'
 import '@numenjs/scheduler'
 import { isSupportedAutomationVersion, type NumenValue } from '@numenjs/core'
 import {
@@ -20,7 +20,7 @@ import {
   type WorkbenchRunDetail,
   type WorkbenchRunsIndex,
 } from './contracts.js'
-import { projectWorkbenchRunDetail } from './run-detail-projection.js'
+import { projectRunFlow, projectWorkbenchRunDetail } from './run-detail-projection.js'
 import { provideExecutionData } from './execution-data-provider.js'
 
 const runStatus = z.union([
@@ -148,7 +148,7 @@ export const workbenchRunDetailQuery: ConsoleQueryDefinition<Record<string, unkn
   description: 'A bounded durable Run snapshot with Execution diagnostics and semantic Journal events.',
   input: z.object({
     runId: z.string().required(),
-    sourceNodeId: z.string().max(200),
+    sourceNodeId: automationSourceNodeIdSchema,
     executionId: z.string().max(200),
     executionLimit: z.number().step(1).min(1).max(50).required(),
     executionCursor: executionCursorInput,
@@ -194,6 +194,7 @@ export const workbenchRunDetailQuery: ConsoleQueryDefinition<Record<string, unkn
       id: z.string().required(),
       instructionId: z.string().required(),
       sourceNodeId: z.string(),
+      sampleId: z.string(),
       title: z.string().required(),
       operation: z.string().required(),
       status: executionStatus,
@@ -276,32 +277,46 @@ export function workbenchRunsProviderPlugin(ctx: Context): void {
   })
   ctx.console.provideQuery(ctx, workbenchRunDetailQueryRef, {
     query({ input }: { input: WorkbenchRunDetailProviderInput }): WorkbenchRunDetail | null {
-      const run = ctx.scheduler.getRun(input.runId)
-      if (!run) return null
-      const automation = ctx.automations.get(run.automationId)
-      const revision = ctx.automations.getExecutionSnapshot(run.revisionId)
-      const supportedRevision = revision && isSupportedAutomationVersion(revision.protocolVersion, revision.irVersion) ? revision : undefined
-      const inspection = ctx.scheduler.inspectRun(run.id)!
-      const diagnostics = ctx.scheduler.listExecutionDiagnosticsPage(
-        run.id,
-        input.executionLimit,
-        input.executionCursor,
-        {
-          ...(input.sourceNodeId ? { instructionIds: Object.keys(supportedRevision?.compiledPlan.instructions ?? {}).filter(id =>
-            (supportedRevision?.compiledPlan.sourceMap?.[id]?.nodeId ?? id) === input.sourceNodeId) } : {}),
-          ...(input.executionId ? { executionId: input.executionId } : {}),
-        },
-      )
-      const events = ctx.scheduler.listRunEventsPage(run.id, input.eventLimit, input.eventCursor)
-      return projectWorkbenchRunDetail(
-        run,
-        automation?.name ?? 'Unknown automation',
-        revision,
-        inspection,
-        diagnostics,
-        events,
-        encodeCursor,
-      )
+      try {
+        const run = ctx.scheduler.getRun(input.runId)
+        if (!run) return null
+        const automation = ctx.automations.get(run.automationId)
+        const revision = ctx.automations.getExecutionSnapshotForInspection(run.revisionId, run.automationId)
+        const supportedRevision = revision && isSupportedAutomationVersion(revision.protocolVersion, revision.irVersion) ? revision : undefined
+        const inspection = ctx.scheduler.inspectRun(run.id)!
+        const diagnostics = ctx.scheduler.listExecutionDiagnosticsPage(
+          run.id,
+          input.executionLimit,
+          input.executionCursor,
+          {
+            ...(input.sourceNodeId ? { instructionIds: Object.keys(supportedRevision?.compiledPlan.instructions ?? {}).filter(id =>
+              (supportedRevision?.compiledPlan.sourceMap?.[id]?.nodeId ?? id) === input.sourceNodeId) } : {}),
+            ...(input.executionId ? { executionId: input.executionId } : {}),
+          },
+        )
+        const events = ctx.scheduler.listRunEventsPage(run.id, input.eventLimit, input.eventCursor)
+        const result = projectWorkbenchRunDetail(
+          run,
+          automation?.name ?? 'Unknown automation',
+          revision,
+          inspection,
+          diagnostics,
+          events,
+          encodeCursor,
+          input.sourceNodeId,
+        )
+        let maximumNodes = 250
+        while (Buffer.byteLength(JSON.stringify(result), 'utf8') > 131_072 && maximumNodes > 1) {
+          maximumNodes = Math.max(1, Math.floor(maximumNodes / 2))
+          result.flow = projectRunFlow(revision, inspection.instructionExecutions, inspection.graphMembers, result.flow.focusedNodeId, maximumNodes)
+        }
+        if (Buffer.byteLength(JSON.stringify(result), 'utf8') > 131_072) throw new ConsoleProcedureError(413, 'RUN_DETAIL_LIMIT', 'The Run inspection exceeds its size limit.')
+        return result
+      } catch (error) {
+        if (error instanceof ConsoleProcedureError) throw error
+        if (error instanceof AutomationSnapshotInspectionLimitError) throw new ConsoleProcedureError(413, 'RUN_DETAIL_LIMIT', 'The Run inspection exceeds its size limit.')
+        throw new ConsoleProcedureError(409, 'RUN_DETAIL_UNAVAILABLE', 'The Run could not be inspected.')
+      }
     },
   })
   ctx.console.provideAction(ctx, workbenchCancelRunActionRef, {

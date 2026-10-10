@@ -130,6 +130,7 @@ export interface WorkbenchRunFlowNode {
   detail: string
   status: WorkbenchRunFlowStatus
   executionCount: number
+  sampledExecutionCount?: number
   children: WorkbenchRunFlowNode[]
   blockedReason?: string
   /** Graph members are unordered. Edges, including ports, carry the actual control topology. */
@@ -159,6 +160,8 @@ export interface WorkbenchRunExecution {
   id: string
   instructionId: string
   sourceNodeId?: string
+  /** Present when a frozen sample supplied this result without a Provider invocation. */
+  sampleId?: string
   title: string
   operation: string
   status: ExecutionStatus
@@ -193,6 +196,8 @@ export interface WorkbenchExecutionData {
   runId: string
   executionId: string
   sourceNodeId?: string
+  /** A sample result has no Provider Attempt; values still belong to this durable Execution. */
+  sampleId?: string
   /** Attempts do not persist separate values; these are the Execution's current durable values. */
   provenance: 'execution-current'
   attempt?: { id: string; number: number }
@@ -242,6 +247,7 @@ export interface WorkbenchRunDetail {
   flow: {
     root: WorkbenchRunFlowNode
     truncated: boolean
+    focusedNodeId?: string
   }
   context: WorkbenchRunContextGroup[]
   executions: WorkbenchRunExecution[]
@@ -785,7 +791,7 @@ export interface WorkbenchStartManualRunResult { runId: string; snapshotId?: str
 
 export const workbenchAutomationSnapshotQueryRef = { id: 'numen:automation-snapshot', version: 1 } as const satisfies ConsoleProcedureRef
 
-export interface WorkbenchAutomationSnapshotQueryInput { automationId: string; snapshotId: string }
+export interface WorkbenchAutomationSnapshotQueryInput { automationId: string; snapshotId: string; sourceNodeId?: string }
 
 export const workbenchAutomationRestoreContentQueryRef = { id: 'numen:automation-restore-content', version: 1 } as const satisfies ConsoleProcedureRef
 export interface WorkbenchAutomationRestoreContentQueryInput { automationId: string; snapshotId: string; expectedDraftVersion: number }
@@ -804,6 +810,8 @@ export interface WorkbenchAutomationComparisonQueryInput {
   automationId: string
   left: WorkbenchAutomationComparisonTarget
   right: WorkbenchAutomationComparisonTarget
+  changeOffset?: number
+  changeLimit?: number
 }
 export interface WorkbenchAutomationComparisonState {
   automationId: string
@@ -828,6 +836,8 @@ export interface WorkbenchAutomationComparison {
   left: WorkbenchAutomationComparisonIdentity
   right: WorkbenchAutomationComparisonIdentity
   changes: WorkbenchAutomationChange[]
+  totalChanges?: number
+  nextChangeOffset?: number
 }
 
 export interface WorkbenchAutomationSnapshotSourceNode {

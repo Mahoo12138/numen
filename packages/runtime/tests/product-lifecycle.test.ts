@@ -113,11 +113,16 @@ describe('independent Console and Workbench product entries', () => {
     const backend = Object.fromEntries(['database', 'scheduler', 'triggers'].map(id => [id, ctx.loader.resolve(id).fiber!.uid]))
     const consoleOnly = resources(ctx)
     let allEnabled: ReturnType<typeof resources> | undefined
+    const sampleMetadata = () => ctx.console.query({ id: 'numen:output-samples', version: 1 }, { automationId: automation.id }, {
+      requestId: 'product-local-test-recovery', principal: { subject: { type: 'user', id: 'owner' }, authenticated: true },
+      signal: new AbortController().signal, logger: ctx.logger('product:local-test-recovery'),
+    })
 
     for (let cycle = 0; cycle < 10; cycle++) {
       await enabled(ctx, 'workbench', true)
       await vi.waitFor(() => expect(ctx.workbench).toBeDefined())
       expect(ctx.console.list().every(item => item.providerAvailable)).toBe(true)
+      expect(await sampleMetadata()).toEqual({ items: [] })
       expect(ctx.consoleEntries.list()).toHaveLength(2)
       expect((await fetch(`${app.serverUrl}/`)).status).toBe(200)
       allEnabled ??= resources(ctx)
@@ -153,6 +158,7 @@ describe('independent Console and Workbench product entries', () => {
       expect(ctx.scheduler.getRun(run.id)?.status).toBe('COMPLETED')
       await enabled(ctx, 'console', true)
       await vi.waitFor(() => expect(resources(ctx)).toEqual(allEnabled))
+      expect(await sampleMetadata()).toEqual({ items: [] })
       expect((await session(app)).status).toBe(200)
     }
     await enabled(ctx, 'workbench', false)

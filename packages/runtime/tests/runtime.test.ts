@@ -190,10 +190,17 @@ describe('Numen runtime', () => {
         definition: expect.objectContaining({ id: 'numen:home-overview', version: 1, kind: 'query' }),
         providerAvailable: true,
       }),
+      // v1 retains its explicit legacy consumer leaves; local testing is a v2 product consumer.
+      expect.objectContaining({ definition: expect.objectContaining({ id: 'numen:local-test-preview', version: 1, kind: 'query' }), providerAvailable: configVersion === 2 }),
+      expect.objectContaining({ definition: expect.objectContaining({ id: 'numen:local-test-start', version: 1, kind: 'action' }), providerAvailable: configVersion === 2 }),
       expect.objectContaining({ definition: expect.objectContaining({ id: 'numen:logs-changed', version: 1, kind: 'subscription' }), providerAvailable: true }),
       expect.objectContaining({ definition: expect.objectContaining({ id: 'numen:logs', version: 1, kind: 'query' }), providerAvailable: true }),
       expect.objectContaining({ definition: expect.objectContaining({ id: 'numen:manual-run-form', version: 1, kind: 'query' }), providerAvailable: true }),
       expect.objectContaining({ definition: expect.objectContaining({ id: 'numen:manual-run-start', version: 1, kind: 'action' }), providerAvailable: true }),
+      expect.objectContaining({ definition: expect.objectContaining({ id: 'numen:output-sample-create', version: 1, kind: 'action' }), providerAvailable: configVersion === 2 }),
+      expect.objectContaining({ definition: expect.objectContaining({ id: 'numen:output-sample-delete', version: 1, kind: 'action' }), providerAvailable: configVersion === 2 }),
+      expect.objectContaining({ definition: expect.objectContaining({ id: 'numen:output-sample-import', version: 1, kind: 'action' }), providerAvailable: configVersion === 2 }),
+      expect.objectContaining({ definition: expect.objectContaining({ id: 'numen:output-samples', version: 1, kind: 'query' }), providerAvailable: configVersion === 2 }),
       expect.objectContaining({ definition: expect.objectContaining({ id: 'numen:plugin-apply', version: 1, kind: 'action' }), providerAvailable: configVersion === 2 }),
       expect.objectContaining({ definition: expect.objectContaining({ id: 'numen:plugin-ownership', version: 1, kind: 'query' }), providerAvailable: configVersion === 2 }),
       expect.objectContaining({ definition: expect.objectContaining({ id: 'numen:plugin-preview', version: 1, kind: 'query' }), providerAvailable: configVersion === 2 }),
@@ -786,7 +793,7 @@ describe('Numen runtime', () => {
     expect(await ready.json()).toMatchObject({
       status: 'ready',
       checks: {
-        database: { migrationVersion: 15 },
+        database: { migrationVersion: 17 },
         automations: { ready: true, count: 1 },
         connections: {
           ready: true,

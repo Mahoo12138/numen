@@ -1,3 +1,4 @@
+import { outputSamplesQuery, createOutputSampleAction, importOutputSampleAction, deleteOutputSampleAction, localTestPreviewQuery, startLocalTestAction } from './local-test-provider.js'
 import { workbenchConnectionUsageQuery } from './connection-usage-provider.js'
 import { workbenchAutomationSnapshotQuery } from './automation-snapshot-provider.js'
 import { workbenchAutomationComparisonQuery, workbenchAutomationComparisonStateQuery } from './automation-comparison-provider.js'
@@ -105,6 +106,13 @@ export class WorkbenchRuntimeService extends Service {
   constructor(ctx: Context, config: WorkbenchRuntimeConfig = {}) {
     super(ctx, 'workbench')
     workbenchServerPlugin(ctx, config)
+    ctx.console.define(ctx, outputSamplesQuery)
+    ctx.console.define(ctx, createOutputSampleAction)
+    ctx.console.define(ctx, importOutputSampleAction)
+    ctx.console.define(ctx, deleteOutputSampleAction)
+    ctx.console.define(ctx, localTestPreviewQuery)
+    ctx.console.define(ctx, startLocalTestAction)
+
     ctx.console.define(ctx, workbenchPluginsQuery)
     ctx.console.define(ctx, workbenchPluginOwnershipQuery)
     ctx.console.define(ctx, workbenchPluginPreview)

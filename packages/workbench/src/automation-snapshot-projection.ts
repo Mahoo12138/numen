@@ -2,6 +2,7 @@ import { isSupportedAutomationVersion, type AutomationExecutionSnapshot, type Co
 import type { WorkbenchAutomationSnapshotDetail, WorkbenchAutomationSnapshotSourceNode, WorkbenchInspectedValue } from './contracts.js'
 import { inspectExecutionValue } from './execution-inspection.js'
 import { projectRunFlow } from './run-detail-projection.js'
+import { findInspectionSourceNode, inspectionSourceChildren } from './automation-source-inspection.js'
 
 const record = (value: unknown): Record<string, unknown> | undefined => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined
 const text = (value: string): string => value.slice(0, 200)
@@ -40,18 +41,7 @@ function knownSchemaFields(snapshot: unknown): Set<string> {
   return new Set(Object.keys(record(encoded?.dict) ?? {}))
 }
 
-function children(node: ControlSource | GraphNodeSource): Array<ControlSource | GraphNodeSource> {
-  switch (node.type) {
-    case 'block': return node.steps
-    case 'if': return [node.then, ...(node.else ? [node.else] : [])]
-    case 'parallel': case 'race': return node.branches
-    case 'foreach': return [node.body]
-    case 'graph': return node.nodes
-    default: return []
-  }
-}
-
-export function projectAutomationSnapshot(snapshot: AutomationExecutionSnapshot, automationName: string): WorkbenchAutomationSnapshotDetail {
+export function projectAutomationSnapshot(snapshot: AutomationExecutionSnapshot, automationName: string, sourceNodeId?: string, maximumNodes = 250): WorkbenchAutomationSnapshotDetail {
   const result: WorkbenchAutomationSnapshotDetail = {
     automationName: text(automationName),
     identity: {
@@ -65,7 +55,9 @@ export function projectAutomationSnapshot(snapshot: AutomationExecutionSnapshot,
     presentation: { collapsedNodes: [], hiddenFields: 0, truncated: false }, inputs: [], inputsTruncated: false,
   }
   if (result.compatibility !== 'supported') return result
-  result.flow = projectRunFlow(snapshot, [])
+  const selected = sourceNodeId ? findInspectionSourceNode(snapshot.source.flow, sourceNodeId) : snapshot.source.flow
+  if (!selected) throw new Error('Source node is not present in this immutable snapshot')
+  result.flow = projectRunFlow(snapshot, [], [], sourceNodeId, maximumNodes)
   // The Flow renderer contains metadata only, never expression values or connection identities.
   const pendingFlow = [result.flow.root]
   while (pendingFlow.length) {
@@ -83,9 +75,9 @@ export function projectAutomationSnapshot(snapshot: AutomationExecutionSnapshot,
     byteBudget.remaining -= bytes
     return projection
   }
-  const pending: Array<{ node: ControlSource | GraphNodeSource; depth: number }> = [{ node: snapshot.source.flow, depth: 0 }]
+  const pending: Array<{ node: ControlSource | GraphNodeSource; depth: number }> = [{ node: selected, depth: 0 }]
   const ids = new Set<string>()
-  while (pending.length && result.source.nodes.length < 250) {
+  while (pending.length && result.source.nodes.length < maximumNodes) {
     const { node, depth } = pending.pop()!
     if (depth > 64) { result.source.truncated = true; continue }
     ids.add(node.id)
@@ -126,8 +118,8 @@ export function projectAutomationSnapshot(snapshot: AutomationExecutionSnapshot,
       }
     }
     result.source.nodes.push(projected)
-    const descendants = children(node)
-    const available = 250 - result.source.nodes.length
+    const descendants = inspectionSourceChildren(node)
+    const available = maximumNodes - result.source.nodes.length
     if (descendants.length > available) result.source.truncated = true
     pending.push(...descendants.slice(0, available).reverse().map(child => ({ node: child, depth: depth + 1 })))
   }

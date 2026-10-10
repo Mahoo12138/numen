@@ -1,5 +1,6 @@
 import { isSupportedAutomationVersion, type AutomationSource, type NumenValue } from '@numenjs/core'
 import type { WorkbenchAutomationChange } from './contracts.js'
+import { maximumInspectedSourceNodes } from './automation-source-inspection.js'
 
 export class AutomationComparisonLimitError extends Error {
   override name = 'AutomationComparisonLimitError'
@@ -183,26 +184,32 @@ function parseDocument(document: ComparisonDocument): ParsedDocument {
   if (source.triggers.length > 100) return limit()
   const nodes = new Map<string, Node>(), groups = new Map<string, string[]>(), triggers = new Map<string, RecordValue>()
   const walk = (value: unknown, parent: string | undefined, slot: string, depth: number, blockOnly = false): void => {
-    if (depth > 64 || nodes.size >= 250) return limit()
+    if (depth > 64 || nodes.size >= maximumInspectedSourceNodes) return limit()
     const node = record(value), id = identity(node.id)
     if (typeof node.type !== 'string' || !Object.hasOwn(nodeFields, node.type) || (blockOnly && node.type !== 'block') || nodes.has(id)) return unavailable()
     if ((node.type === 'condition' || node.type === 'merge') && (document.protocolVersion !== 2 || slot !== 'graphNodes')) return unavailable()
     nodes.set(id, { value: node, parent, slot })
     const key = JSON.stringify([parent, slot])
-    groups.set(key, [...(groups.get(key) ?? []), id])
+    const group = groups.get(key) ?? []
+    group.push(id)
+    groups.set(key, group)
     const children = (array: unknown, childSlot: string, onlyBlocks = false): void => {
       if (!Array.isArray(array)) return unavailable()
-      if (array.length > 250) return limit()
+      if (array.length > maximumInspectedSourceNodes) return limit()
       for (const child of array) walk(child, id, childSlot, depth + 1, onlyBlocks)
     }
     switch (node.type) {
       case 'block': children(node.steps, 'steps'); break
       case 'if': walk(node.then, id, 'then', depth + 1, true); if (node.else !== undefined) walk(node.else, id, 'else', depth + 1, true); break
       case 'parallel': case 'race': children(node.branches, 'branches', true); break
-      case 'foreach': walk(node.body, id, 'body', depth + 1, true); break
+      case 'foreach': {
+        const graphMember = slot === 'graphNodes'
+        if (graphMember && (record(node.body).type !== 'graph' || record(node.body).output === undefined)) return unavailable()
+        walk(node.body, id, 'body', depth + 1, !graphMember); break
+      }
       case 'graph': {
         if (document.protocolVersion !== 2 || node.version !== 1 || !Array.isArray(node.nodes)) return unavailable()
-        if (node.nodes.some(member => !['capability', 'condition', 'merge'].includes(record(member).type as string))) return unavailable()
+        if (node.nodes.some(member => !['capability', 'condition', 'merge', 'foreach'].includes(record(member).type as string))) return unavailable()
         children(node.nodes, 'graphNodes')
         const memberIds = new Set(node.nodes.map(member => identity(record(member).id)))
         for (const edge of graphEdges(node.edges)) {
@@ -294,14 +301,19 @@ function nodeProjection(node: RecordValue) {
 /** Choose a largest stable subsequence; insertion/deletion never moves surviving siblings. */
 function stableSubsequence(previous: string[], current: string[]): Set<string> {
   const positions = new Map(previous.map((id, index) => [id, index]))
-  const lengths = current.map(() => 1), predecessors = current.map(() => -1)
-  let best = -1
+  const tails: number[] = [], predecessors = current.map(() => -1)
   for (let index = 0; index < current.length; index++) {
-    for (let prior = 0; prior < index; prior++) if (positions.get(current[prior]!)! < positions.get(current[index]!)! && lengths[prior]! + 1 > lengths[index]!) {
-      lengths[index] = lengths[prior]! + 1; predecessors[index] = prior
+    const position = positions.get(current[index]!)!
+    let start = 0, end = tails.length
+    while (start < end) {
+      const middle = (start + end) >>> 1
+      if (positions.get(current[tails[middle]!]!)! < position) start = middle + 1
+      else end = middle
     }
-    if (best === -1 || lengths[index]! > lengths[best]!) best = index
+    if (start) predecessors[index] = tails[start - 1]!
+    tails[start] = index
   }
+  let best = tails.at(-1) ?? -1
   const result = new Set<string>()
   while (best !== -1) { result.add(current[best]!); best = predecessors[best]! }
   return result
@@ -309,13 +321,32 @@ function stableSubsequence(previous: string[], current: string[]): Set<string> {
 
 /** Read-only semantic comparison. Returned metadata never contains authored values or paths. */
 export function compareAutomationDocuments(left: ComparisonDocument, right: ComparisonDocument): WorkbenchAutomationChange[] {
+  const changes: WorkbenchAutomationChange[] = []
+  compareDocuments(left, right, change => {
+    if (changes.length >= 1_000) return limit()
+    changes.push(change)
+  })
+  return changes
+}
+
+/** All comparisons are computed, but only the requested bounded page is retained and returned. */
+export function compareAutomationDocumentPage(left: ComparisonDocument, right: ComparisonDocument, offset = 0, pageSize = 250): { changes: WorkbenchAutomationChange[]; totalChanges: number; nextChangeOffset?: number } {
+  if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > 250) throw new TypeError('Invalid comparison page')
+  const changes: WorkbenchAutomationChange[] = []
+  let totalChanges = 0
+  compareDocuments(left, right, change => {
+    if (totalChanges >= offset && changes.length < pageSize) changes.push(change)
+    totalChanges++
+  })
+  return { changes, totalChanges, ...(offset + changes.length < totalChanges ? { nextChangeOffset: offset + changes.length } : {}) }
+}
+
+function compareDocuments(left: ComparisonDocument, right: ComparisonDocument, emit: (change: WorkbenchAutomationChange) => void): void {
   if (!isSupportedAutomationVersion(left.protocolVersion, left.irVersion ?? left.protocolVersion)
     || !isSupportedAutomationVersion(right.protocolVersion, right.irVersion ?? right.protocolVersion)) return unavailable()
   const before = parseDocument(left), after = parseDocument(right)
-  const changes: WorkbenchAutomationChange[] = []
   const add = (category: WorkbenchAutomationChange['category'], kind: WorkbenchAutomationChange['kind'], field: Field, nodeId?: string): void => {
-    if (changes.length >= 1_000) return limit()
-    changes.push({ category, kind, field, ...(nodeId === undefined ? {} : { nodeId }) })
+    emit({ category, kind, field, ...(nodeId === undefined ? {} : { nodeId }) })
   }
   const changed = (category: WorkbenchAutomationChange['category'], field: Field, a: unknown, b: unknown, nodeId?: string) => { if (!equal(a, b)) add(category, 'changed', field, nodeId) }
   const moved = new Set<string>()
@@ -329,7 +360,8 @@ export function compareAutomationDocuments(left: ComparisonDocument, right: Comp
     // Member array order is not Graph execution order. Only explicit edges determine it.
     if (group.some(id => after.nodes.get(id)?.slot === 'graphNodes')) continue
     const current = group.filter(id => before.nodes.has(id) && !moved.has(id))
-    const previous = (before.groups.get(key) ?? []).filter(id => current.includes(id))
+    const currentIds = new Set(current)
+    const previous = (before.groups.get(key) ?? []).filter(id => currentIds.has(id))
     const stable = stableSubsequence(previous, current)
     for (const id of current) if (!stable.has(id)) moved.add(id)
   }
@@ -389,5 +421,4 @@ export function compareAutomationDocuments(left: ComparisonDocument, right: Comp
   for (const [category, field, key] of [['triggers', 'triggerCapability', 'capability'], ['triggers', 'triggerConfig', 'config'], ['bindings', 'connections', 'bindings'], ['extensions', 'extensionFields', 'extensions']] as const) {
     changed(category, field, commonTriggers.map(id => (triggersA[id] as RecordValue)[key]), commonTriggers.map(id => (triggersB[id] as RecordValue)[key]))
   }
-  return changes
 }

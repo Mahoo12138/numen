@@ -2,14 +2,14 @@ import { AutomationSnapshotInspectionLimitError } from '@numenjs/automation'
 import { ConsoleProcedureError, type ConsoleQueryDefinition, type ConsoleRequestContext } from '@numenjs/console'
 import type { Context } from 'cordis'
 import z from 'schemastery'
-import { automationIdSchema } from './automation-schemas.js'
+import { automationIdSchema, automationSourceNodeIdSchema } from './automation-schemas.js'
 import { projectAutomationSnapshot } from './automation-snapshot-projection.js'
 import { workbenchAutomationSnapshotQueryRef, type WorkbenchAutomationSnapshotDetail, type WorkbenchAutomationSnapshotQueryInput } from './contracts.js'
 
 export const workbenchAutomationSnapshotQuery: ConsoleQueryDefinition<WorkbenchAutomationSnapshotQueryInput, WorkbenchAutomationSnapshotDetail> = {
   ...workbenchAutomationSnapshotQueryRef, kind: 'query', title: 'Inspect an immutable Automation snapshot',
   description: 'Authenticated, bounded Source and presentation inspection using only frozen contracts.',
-  input: z.object({ automationId: automationIdSchema, snapshotId: z.string().pattern(/^(?:rev|snap)_[a-f0-9]{32}$/).required() }),
+  input: z.object({ automationId: automationIdSchema, snapshotId: z.string().pattern(/^(?:rev|snap)_[a-f0-9]{32}$/).required(), sourceNodeId: automationSourceNodeIdSchema }),
   output: z.any<WorkbenchAutomationSnapshotDetail>(),
 }
 
@@ -22,7 +22,12 @@ export function workbenchAutomationSnapshotProviderPlugin(ctx: Context): void {
         const automation = ctx.automations.get(input.automationId)
         const snapshot = automation && ctx.automations.getExecutionSnapshotForInspection(input.snapshotId, automation.id)
         if (!automation || !snapshot) throw new ConsoleProcedureError(404, 'AUTOMATION_SNAPSHOT_NOT_FOUND', 'The snapshot was not found in this Automation.')
-        const result = projectAutomationSnapshot(snapshot, automation.name)
+        let maximumNodes = 250
+        let result = projectAutomationSnapshot(snapshot, automation.name, input.sourceNodeId, maximumNodes)
+        while (Buffer.byteLength(JSON.stringify(result), 'utf8') > 131_072 && maximumNodes > 1) {
+          maximumNodes = Math.max(1, Math.floor(maximumNodes / 2))
+          result = projectAutomationSnapshot(snapshot, automation.name, input.sourceNodeId, maximumNodes)
+        }
         if (Buffer.byteLength(JSON.stringify(result), 'utf8') > 131_072) throw new ConsoleProcedureError(413, 'AUTOMATION_SNAPSHOT_LIMIT', 'The snapshot inspection exceeds its size limit.')
         return result
       } catch (error) {

@@ -252,7 +252,7 @@ describe('Explicit restore-to-Draft authoring preparation', () => {
   it('rejects excessive node/depth/entry/Presentation bounds instead of returning a partial restoration', async () => {
     const { root, first, prepare } = await fixture()
     const replace = (source: unknown, presentation: unknown = {}) => root.database.db.prepare('UPDATE automation_revisions SET source_json = ?, presentation_json = ? WHERE id = ?').run(JSON.stringify(source), JSON.stringify(presentation), first.id)
-    replace({ triggers: [], flow: { type: 'block', id: 'root', steps: Array.from({ length: 250 }, (_, index) => ({ type: 'wait', id: `wait-${index}` })) } })
+    replace({ triggers: [], flow: { type: 'block', id: 'root', steps: Array.from({ length: 10_000 }, (_, index) => ({ type: 'wait', id: `wait-${index}` })) } })
     await expect(prepare()).rejects.toMatchObject({ status: 413, code: 'AUTOMATION_RESTORE_LIMIT' })
     let deep: ControlSource = { type: 'wait', id: 'leaf' }
     for (let index = 0; index < 65; index++) deep = { type: 'block', id: `depth-${index}`, steps: [deep] }
