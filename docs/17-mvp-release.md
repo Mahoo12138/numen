@@ -1,12 +1,13 @@
 # 17. MVP 0.1.0 发布
 
-## 1. 版本与冻结范围
+> 本页保留早期 0.1.0 容器发布方案及操作模板，不代表当前代码已经完成发布验收。N0–N4 的本地整体验收见 [2026-10-10 记录](verification/n0-n4-acceptance-2026-10-10.md)；公共包边界见 [通用组件与 npm 发布](20-components-and-publishing.md)。容器、远程 CI、仓库上传等门禁仍须针对实际发布候选重新执行。
+
+## 1. 版本与历史冻结范围
 
 当前应用版本为 **0.1.0**，版本来源是根 `package.json`。
-这是容器应用版本；所有 workspace package 仍为 private，不发布到 npm，
-也不意味着 `@numenjs/*` npm scope 或第三方 SDK 已冻结。
+早期容器方案制定时所有 workspace package 均为 private；当前已有六个 public 包用于本地打包与独立消费验证，Workbench、Runtime 与 CLI 仍为 private。源码版本不代表已发布到 npm，也不证明 `@numenjs/*` scope 的实际权限已经确认。
 
-本次冻结当前已经实现的单用户、单进程 Node + SQLite 产品路径：
+早期方案冻结的单用户、单进程 Node + SQLite 产品路径：
 
 - 首次部署、Master Key 配置、bootstrap URL 登录与 Workbench。
 - Automation 创建、Trigger/Capability/核心控制编辑、Draft 自动保存与冲突恢复。
@@ -15,8 +16,7 @@
 - Connection 与 Credential 管理、共享出站 HTTP、受限的 HTTP Request Capability。
 - 冷备、容器重建恢复、前向升级和 loopback-only Compose 部署。
 
-候选期仅接受以上范围内的缺陷修复及发布验证改进。新产品能力另开后续里程碑。
-现有协议版本及 SQLite schema v13 保持不变。
+上述范围和 SQLite schema v13 对应该历史候选。此后 N0–N4 已推进配置编辑、Draft 固定快照、版本工作区和编辑效率；当前最新迁移为 v15。未来发布应根据当前实现重新冻结范围，不能沿用历史版本号或候选限制代替核对。
 
 **已知边界随候选版本交付：** 无多用户授权、分布式调度、任意脚本或插件沙箱；
 Cron 不补发停机期间错过的触发；State Trigger、Try/Finally、Resource HTTP 下载、

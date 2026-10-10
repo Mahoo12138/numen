@@ -1,0 +1,38 @@
+[
+  {
+    "name": "@numenjs/components",
+    "version": "0.1.0",
+    "filename": "numenjs-components-0.1.0.tgz",
+    "sha256": "418becf16d5f58c7185af88e0d172d10d0a3b6fdd3055f0b4b109592e3b63335"
+  },
+  {
+    "name": "@numenjs/console",
+    "version": "0.1.0",
+    "filename": "numenjs-console-0.1.0.tgz",
+    "sha256": "ddbe6ad132b8c7e41d9ed45d9dd78f270984634a66cd93e70a41ae2edc3bd309"
+  },
+  {
+    "name": "@numenjs/core",
+    "version": "0.1.0",
+    "filename": "numenjs-core-0.1.0.tgz",
+    "sha256": "e5443e290485c061ebe3b334d6045eda77eb4932823a305b305b91c7fa4fd08b"
+  },
+  {
+    "name": "@numenjs/i18n",
+    "version": "0.1.0",
+    "filename": "numenjs-i18n-0.1.0.tgz",
+    "sha256": "2f2ebe7528ef6602b223772fbeffbd8f54d531962326116d0ee140912bd87a29"
+  },
+  {
+    "name": "@numenjs/logging",
+    "version": "0.1.0",
+    "filename": "numenjs-logging-0.1.0.tgz",
+    "sha256": "be68a228e93c75b4eb495832828effa8f23dfd0490cacf9a889221e17e16bdba"
+  },
+  {
+    "name": "@numenjs/webui",
+    "version": "0.1.0",
+    "filename": "numenjs-webui-0.1.0.tgz",
+    "sha256": "2c63419d691b9d2519cf794226b0f35c7d6abb3975c904c97ce1f77a5fbe41da"
+  }
+]

@@ -50,7 +50,7 @@
 | [14-v1-scope-open-questions.md](14-v1-scope-open-questions.md) | V1 边界、明确不做、后续开放问题 |
 | [15-reference-repositories.md](15-reference-repositories.md) | 开发参考仓库、源码阅读路线、Cordis/Koishi/Shigma/Satori/VS Code 对照图 |
 | [16-outbound-http-proxy.md](16-outbound-http-proxy.md) | 宿主级出站 HTTP、代理、取消、错误与 Integration 约束 |
-| [17-mvp-release.md](17-mvp-release.md) | MVP 候选范围冻结、发布门禁、版本镜像与发布检查表 |
+| [17-mvp-release.md](17-mvp-release.md) | 早期 MVP 发布方案、操作模板与历史边界 |
 | [18-i18n.md](18-i18n.md) | 共用词条服务、浏览器语言、Vue 接入、Entry 生命周期与验证 |
 | [18-i18n-research.md](18-i18n-research.md) | Koishi i18n 第一方源码依据与适配取舍 |
 | [19-logging.md](19-logging.md) | 宿主日志、关联上下文、脱敏、轮转与 Workbench 实时查询 |
@@ -73,6 +73,7 @@
 - [20. 通用组件与 npm 发布](20-components-and-publishing.md)
 - [23. Draft 固定快照试运行设计建议](23-draft-test-snapshot-design.md)
 - [24. Draft 快照决策与迁移影响清单（已批准）](24-draft-test-snapshot-decision.md)
+- [N0–N4 整体验收与本地公共包消费检查（2026-10-10）](verification/n0-n4-acceptance-2026-10-10.md)
 - [N2-01 固定快照查看验收](verification/version-workspace-2026-10-08.md)
 - [N2-02 固定版本语义比较验收](verification/semantic-comparison-2026-10-08.md)
 - [N2-03 固定版本恢复到草稿验收](verification/draft-restoration-2026-10-08.md)

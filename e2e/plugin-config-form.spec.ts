@@ -313,6 +313,85 @@ test('retains form buffers through a failed query refresh and reconciles a lost 
   await page.unroute('**/api/console/call')
 })
 
+test('aborts a committed Apply response on confirmed navigation and reads the saved configuration on return without replay', async ({ page }, testInfo) => {
+  await plugins(page)
+  const base = await application.context.hostConfig.read(), calls = recordMutations(page)
+  const editor = await form(page), title = editor.getByRole('textbox', { name: 'title', exact: true })
+  const originalEditor = await editor.elementHandle()
+  const committed = { ...original, title: 'Saved before leaving the page' }
+  await title.fill(committed.title)
+  await editor.getByRole('button', { name: 'Preview change', exact: true }).click()
+  await expect(page.locator('.plugin-preview')).toBeVisible()
+
+  let release!: () => void
+  const gate = new Promise<void>(resolve => { release = resolve })
+  let savedFingerprint = '', held = false, fulfilled = false, aborted = false
+  page.on('requestfailed', request => {
+    if (request.url().endsWith('/api/console/call') && request.postDataJSON()?.procedure === 'numen:plugin-apply@1') {
+      aborted = request.failure()?.errorText === 'net::ERR_ABORTED'
+    }
+  })
+  await page.route('**/api/console/call', async route => {
+    if (route.request().postDataJSON()?.procedure !== 'numen:plugin-apply@1') return route.continue()
+    // Send the real write to Host, but keep its successful response outside the browser.
+    const response = await route.fetch()
+    expect(response.ok()).toBe(true)
+    const body = await response.json()
+    expect(body.result).toMatchObject({ saved: true, runtimeApplied: true })
+    savedFingerprint = body.result.fingerprint
+    held = true
+    await gate
+    try { await route.fulfill({ response }) }
+    catch { await expect.poll(() => aborted).toBe(true) }
+    fulfilled = true
+  })
+  try {
+    const applyButton = page.getByRole('button', { name: 'Save and apply this change', exact: true })
+    await applyButton.click()
+    await expect.poll(() => held).toBe(true)
+    expect(savedFingerprint).not.toBe(base.fingerprint)
+    expect(await diskConfig()).toEqual(committed)
+    await expect(applyButton).toBeDisabled()
+    await expect(title).toHaveValue(committed.title)
+    await expect(page.getByText('Configuration saved; runtime application completed.', { exact: true })).toHaveCount(0)
+
+    await chooseDiscard(page, false, () => page.getByRole('button', { name: 'Home', exact: true }).click())
+    await expect(page.getByRole('heading', { name: 'Plugins', exact: true })).toBeVisible()
+    await expect(title).toHaveValue(committed.title)
+    expect(await originalEditor!.evaluate(element => element.isConnected)).toBe(true)
+    expect(aborted).toBe(false)
+    await chooseDiscard(page, true, () => page.getByRole('button', { name: 'Home', exact: true }).click())
+    await expect(page.getByRole('heading', { name: 'Home', exact: true })).toBeVisible()
+    expect(await originalEditor!.evaluate(element => element.isConnected)).toBe(false)
+
+    const returningRead = page.waitForResponse(response => response.url().endsWith('/api/console/call') && response.request().postDataJSON()?.procedure === 'numen:plugins@1')
+    await page.getByRole('button', { name: 'Plugins', exact: true }).click()
+    const refreshed = (await (await returningRead).json()).result as HostConfigSnapshot
+    expect(refreshed.fingerprint).toBe(savedFingerprint)
+    expect(refreshed.entries.find(entry => entry.id === 'form-a')?.config).toEqual(committed)
+    await expect(page.locator('.plugin-editor')).toHaveCount(0)
+    await expect(page.locator('.plugin-preview')).toHaveCount(0)
+    const reopened = await form(page), reopenedTitle = reopened.getByRole('textbox', { name: 'title', exact: true })
+    await expect(reopenedTitle).toHaveValue(committed.title)
+    await expect(reopened.getByRole('textbox', { name: 'optionalDefault', exact: true })).toHaveValue('')
+    await reopenedTitle.fill('New local buffer after returning')
+
+    // Releasing an obsolete response must not close or overwrite the new editing session.
+    release()
+    await expect.poll(() => fulfilled).toBe(true)
+    await expect.poll(() => aborted).toBe(true)
+    await expect(reopenedTitle).toHaveValue('New local buffer after returning')
+    await expect(page.locator('.plugin-preview')).toHaveCount(0)
+    await expect(page.getByText('Configuration saved; runtime application completed.', { exact: true })).toHaveCount(0)
+    await expect(page.getByText(/The response did not confirm the outcome/)).toHaveCount(0)
+    expect(calls.map(call => call.procedure)).toEqual(['numen:plugin-preview@1', 'numen:plugin-apply@1'])
+    expect(calls[1]?.input).toEqual({ ...calls[0]?.input, previewToken: expect.any(String) })
+    expect(await diskConfig()).toEqual(committed)
+    expect(await diskConfig('form:b')).toEqual({ ...original, title: 'Beta title' })
+    await testInfo.attach('apply-navigation-reconciliation', { body: JSON.stringify({ baseFingerprint: base.fingerprint, savedFingerprint, aborted, calls, finalConfig: await diskConfig() }, null, 2), contentType: 'application/json' })
+  } finally { release(); await page.unrouteAll({ behavior: 'wait' }) }
+})
+
 test('shows independent product instances and read-only internal details without exposing withheld configuration or executable metadata', async ({ page }, testInfo) => {
   const dtoResponse = page.waitForResponse(response => response.url().endsWith('/api/console/call') && response.request().postDataJSON()?.procedure === 'numen:plugins@1')
   await plugins(page)

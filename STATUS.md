@@ -623,9 +623,33 @@ navigation. The 1000-node case remains a pressure probe.
 records raw comparisons, regression evidence and exact candidate identities.
 No deployment or release.
 
-Next: consolidate N0–N4 acceptance against the plan and run local public-package
-consumer checks before proposing any further product scope. Remaining pressure
-costs, including parameterized translation, stay documented diagnostic candidates.
+### N0–N4 consolidated local acceptance — 2026-10-10
+
+All 15 items in the 2026-09-30 plan have implementation and representative
+failure/recovery coverage. A fresh archive of `2e46e8f` passes frozen offline
+installation, typecheck, production/example builds, 131 Vitest files / 923 tests,
+and the original 103 browser cases. Six public package archives pass installation
+and consumer checks outside the workspace. CLI validation and normal/safe doctor
+pass against an explicit temporary configuration.
+
+One additional production-browser regression covers a committed Apply with its
+response delayed across cancelled/confirmed navigation, component disposal,
+read reconciliation and a new editing session. It checks exactly one Preview and
+Apply, actual request abortion, persisted instance configurations and preservation
+of new local input.
+The targeted case and final full suite of 104 browser cases pass.
+
+[Consolidated acceptance](docs/verification/n0-n4-acceptance-2026-10-10.md)
+maps each plan item to evidence and distinguishes current checks from retained
+2026-10-08 performance measurements. The production assets match that measured
+build. N2 inspection projects at most 250 Flow nodes / 64 levels; comparison and
+restoration reject over-limit structures. The 1000-node editor case remains a
+pressure probe, not a capacity guarantee for all features.
+
+The planned N0–N4 product scope is complete locally. Further product scope or an
+actual release candidate needs its own scope decision; no release was performed.
+Remaining pressure costs, including parameterized translation, stay documented
+diagnostic candidates. Independent npm consumers do not inherit host pnpm patches.
 
 M0/M1 foundation implemented and verified: independent Console/Workbench composition,
 v2 native groups and explicit migration, v1 compatibility, two sets of ten lifecycle cycles,
@@ -757,7 +781,7 @@ local release verification.
 
 ## Historical Release Verification Baseline
 
-The current N0/N1 working-tree validation is recorded above. The following checks describe
+The current N0–N4 local validation is recorded above. The following checks describe
 the earlier release baseline and do not establish release validation for these changes.
 
 ```text
