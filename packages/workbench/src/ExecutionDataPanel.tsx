@@ -16,6 +16,7 @@ export function ExecutionDataPanel({ state, onClose, onLocate }: {
     {state.status === 'ERROR' ? <p role="alert">{t('workbench.runData.failed')}</p> : null}
     {state.status === 'READY' ? <>
       <p class="run-data-provenance">{t('workbench.runData.current')}{state.data.attempt ? ` · ${t('workbench.attempt2')}${state.data.attempt.number}` : ''}</p>
+      {state.data.sampleId ? <p>{t('workbench.localTest.sampled')} · <code>{state.data.sampleId}</code></p> : null}
       {state.data.sourceNodeId ? <Button onClick={() => onLocate(state.data.sourceNodeId!)} type="button">{t('workbench.runData.locate')}</Button> : null}
       <div class="run-data-values">{(['input', 'output'] as const).map(side => <section key={side}>
         <h3>{t(`workbench.runData.${side}`)}</h3>

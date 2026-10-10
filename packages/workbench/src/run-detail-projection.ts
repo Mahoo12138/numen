@@ -32,14 +32,14 @@ export function projectWorkbenchRunDetail(
   diagnostics: RunExecutionDiagnosticsPage,
   events: RunEventPage,
   encodeExecutionCursor: (cursor: NonNullable<RunExecutionDiagnosticsPage['nextCursor']>) => string,
-  sourceNodeId?: string,
+  flowNodeId?: string,
 ): WorkbenchRunDetail {
   const supportedRevision = revision && isSupportedAutomationVersion(revision.protocolVersion, revision.irVersion) ? revision : undefined
   const capabilityTitles = new Map(
     (supportedRevision?.contractSnapshot.capabilities ?? []).map(capability => [capabilityKey(capability), capability.title]),
   )
   const instructions = supportedRevision?.compiledPlan.instructions ?? {}
-  const focusedNodeId = supportedRevision && sourceNodeId && findInspectionSourceNode(supportedRevision.source.flow, sourceNodeId) ? sourceNodeId : undefined
+  const focusedNodeId = supportedRevision && flowNodeId && findInspectionSourceNode(supportedRevision.source.flow, flowNodeId) ? flowNodeId : undefined
   const flow = projectRunFlow(revision, inspection.instructionExecutions, inspection.graphMembers, focusedNodeId)
   const counts = diagnostics.statusCounts
   return {

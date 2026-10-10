@@ -1,4 +1,5 @@
 import type { AutomationSource, CapabilitySource, ControlSource, ValueExpr } from '@numenjs/core'
+import { automationSourceNodeChildren, type AutomationSourceNode } from './graph-source-editing.js'
 import type {
   WorkbenchAutomationInputField,
   WorkbenchAutomationVariableCatalog,
@@ -20,6 +21,7 @@ export interface MagicVariableCandidate {
   description?: string
   sourceNodeId?: string
   unavailableReason?: 'out-of-scope' | 'requires-loop' | 'type-mismatch'
+  warning?: 'missing-dependency' | 'dynamic-path'
 }
 
 export interface ProjectMagicVariablesOptions {
@@ -34,6 +36,7 @@ export interface ProjectMagicVariablesOptions {
 interface LexicalScope {
   priorCapabilities: CapabilitySource[]
   inLoop: boolean
+  missingDependencies?: Set<string>
 }
 
 function capabilityKey(ref: { id: string; version: number }): string {
@@ -41,13 +44,35 @@ function capabilityKey(ref: { id: string; version: number }): string {
 }
 
 function findLexicalScope(
-  control: ControlSource,
+  control: AutomationSourceNode,
   nodeId: string,
   priorCapabilities: CapabilitySource[] = [],
   inLoop = false,
 ): LexicalScope | undefined {
-  if (control.id === nodeId) return { priorCapabilities, inLoop }
+  if (control.id === nodeId) return { priorCapabilities: control.type === 'graph' ? [...priorCapabilities, ...control.nodes.filter((node): node is CapabilitySource => node.type === 'capability')] : priorCapabilities, inLoop }
   switch (control.type) {
+    case 'graph': {
+      const ancestors = (id: string): Set<string> => {
+        const seen = new Set<string>(), pending = [id]
+        while (pending.length) {
+          const target = pending.pop()!
+          for (const edge of control.edges.filter(edge => edge.to.nodeId === target)) if (!seen.has(edge.from.nodeId)) { seen.add(edge.from.nodeId); pending.push(edge.from.nodeId) }
+        }
+        seen.delete(id)
+        return seen
+      }
+      const member = control.nodes.find(node => node.id === nodeId)
+      if (member) {
+        const upstream = ancestors(nodeId), candidates = control.nodes.filter((node): node is CapabilitySource => node.type === 'capability' && node.id !== nodeId)
+        return { priorCapabilities: [...priorCapabilities, ...candidates], inLoop, missingDependencies: new Set(candidates.filter(node => !upstream.has(node.id)).map(node => node.id)) }
+      }
+      for (const loop of control.nodes) if (loop.type === 'foreach') {
+        const upstream = ancestors(loop.id)
+        const found = findLexicalScope(loop.body, nodeId, [...priorCapabilities, ...control.nodes.filter((node): node is CapabilitySource => node.type === 'capability' && upstream.has(node.id))], true)
+        if (found) return found
+      }
+      return
+    }
     case 'block': {
       const visible = [...priorCapabilities]
       for (const step of control.steps) {
@@ -167,12 +192,9 @@ function stepCandidates(
 ): MagicVariableCandidate[] {
   const visible = new Set(scope.priorCapabilities.map(step => step.id))
   const all: CapabilitySource[] = []
-  const visit = (control: ControlSource): void => {
+  const visit = (control: AutomationSourceNode): void => {
     if (control.type === 'capability') all.push(control)
-    else if (control.type === 'block') control.steps.forEach(visit)
-    else if (control.type === 'if') { visit(control.then); if (control.else) visit(control.else) }
-    else if (control.type === 'foreach') visit(control.body)
-    else if (control.type === 'parallel' || control.type === 'race') control.branches.forEach(visit)
+    else automationSourceNodeChildren(control).forEach(visit)
   }
   if (options.includeUnavailable) visit(options.source.flow)
   return (options.includeUnavailable ? all : scope.priorCapabilities).flatMap(step => {
@@ -186,6 +208,7 @@ function stepCandidates(
         sourceLabel: definition.title,
         sourceNodeId: step.id,
         ...(!visible.has(step.id) ? { unavailableReason: 'out-of-scope' as const } : {}),
+        ...(scope.missingDependencies?.has(step.id) ? { warning: 'missing-dependency' as const } : field.valueType === 'unknown' ? { warning: 'dynamic-path' as const } : {}),
         group: 'steps',
         valueType: field.valueType,
         ...(field.description ? { description: field.description } : {}),

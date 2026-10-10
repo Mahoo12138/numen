@@ -31,6 +31,8 @@ import type { AutomationActivationView } from './useAutomationActivation.js'
 import type { ConsoleQueryState } from './useConsoleQuery.js'
 import { shortcutLabel, useWorkbenchCommands } from './commands.js'
 import { defineSetupComponent } from './vue-component.js'
+import { GraphCanvasWorkspace } from './GraphCanvasWorkspace.js'
+import type { GraphPosition } from './graph-canvas-projection.js'
 
 const tabs = ['Editor', 'Runs', 'Revisions', 'State', 'Settings'] as const
 
@@ -55,6 +57,9 @@ export interface AutomationEditorProps {
     publishError?: string
     editError?: string
   }
+  graphConversion?: VNodeChild
+  nodeFocus?: VNodeChild
+  onFocusNode?(nodeId: string): boolean | void
   inputSettings?: VNodeChild
   manualRunForm?: VNodeChild
   draftTestForm?: VNodeChild
@@ -78,6 +83,7 @@ export interface AutomationEditorProps {
   onMoveStep?(nodeId: string, direction: 'up' | 'down'): void
   onInsert?(item: WorkbenchAutomationInsertItem, target: AutomationInsertTarget): boolean
   onSourceCommand?(command: AutomationSourceCommand, expectedSource?: AutomationSource): boolean
+  onGraphPositions?(graphId: string, positions: Record<string, GraphPosition>, expectedSource?: AutomationSource): boolean
   clipboard?: AutomationClipboardView
   collapsedNodes?: string[]
   onCopyStep?(nodeId: string): void
@@ -125,6 +131,9 @@ export function AutomationEditor({
   inspectorOpen,
   inspectorFocusNodeId,
   conflictRecovery,
+  graphConversion,
+  nodeFocus,
+  onFocusNode,
   inputSettings,
   manualRunForm,
   draftTestForm,
@@ -142,6 +151,7 @@ export function AutomationEditor({
   onAutomationChange,
   onInsert,
   onSourceCommand,
+  onGraphPositions,
   clipboard,
   collapsedNodes,
   onCopyStep,
@@ -294,7 +304,7 @@ export function AutomationEditor({
         />
       ) : activeTab === 'Editor' ? (
         <>
-          <div class="editor-toolbar" aria-label={t('workbench.editorToolbar')}>
+          {detail?.draft.source.flow.type !== 'graph' ? <div class="editor-toolbar" aria-label={t('workbench.editorToolbar')}>
             <div class="toolbar-group">
               <ToolbarButton disabled={!authoring?.canUndo || !onUndo} commandId="automation.undo" label={t('workbench.undo')} {...(onUndo ? { onClick: onUndo } : {})}><Undo2 size={16} /></ToolbarButton>
               <ToolbarButton disabled={!authoring?.canRedo || !onRedo} commandId="automation.redo" label={t('workbench.redo')} {...(onRedo ? { onClick: onRedo } : {})}><Redo2 size={16} /></ToolbarButton>
@@ -307,8 +317,22 @@ export function AutomationEditor({
               <ToolbarButton disabled={!canEdit || !editOptions?.canMoveUp || !onMoveStep} commandId="automation.moveUp" label={t('workbench.moveUp')} onClick={() => selectedNodeId && onMoveStep?.(selectedNodeId, 'up')}><ArrowUp size={16} /></ToolbarButton>
               <ToolbarButton disabled={!canEdit || !editOptions?.canMoveDown || !onMoveStep} commandId="automation.moveDown" label={t('workbench.moveDown')} onClick={() => selectedNodeId && onMoveStep?.(selectedNodeId, 'down')}><ArrowDown size={16} /></ToolbarButton>
             </div>
-          </div>
-          <section class="automation-canvas" aria-label={t('workbench.value0AutomationFlow', { value0: automationName })}>
+            {canEdit && detail?.draft.source.flow.type === 'block' && detail.draft.source.flow.steps.length === 0 && !detail.draft.source.flow.output ? <Button type="button" onClick={() => onSourceCommand?.({ type: 'GRAPH_CREATE_EMPTY', graphId: 'graph' })}>{t('workbench.graph.create')}</Button> : null}
+          </div> : null}
+          {detail?.draft.source.flow.type !== 'graph' ? graphConversion : null}
+          {detail?.draft.source.flow.type === 'graph' ? <GraphCanvasWorkspace key={detail.automation.id}
+            {...(nodeFocus ? { nodeFocus } : {})}
+            {...(onFocusNode ? { onFocusNode } : {})}
+            source={detail.draft.source} graph={detail.draft.source.flow} presentation={detail.draft.presentation}
+            steps={steps} activeStepId={activeStepId} canEdit={canEdit} onStepChange={onStepChange}
+            toolbar={<div class="toolbar-group">
+              <ToolbarButton disabled={!authoring?.canUndo || !onUndo} commandId="automation.undo" label={t('workbench.undo')} {...(onUndo ? { onClick: onUndo } : {})}><Undo2 size={16} /></ToolbarButton>
+              <ToolbarButton disabled={!authoring?.canRedo || !onRedo} commandId="automation.redo" label={t('workbench.redo')} {...(onRedo ? { onClick: onRedo } : {})}><Redo2 size={16} /></ToolbarButton>
+            </div>}
+            {...(insertCatalogState?.status === 'READY' ? { catalog: insertCatalogState.data } : {})}
+            {...(onSourceCommand ? { onCommand: onSourceCommand } : {})}
+            {...(onGraphPositions ? { onPositions: onGraphPositions } : {})}
+          /> : <section class="automation-canvas" aria-label={t('workbench.value0AutomationFlow', { value0: automationName })}>
             <div class="step-flow">
               {detail ? <StructuredAutomationFlow
                 key={detail.automation.id}
@@ -348,7 +372,7 @@ export function AutomationEditor({
                 <AutomationQuickPicker disabled />
               </>}
             </div>
-          </section>
+          </section>}
         </>
       ) : activeTab === 'Settings' && inputSettings ? inputSettings : activeTab === 'Runs' && manualRunForm ? manualRunForm : activeTab === 'Revisions' && detail ? (
         <section class="automation-revisions">

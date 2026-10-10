@@ -3,7 +3,7 @@ import { t } from './i18n.js'
 import type { NumenValue } from '@numenjs/core'
 import type { SchemaUIResolver } from '@numenjs/webui/schema-ui'
 import { AlertCircle, Save, Trash2, X } from '@lucide/vue'
-import { computed, h, ref, type VNodeChild } from 'vue'
+import { computed, h, onScopeDispose, ref, watch, type VNodeChild } from 'vue'
 import {
   workbenchCreateConnectionActionRef,
   workbenchDeleteConnectionActionRef,
@@ -28,7 +28,8 @@ interface ConnectionConfigurationPanelProps {
   adapters: WorkbenchConnectionAdapter[]
   connection?: WorkbenchConnectionIndexItem
   onClose(): void
-  onChanged(connectionId?: string): void
+  onChanged(connectionId?: string): void | Promise<void>
+  onProtectionChange?(protect: boolean): void
 }
 
 function defaultValue(field: WorkbenchSchemaField): NumenValue | undefined {
@@ -58,7 +59,7 @@ function connectionAdapter(
 
 export const ConnectionConfigurationPanel = defineSetupComponent<ConnectionConfigurationPanelProps>(
   'ConnectionConfigurationPanel',
-  ['client', 'schemaUI', 'adapters', 'connection', 'onClose', 'onChanged'],
+  ['client', 'schemaUI', 'adapters', 'connection', 'onClose', 'onChanged', 'onProtectionChange'],
   props => {
     const initialAdapter = connectionAdapter(props.adapters, props.connection)
     const selectedAdapterKey = ref(initialAdapter ? adapterKey(initialAdapter) : '')
@@ -69,6 +70,7 @@ export const ConnectionConfigurationPanel = defineSetupComponent<ConnectionConfi
     const pending = ref(false)
     const error = ref<string>()
     const confirmDelete = ref(false)
+    const fieldDrafts = ref<Record<string, { dirty: boolean; invalid: boolean }>>({})
     const adapter = computed(() => props.adapters.find(item => adapterKey(item) === selectedAdapterKey.value))
     const mode = props.connection ? 'edit' : 'create'
 
@@ -80,14 +82,20 @@ export const ConnectionConfigurationPanel = defineSetupComponent<ConnectionConfi
       }))
       credentialId.value = next.credentials[0]?.id ?? ''
       error.value = undefined
+      fieldDrafts.value = {}
     }
     if (!props.connection && initialAdapter) resetForAdapter(initialAdapter)
+    const formValue = () => JSON.stringify([selectedAdapterKey.value, name.value, config.value, credentialId.value])
+    const originalValue = formValue()
+    watch(() => pending.value || formValue() !== originalValue || Object.values(fieldDrafts.value).some(field => field.dirty), protect => props.onProtectionChange?.(protect), { immediate: true })
+    onScopeDispose(() => props.onProtectionChange?.(false))
 
     const canSave = computed(() => !!props.client
       && !!adapter.value
       && !!name.value.trim()
       && adapter.value.configSchemaSupported
       && (!adapter.value.credentialType || !!credentialId.value)
+      && !Object.values(fieldDrafts.value).some(field => field.invalid)
       && !pending.value)
 
     const save = async () => {
@@ -110,7 +118,7 @@ export const ConnectionConfigurationPanel = defineSetupComponent<ConnectionConfi
             input,
           )
           expectedGeneration.value = result.connection.generation
-          props.onChanged(result.connection.id)
+          await props.onChanged(result.connection.id)
         } else if (props.connection && expectedGeneration.value !== undefined) {
           const input: WorkbenchUpdateConnectionInput = {
             connectionId: props.connection.id,
@@ -124,7 +132,7 @@ export const ConnectionConfigurationPanel = defineSetupComponent<ConnectionConfi
             input,
           )
           expectedGeneration.value = result.connection.generation
-          props.onChanged(result.connection.id)
+          await props.onChanged(result.connection.id)
         }
       } catch (nextError) {
         error.value = mutationMessage(nextError)
@@ -148,7 +156,7 @@ export const ConnectionConfigurationPanel = defineSetupComponent<ConnectionConfi
           workbenchDeleteConnectionActionRef,
           input,
         )
-        props.onChanged()
+        await props.onChanged()
         props.onClose()
       } catch (nextError) {
         error.value = mutationMessage(nextError)
@@ -180,6 +188,7 @@ export const ConnectionConfigurationPanel = defineSetupComponent<ConnectionConfi
             else next[field.name] = value
             config.value = next
           },
+          onDraftStateChange: (state: { dirty: boolean; invalid: boolean }) => { fieldDrafts.value = { ...fieldDrafts.value, [field.name]: state } },
         })}
         {field.description ? <small>{field.description}</small> : null}
       </label>

@@ -18,7 +18,10 @@ import {
   coreWorkbenchRoutes,
   type CoreWorkbenchActivityId,
 } from './routes.js'
+import '@vue-flow/core/dist/style.css'
 import './styles.css'
+import './graph-node-focus.css'
+import './readonly-graph-canvas.css'
 import type {
   WorkbenchConsoleClient,
   WorkbenchPageChromeProps,

@@ -48,7 +48,7 @@ export const AutomationComparisonPage = defineSetupComponent<WorkbenchPageProps>
     const right = target(rightChoice.value, version)
     // Only a fully pinned bookmark may start a comparison without the form's Compare action.
     const next = left && right && !(left.kind === 'draft' && right.kind === 'draft')
-      ? { automationId: automationId.value, left, right } : undefined
+      ? { automationId: automationId.value, left, right, ...(parseVersion(query.get('changeOffset')) ? { changeOffset: parseVersion(query.get('changeOffset'))! } : {}) } : undefined
     if (JSON.stringify(next) !== JSON.stringify(compared.value)) compared.value = next
   }, { immediate: true, flush: 'sync' })
   watch(() => metadata.status === 'READY' ? metadata.data : undefined, data => {
@@ -83,6 +83,7 @@ export const AutomationComparisonPage = defineSetupComponent<WorkbenchPageProps>
       query: { left: input.left.kind === 'draft' ? 'draft' : input.left.snapshotId,
         right: input.right.kind === 'draft' ? 'draft' : input.right.snapshotId,
         ...(draftIdentity?.kind === 'draft' ? { draftVersion: String(draftIdentity.version) } : {}),
+        ...(input.changeOffset ? { changeOffset: input.changeOffset } : {}),
       },
     })
   }
@@ -106,7 +107,7 @@ export const AutomationComparisonPage = defineSetupComponent<WorkbenchPageProps>
       const latest = await client.query<{ automationId: string }, WorkbenchAutomationComparisonState>(workbenchAutomationComparisonStateQueryRef, { automationId: current.automationId }, controller.signal)
       if (controller.signal.aborted || current !== compared.value || latest.automationId !== current.automationId) return
       refreshedDraftVersion.value = Math.max(latest.draftVersion, refreshedDraftVersion.value ?? latest.draftVersion)
-      commitTargets({ ...current,
+      commitTargets({ ...current, changeOffset: 0,
         left: current.left.kind === 'draft' ? { kind: 'draft', version: latest.draftVersion } : current.left,
         right: current.right.kind === 'draft' ? { kind: 'draft', version: latest.draftVersion } : current.right,
       })
@@ -157,6 +158,15 @@ export const AutomationComparisonPage = defineSetupComponent<WorkbenchPageProps>
           </article>)}
         </div>
         <p>{t('workbench.comparison.hidden')}</p>
+        <nav class="comparison-pagination" aria-label={t('workbench.graph.changePages')}>
+          <span>{t('workbench.graph.changeCount', { count: comparison.data.totalChanges ?? comparison.data.changes.length })}</span>
+          <Button type="button" disabled={!compared.value?.changeOffset || stale.value} onClick={() => {
+            if (compared.value) commitTargets({ ...compared.value, changeOffset: Math.max(0, (compared.value.changeOffset ?? 0) - 250) })
+          }}>{t('workbench.graph.previousChanges')}</Button>
+          <Button type="button" disabled={comparison.data.nextChangeOffset === undefined || stale.value} onClick={() => {
+            if (compared.value && comparison.status === 'READY' && comparison.data.nextChangeOffset !== undefined) commitTargets({ ...compared.value, changeOffset: comparison.data.nextChangeOffset })
+          }}>{t('workbench.graph.nextChanges')}</Button>
+        </nav>
         {!comparison.data.changes.length ? <p role="status">{t('workbench.comparison.noChanges')}</p> : categories.map(category => {
           if (comparison.status !== 'READY') return null
           const changes = comparison.data.changes.filter(change => change.category === category)

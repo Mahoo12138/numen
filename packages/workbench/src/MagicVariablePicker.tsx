@@ -87,6 +87,7 @@ export const MagicVariablePicker = defineSetupComponent<MagicVariablePickerProps
                       <code>{item.path}</code>
                       {item.description ? <small class="magic-variable-description">{item.description}</small> : null}
                       {item.unavailableReason ? <small class="magic-variable-unavailable">{t(`workbench.inspector.unavailable.${item.unavailableReason}`)}</small> : null}
+                      {item.warning ? <small class="magic-variable-unavailable">{t(`workbench.inspector.warning.${item.warning}`)}</small> : null}
                       <span class="magic-variable-meta">
                         <em>{item.valueType}</em>
                         {item.conversion ? <small>{t('workbench.convertToText')}</small> : null}

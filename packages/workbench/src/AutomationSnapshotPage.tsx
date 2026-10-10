@@ -7,11 +7,14 @@ import { coreWorkbenchRoutes, coreWorkbenchRunFlowRoute } from './routes.js'
 import type { WorkbenchPageProps } from './types.js'
 import { useConsoleQuery, type ConsoleQueryState } from './useConsoleQuery.js'
 import { defineSetupComponent } from './vue-component.js'
+import { SourceNodeLocator } from './SourceNodeLocator.js'
 
 export const AutomationSnapshotPage = defineSetupComponent<WorkbenchPageProps>('AutomationSnapshotPage', ['consoleClient', 'schemaUI', 'navigation'], props => {
+  const sourceFilter = ref<string>()
   const input = computed<WorkbenchAutomationSnapshotQueryInput>(() => ({
     automationId: props.navigation?.route.parameters.automationId ?? '',
     snapshotId: props.navigation?.route.parameters.snapshotId ?? '',
+    ...(sourceFilter.value ? { sourceNodeId: sourceFilter.value } : {}),
   }))
   // Immutable IDs stay fixed across Draft edits and plugin invalidation. Refresh is explicit.
   const [state, reload] = useConsoleQuery<WorkbenchAutomationSnapshotQueryInput, WorkbenchAutomationSnapshotDetail | null>(
@@ -19,7 +22,7 @@ export const AutomationSnapshotPage = defineSetupComponent<WorkbenchPageProps>('
     workbenchAutomationSnapshotQueryRef, input,
   )
   const selectedNode = ref<string>()
-  watch(input, () => { selectedNode.value = undefined }, { flush: 'sync' })
+  watch(() => input.value.snapshotId, () => { selectedNode.value = undefined; sourceFilter.value = undefined }, { flush: 'sync' })
   const locateNode = (nodeId: string) => {
     const snapshotId = input.value.snapshotId
     selectedNode.value = nodeId
@@ -45,6 +48,7 @@ export const AutomationSnapshotPage = defineSetupComponent<WorkbenchPageProps>('
         <Button type="button" variant="secondary" onClick={reload} disabled={state.status === 'LOADING' || state.status === 'DISABLED'}>{t('workbench.management.refresh')}</Button>
       </div>
     </header>
+    <SourceNodeLocator key={input.value.snapshotId} onLocate={id => { sourceFilter.value = id; selectedNode.value = id }} />
     <AutomationSnapshotContent state={state} onReload={reload} onSelectNode={locateNode} selectedNodeId={selectedNode.value} />
   </main>
 })

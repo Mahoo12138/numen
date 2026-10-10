@@ -1,0 +1,25 @@
+.graph-node-focus { height:100%; min-height:0; display:flex; flex-direction:column; background:var(--wb-surface,#fff); padding:20px; overflow:auto; }
+.graph-workspace > .graph-node-focus { position:absolute; inset:0; z-index:8; height:auto; }
+.graph-node-focus > header { display:flex; align-items:center; justify-content:space-between; gap:16px; }
+.graph-node-focus h2,.graph-node-focus h3,.graph-node-focus h4 { margin:0 0 8px; }
+.graph-node-focus code { overflow-wrap:anywhere; font-size:11px; }
+.focus-history { display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:14px 0; border-bottom:1px solid var(--wb-border,#e2e8f0); }
+.focus-history > .select-menu { max-width:230px; }
+.focus-history > p { flex-basis:100%; margin:0; color:var(--wb-muted,#64748b); font-size:12px; overflow-wrap:anywhere; }
+.focus-columns { display:grid; grid-template-columns:minmax(0,1fr) minmax(280px,1.4fr) minmax(0,1fr); gap:16px; min-height:0; flex:1; padding-top:16px; }
+.focus-columns > section { min-width:0; overflow:auto; }
+.focus-input,.focus-output { padding:0 10px; font-size:12px; }
+.focus-source { border-bottom:1px solid var(--wb-border,#e2e8f0); padding:14px 0; }
+.focus-field { display:flex; flex-wrap:wrap; gap:6px; align-items:center; padding:10px 0; }
+.focus-field > code,.focus-field > small { flex-basis:100%; }
+.focus-field small { color:var(--wb-muted,#64748b); }
+.focus-execution-value pre { max-height:280px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; background:#f6f8fb; padding:10px; }
+.focus-parameters .inspector { position:static; width:auto; height:auto; border:0; display:block; transform:none; box-shadow:none; }
+.focus-parameters .inspector-header { display:none; }
+.focus-tabs { display:none; }
+.automation-connection-overlay { position:fixed; inset:0; z-index:90; background:rgb(15 23 42 / 25%); display:flex; justify-content:flex-end; }
+.automation-connection-overlay .connection-config-panel { position:relative; width:min(480px,100%); height:100%; overflow:auto; background:white; }
+.automation-connection-return-message { position:fixed; bottom:32px; right:16px; z-index:80; max-width:min(440px,calc(100vw - 32px)); padding:10px 16px; background:white; border:1px solid #d9e0eb; box-shadow:0 3px 12px #15233d22; color:var(--wb-muted,#64748b); font-size:12px; }
+.connection-binding-actions { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+@media (max-width:1000px) { .focus-tabs { display:flex; gap:8px; padding-top:12px; } .focus-columns { display:block; } .focus-columns > section { display:none; } .focus-columns[data-tab="input"] > .focus-input,.focus-columns[data-tab="parameters"] > .focus-parameters,.focus-columns[data-tab="output"] > .focus-output { display:block; } }
+@media (max-width:640px) { .graph-node-focus { padding:12px; } .focus-history > .select-menu { max-width:100%; } .focus-history > strong { flex-basis:100%; } }

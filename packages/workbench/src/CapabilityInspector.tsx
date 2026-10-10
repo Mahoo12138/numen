@@ -1,4 +1,4 @@
-import { SelectMenu } from '@numenjs/components'
+import { Button, SelectMenu } from '@numenjs/components'
 import { diagnosticText, statusLabel, t } from './i18n.js'
 import type { AutomationSource, CapabilitySource, CompileDiagnostic, NumenValue, TriggerSource, ValueExpr } from '@numenjs/core'
 import type { SchemaUIResolver } from '@numenjs/webui/schema-ui'
@@ -58,6 +58,7 @@ export function CapabilityConnectionFields({
   problems,
   canEdit,
   onChange,
+  onConfigure,
 }: {
   nodeId: string
   slots: WorkbenchAutomationConnectionSlot[]
@@ -66,6 +67,7 @@ export function CapabilityConnectionFields({
   problems: CompileDiagnostic[]
   canEdit: boolean
   onChange?(nodeId: string, slotName: string, connectionId?: string): void
+  onConfigure?(nodeId: string, slotName: string, connectionId?: string): void
 }) {
   return <>{slots.map(slot => {
     const options = compatibleConnections(slot, connections)
@@ -75,7 +77,7 @@ export function CapabilityConnectionFields({
     const problem = problems.find(item => item.source?.fieldPath === `connections.${slot.name}`)
     const problemId = `${nodeId}-connection-${slot.name}-problem`
     return (
-      <div class="connection-binding-field" data-invalid={!!problem} key={slot.name}>
+      <div class="connection-binding-field" data-invalid={!!problem} data-connection-node={nodeId} data-connection-slot={slot.name} key={slot.name}>
         <label>
           <span>{slot.name}{slot.required ? <em>{t('workbench.required')}</em> : null}</span>
           <SelectMenu aria-describedby={problem ? problemId : undefined} aria-invalid={!!problem}
@@ -93,6 +95,10 @@ export function CapabilityConnectionFields({
         </p>
         {selectedConnection && (!selectedConnection.enabled || !selectedConnection.adapterAvailable || selectedConnection.status !== 'READY') ? <p class="inspector-field-error" role="status">{t('workbench.inspector.connectionUnavailable', { name: selectedConnection.name, reason: !selectedConnection.enabled ? t('workbench.disabled') : !selectedConnection.adapterAvailable ? t('workbench.inspector.adapterUnavailable') : statusLabel(selectedConnection.status) })}</p> : null}
         {problem ? <p class="inspector-field-error" id={problemId}>{diagnosticText(problem)}</p> : null}
+        {onConfigure ? <div class="connection-binding-actions">
+          <Button type="button" disabled={!canEdit} onClick={() => onConfigure(nodeId, slot.name)}>{t('workbench.focus.createConnection')}</Button>
+          {selected ? <Button type="button" disabled={!canEdit} onClick={() => onConfigure(nodeId, slot.name, selected)}>{t('workbench.focus.repairConnection')}</Button> : null}
+        </div> : null}
       </div>
     )
   })}</>

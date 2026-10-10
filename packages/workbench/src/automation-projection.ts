@@ -1,6 +1,6 @@
 import { interpolate, type MessageParams } from '@numenjs/i18n'
 import { enUS } from './locales/en-US.js'
-import type { AutomationSource, CompileDiagnostic, ControlSource, ValueExpr } from '@numenjs/core'
+import type { AutomationSource, CompileDiagnostic, ControlSource, GraphNodeSource, ValueExpr } from '@numenjs/core'
 import { Boxes, Clock3, GitBranch, Network, Play, Radio, Repeat2, Zap } from '@lucide/vue'
 import type { AutomationStep } from './model.js'
 
@@ -59,13 +59,23 @@ function step(
 }
 
 function projectControl(
-  source: ControlSource,
+  source: ControlSource | GraphNodeSource,
   depth: number,
   output: AutomationStep[],
   capabilityTitles: ReadonlyMap<string, string>,
   t: Translate,
 ): void {
   switch (source.type) {
+    case 'graph':
+      output.push(step(source.id, 'graph', t('workbench.graph.title'), t('workbench.graph.explicitStart'), Network, depth))
+      for (const node of source.nodes) projectControl(node, depth + 1, output, capabilityTitles, t)
+      break
+    case 'condition':
+      output.push(step(source.id, 'condition', t('workbench.graph.condition'), t('workbench.graph.conditionPorts'), GitBranch, depth))
+      break
+    case 'merge':
+      output.push(step(source.id, 'merge', t('workbench.graph.merge'), t(`workbench.graph.merge.${source.mode}`), Network, depth))
+      break
     case 'block':
       output.push(step(
         source.id,

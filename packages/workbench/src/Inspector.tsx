@@ -4,7 +4,9 @@ import type { AutomationSource, CompileDiagnostic, InvocationPolicy, NumenValue,
 import type { SchemaUIResolver } from '@numenjs/webui/schema-ui'
 import { ChevronDown, X } from '@lucide/vue'
 import { CapabilityConnectionFields, CapabilityInputFields, TriggerConfigurationFields } from './CapabilityInspector.js'
-import { findAutomationControl, findAutomationTrigger } from './automation-source-editing.js'
+import { findAutomationNode, findAutomationTrigger, type AutomationSourceCommand } from './automation-source-editing.js'
+import { GraphNodeConfiguration } from './GraphNodeConfiguration.js'
+import { graphContainingNode } from './graph-node-focus-model.js'
 import type {
   WorkbenchAutomationInsertCatalog,
   WorkbenchAutomationInputField,
@@ -37,11 +39,14 @@ export interface InspectorProps {
   schemaUI?: SchemaUIResolver
   onInvocationPolicyChange?(nodeId: string, policy?: InvocationPolicy): void
   onCapabilityConnectionChange?(nodeId: string, slotName: string, connectionId?: string): void
+  onConfigureConnection?(nodeId: string, slotName: string, connectionId?: string): void
+  onFocusNode?(nodeId: string): boolean
   onExtensionInputChange?(nodeId: string, fieldName: string, expression?: ValueExpr): void
   onCapabilityInputChange?(nodeId: string, fieldName: string, expression?: ValueExpr): void
   onTriggerConfigChange?(nodeId: string, fieldName: string, value?: NumenValue): void
   onControlExpressionChange?(nodeId: string, field: 'condition' | 'items', expression: ValueExpr): void
   onWaitExpressionChange?(nodeId: string, field: 'durationMs' | 'until', expression: ValueExpr): void
+  onSourceCommand?(command: AutomationSourceCommand): boolean
   onClose(): void
 }
 
@@ -140,17 +145,20 @@ export function Inspector({
   schemaUI,
   onInvocationPolicyChange,
   onCapabilityConnectionChange,
+  onConfigureConnection,
+  onFocusNode,
   onCapabilityInputChange,
   onTriggerConfigChange,
   onExtensionInputChange,
   onControlExpressionChange,
   onWaitExpressionChange,
+  onSourceCommand,
   onClose,
 }: InspectorProps) {
   const projectedSteps = steps ?? automationSteps
   const step = projectedSteps.find(item => item.id === activeStepId) ?? projectedSteps[0]
   const isNotification = !steps && step?.id === 'notification'
-  const control = source && step?.sourceId ? findAutomationControl(source, step.sourceId) : undefined
+  const control = source && step?.sourceId ? findAutomationNode(source, step.sourceId) : undefined
   const trigger = source && step?.sourceId ? findAutomationTrigger(source, step.sourceId) : undefined
   const stepProblems = step?.sourceId
     ? problems.filter(problem => problem.source?.nodeId === step.sourceId)
@@ -187,6 +195,7 @@ export function Inspector({
     <aside class="inspector" data-open={open} aria-label={t('workbench.inspector')}>
       <header class="inspector-header">
         <div><span>{step ? t('workbench.stepValue0', { value0: projectedSteps.indexOf(step) + 1 }) : t('workbench.noSelection')}</span><h2>{step?.label ?? t('workbench.inspector')}</h2></div>
+        {step?.sourceId && onFocusNode ? <Button type="button" onClick={() => onFocusNode(step.sourceId!)}>{t('workbench.focus.open')}</Button> : null}
         <Button variant="ghost" size="icon" aria-label={t('workbench.closeInspector2')} class="icon-button inspector-close" onClick={onClose} type="button"><X size={17} /></Button>
       </header>
       {!step ? (
@@ -216,6 +225,7 @@ export function Inspector({
                 connections={catalog?.connections ?? []}
                 nodeId={step.sourceId}
                 {...(onCapabilityConnectionChange ? { onChange: onCapabilityConnectionChange } : {})}
+                {...(onConfigureConnection ? { onConfigure: onConfigureConnection } : {})}
                 problems={stepProblems}
                 slots={triggerDefinition.connectionRequirements}
               />
@@ -244,6 +254,10 @@ export function Inspector({
             {stepProblems.map(problem => <p key={`${problem.code}:${problem.source?.fieldPath ?? ''}`}>{diagnosticText(problem)}</p>)}
           </div></InspectorGroup> : null}
         </>
+      ) : source && (control?.type === 'graph' || control?.type === 'condition' || control?.type === 'merge' || (control?.type === 'foreach' && control.body.type === 'graph')) ? (
+        <GraphNodeConfiguration key={control.id} node={control as import('@numenjs/core').GraphSource | import('@numenjs/core').GraphConditionSource | import('@numenjs/core').GraphMergeSource | import('@numenjs/core').GraphForEachSource} source={source} graphId={graphContainingNode(source, control.id)?.id ?? source.flow.id} canEdit={canEdit} problems={stepProblems}
+          {...(schemaUI ? { schemaUI } : {})}
+          {...(variableCatalog ? { variableCatalog } : {})} {...(onSourceCommand ? { onCommand: onSourceCommand } : {})} />
       ) : control?.type === 'extension' && step.sourceId ? (
         <InspectorGroup title={t('workbench.configuration')}>
           {extensionDefinition ? <CapabilityInputFields
@@ -321,6 +335,7 @@ export function Inspector({
                 connections={catalog?.connections ?? []}
                 nodeId={step.sourceId}
                 {...(onCapabilityConnectionChange ? { onChange: onCapabilityConnectionChange } : {})}
+                {...(onConfigureConnection ? { onConfigure: onConfigureConnection } : {})}
                 problems={stepProblems}
                 slots={capabilityDefinition.connectionRequirements}
               />

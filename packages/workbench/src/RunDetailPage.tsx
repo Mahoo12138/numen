@@ -24,6 +24,7 @@ import {
 } from './routes.js'
 import type { WorkbenchPageProps } from './types.js'
 import { useConsoleQuery, type ConsoleQueryState } from './useConsoleQuery.js'
+import { SourceNodeLocator } from './SourceNodeLocator.js'
 import { defineSetupComponent } from './vue-component.js'
 
 const formatTime = formatDateTime
@@ -44,12 +45,14 @@ export const RunDetailPage = defineSetupComponent<WorkbenchPageProps>(
     const position = reactive<RunDetailPosition>({ executionHistory: [], eventHistory: [] })
     const runId = computed(() => props.navigation?.route.parameters.id ?? '')
     const sourceFilter = ref<string>()
+    const flowFilter = ref<string>()
     const executionFilter = ref<string>()
     const selectedSourceNode = ref<string>()
     const inspection = useExecutionData(() => props.consoleClient, runId)
     let inspectionTrigger: HTMLElement | undefined
     watch(runId, () => {
       sourceFilter.value = undefined
+      flowFilter.value = undefined
       executionFilter.value = undefined
       selectedSourceNode.value = undefined
       delete position.executionCursor
@@ -60,6 +63,7 @@ export const RunDetailPage = defineSetupComponent<WorkbenchPageProps>(
     const input = computed<WorkbenchRunDetailQueryInput>(() => ({
       runId: runId.value,
       ...(sourceFilter.value ? { sourceNodeId: sourceFilter.value } : {}),
+      ...(flowFilter.value ? { flowNodeId: flowFilter.value } : {}),
       ...(executionFilter.value ? { executionId: executionFilter.value } : {}),
       executionLimit: 25,
       ...(position.executionCursor ? { executionCursor: position.executionCursor } : {}),
@@ -121,9 +125,15 @@ export const RunDetailPage = defineSetupComponent<WorkbenchPageProps>(
       props.navigation?.navigate(route, { parameters: { id: runId.value }, query: { from: new URLSearchParams(props.navigation.route.search).get('from') ?? undefined } })
     }
     const clearExecutionPage = () => { delete position.executionCursor; position.executionHistory.splice(0) }
-    const selectSource = (id: string) => {
+    const selectSource = (id: string, pointRead = false) => {
       inspection.close()
+      const visible = (node: WorkbenchRunDetail['flow']['root']): boolean => node.id === id
+        || node.children.some(visible) || !!node.graph?.nodes.some(visible)
+      if (pointRead || detail.status !== 'READY' || !detail.data || !visible(detail.data.flow.root)) flowFilter.value = id
       selectedSourceNode.value = id
+      sourceFilter.value = id
+      executionFilter.value = undefined
+      clearExecutionPage()
       selectView('flow')
     }
     const filterExecutions = (sourceNodeId?: string, executionId?: string) => {
@@ -144,6 +154,9 @@ export const RunDetailPage = defineSetupComponent<WorkbenchPageProps>(
       void nextTick(() => {
         const target = Array.from(document.querySelectorAll<HTMLElement>('[data-run-source-id]'))
           .find(element => element.dataset.runSourceId === selectedSourceNode.value)
+        for (let parent = target?.parentElement; parent; parent = parent.parentElement) {
+          if (parent instanceof HTMLDetailsElement) parent.open = true
+        }
         target?.focus()
         target?.scrollIntoView({ block: 'nearest' })
       })
@@ -183,6 +196,10 @@ export const RunDetailPage = defineSetupComponent<WorkbenchPageProps>(
     return () => (
       <main class="main-workbench core-page run-detail-page">
         <RunDetailHeader onSnapshot={() => { if (detail.status === 'READY' && detail.data) props.navigation?.navigate(coreWorkbenchAutomationSnapshotRoute, { parameters: { automationId: detail.data.run.automationId, snapshotId: detail.data.run.revisionId }, query: { fromRun: detail.data.run.id } }) }} onAutomation={() => { if (detail.status === 'READY' && detail.data) props.navigation?.navigate(coreWorkbenchRoutes.automations, { query: { automation: detail.data.run.automationId } }) }} onLogs={() => props.navigation?.navigate(coreWorkbenchRoutes.system, { query: { runId: runId.value, from: new URLSearchParams(props.navigation?.route.search ?? '').get('from') ?? undefined } })} cancellation={cancellation} onBack={openRuns} onCancel={cancelRun} state={detail} />
+        <SourceNodeLocator key={runId.value} onLocate={id => {
+          if (id) selectSource(id, true)
+          else { sourceFilter.value = undefined; flowFilter.value = undefined; executionFilter.value = undefined; selectedSourceNode.value = undefined; clearExecutionPage() }
+        }} />
         <ExecutionDataPanel state={inspection.state.value} onClose={closeInspection} onLocate={selectSource} />
         <RunDetailContent
           activeView={activeView.value}
@@ -437,6 +454,7 @@ function ExecutionRecord({ execution, onInspect, onLocate, ownership, runId }: {
       </header>
       <h3>{execution.title}</h3>
       <code>{execution.instructionId}</code>
+      {execution.sampleId ? <p class="execution-sample-label">{t('workbench.localTest.sampled')} · <code>{execution.sampleId}</code></p> : null}
       <div class="run-execution-actions">
         {onInspect ? <Button type="button" onClick={() => onInspect(execution.id)}>{t('workbench.runData.inspect')}</Button> : null}
         {onLocate && execution.sourceNodeId ? <Button type="button" onClick={() => onLocate(execution.sourceNodeId!)}>{t('workbench.runData.locate')}</Button> : null}

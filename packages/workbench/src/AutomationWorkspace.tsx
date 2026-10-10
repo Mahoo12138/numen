@@ -1,4 +1,11 @@
 import { AutomationInputs } from './AutomationInputs.js'
+import { GraphNodeFocus } from './GraphNodeFocus.js'
+import { GraphConversionPanel } from './GraphConversionPanel.js'
+import { GraphLocalTestPanel } from './GraphLocalTestPanel.js'
+import { ConnectionConfigurationPanel } from './ConnectionConfigurationPanel.js'
+import { captureConnectionReturn, connectionReturnAdapters, connectionReturnError, type AutomationConnectionReturn } from './automation-connection-return.js'
+import { allocateGraphEdgeId, findAutomationNode } from './graph-source-editing.js'
+import { graphContainingNode } from './graph-node-focus-model.js'
 import { AutomationRestorationPanel } from './AutomationRestorationPanel.js'
 import { useAutomationRestoration } from './useAutomationRestoration.js'
 import { localizeCatalogItem, useWorkbenchI18n } from './i18n.js'
@@ -18,6 +25,7 @@ import {
   workbenchAutomationInsertCatalogQueryRef,
   workbenchAutomationVariableCatalogQueryRef,
   workbenchAutomationsIndexQueryRef,
+  workbenchConnectionsIndexQueryRef,
   workbenchArchiveAutomationActionRef,
   workbenchCreateAutomationActionRef,
   workbenchRemoveArchivedAutomationActionRef,
@@ -33,8 +41,9 @@ import {
   type WorkbenchRemoveArchivedAutomationInput,
   type WorkbenchRestoreAutomationInput,
   type WorkbenchStartManualRunResult,
+  type WorkbenchConnectionsIndex,
 } from './contracts.js'
-import { Inspector, type InspectorFieldFocus } from './Inspector.js'
+import { Inspector, type InspectorFieldFocus, type InspectorProps } from './Inspector.js'
 import type { WorkbenchPageChromeProps } from './types.js'
 import { useAutomationActivation } from './useAutomationActivation.js'
 import { useAutomationDraftDocument } from './useAutomationDraftDocument.js'
@@ -43,6 +52,7 @@ import { defineSetupComponent } from './vue-component.js'
 import { automationDocumentNeedsProtection, createAutomationInputSession, provideAutomationInputSession } from './automation-input-session.js'
 import { useCommandRegistration } from './commands.js'
 import { automationRelativeInsertTarget, automationStepEditOptions } from './automation-source-editing.js'
+import { useWorkbenchLayout } from './workbench-layout.js'
 
 const emptyQueryInput: Record<string, never> = {}
 
@@ -56,6 +66,7 @@ export function useAutomationWorkspace(): ComputedRef<AutomationEditorProps> {
 
 export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProps>('AutomationPageChrome', ['page', 'consoleClient', 'schemaUI', 'navigation', 'inspectorOpen', 'onInspectorOpenChange'], props => {
   const { t } = useWorkbenchI18n()
+  const layout = useWorkbenchLayout()
   const inputs = createAutomationInputSession(() => globalThis.confirm(t('workbench.document.discardInputs')))
   provideAutomationInputSession(inputs)
   const inputBlocked = ref(false)
@@ -78,6 +89,13 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
   const lifecycleError = ref<string>()
   const requestedStepId = ref('notification')
   const fieldFocus = ref<InspectorFieldFocus>()
+  const focusedNodeId = ref<string>()
+  const connectionProtection = ref(false)
+  const connectionReturn = ref<{ ticket: AutomationConnectionReturn; data?: WorkbenchConnectionsIndex; connectionId?: string; request: number }>()
+  const connectionReturnMessage = ref<string>()
+  let connectionReturnRequest = 0
+  let connectionReturnController: AbortController | undefined
+  onScopeDispose(() => { connectionReturnController?.abort(); connectionReturn.value = undefined })
   const creatingAutomation = ref(false)
   const createAutomationError = ref<string>()
   let createAutomationController: AbortController | undefined
@@ -91,7 +109,7 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
     indexInput,
     'automations',
   )
-  const [insertCatalogState, reloadInsertCatalog] = useConsoleQuery<Record<string, never>, WorkbenchAutomationInsertCatalog>(
+  const [insertCatalogState, reloadInsertCatalog, refreshInsertCatalog] = useConsoleQuery<Record<string, never>, WorkbenchAutomationInsertCatalog>(
     () => props.consoleClient,
     workbenchAutomationInsertCatalogQueryRef,
     emptyQueryInput,
@@ -217,7 +235,7 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
     detail,
     reloadDetail,
   })
-  const needsProtection = computed(() => draftTestProtection.value || automationDocumentNeedsProtection(authoring.savePhase, inputs.hasUncommitted, authoring.publishPending))
+  const needsProtection = computed(() => connectionProtection.value || draftTestProtection.value || automationDocumentNeedsProtection(authoring.savePhase, inputs.hasUncommitted, authoring.publishPending))
   function allowDocumentLeave(): boolean {
     blurCurrentInput()
     return !needsProtection.value || globalThis.confirm(t('workbench.document.leaveUnsaved'))
@@ -253,7 +271,7 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
     cleanup(() => window.removeEventListener('beforeunload', beforeUnload))
   }, { immediate: true, flush: 'sync' })
   watch(() => inputs.hasUncommitted, pending => { if (!pending) inputBlocked.value = false }, { flush: 'sync' })
-  watch(automationId, () => { inputs.clear(); inputBlocked.value = false; draftTestMounted.value = false; draftTestOpen.value = false; lastDraftTest.value = undefined; draftTestProtection.value = false })
+  watch(automationId, () => { inputs.clear(); inputBlocked.value = false; draftTestMounted.value = false; draftTestOpen.value = false; lastDraftTest.value = undefined; draftTestProtection.value = false; focusedNodeId.value = undefined; connectionReturn.value = undefined; connectionReturnController?.abort(); connectionProtection.value = false })
   const publishDraft = () => {
     blurCurrentInput()
     if (inputs.hasUncommitted) { inputBlocked.value = true; return }
@@ -367,13 +385,129 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
   const steps = computed(() => (
     effectiveDetail.value ? projectAutomationSteps(effectiveDetail.value.draft.source, authoring.problems, capabilityTitles.value, t) : []
   ))
+  watch(() => effectiveDetail.value?.draft.source.flow.type === 'graph' ? automationId.value : undefined, graphId => {
+    if (graphId && layout) layout.sidebarOpen.value = false
+  })
   const activeStepId = computed(() => {
     const selectedStep = steps.value.find(step => step.sourceId === authoring.selectedNodeId)
     return props.consoleClient
       ? selectedStep?.id ?? steps.value[0]?.id ?? ''
       : requestedStepId.value
   })
+  const focusNode = (nodeId: string): boolean => {
+    const source = authoring.document?.source
+    if (!source || source.flow.type !== 'graph' || !findAutomationNode(source, nodeId) || !allowInputChange()) return false
+    authoring.selectNode(nodeId, false)
+    focusedNodeId.value = nodeId
+    props.onInspectorOpenChange(false)
+    return true
+  }
+  const closeFocus = (): boolean => {
+    if (!allowInputChange()) return false
+    focusedNodeId.value = undefined
+    props.onInspectorOpenChange(true)
+    return true
+  }
+  watch(() => authoring.document?.source, source => {
+    if (focusedNodeId.value && (!source || !findAutomationNode(source, focusedNodeId.value))) focusedNodeId.value = undefined
+  })
+  const focusConnectionSlot = (ticket: AutomationConnectionReturn) => { void nextTick(() => {
+    const field = [...document.querySelectorAll<HTMLElement>('[data-connection-node]')].find(element => element.dataset.connectionNode === ticket.nodeId && element.dataset.connectionSlot === ticket.slotName)
+    field?.querySelector<HTMLElement>('button')?.focus()
+  }) }
+  const closeConnection = () => {
+    blurCurrentInput()
+    if (connectionProtection.value && !globalThis.confirm(t('workbench.document.discardInputs'))) return
+    if (connectionReturn.value) focusConnectionSlot(connectionReturn.value.ticket)
+    connectionReturnController?.abort(); connectionReturn.value = undefined; connectionProtection.value = false
+  }
+  const configureConnection = async (nodeId: string, slotName: string, connectionId?: string) => {
+    const document = authoring.document, client = props.consoleClient
+    if (!client || !document || !editable.value || !authoring.canEdit || localizedCatalogState.value.status !== 'READY' || !allowInputChange()) return
+    const ticket = captureConnectionReturn(document.automationId, document.source, localizedCatalogState.value.data, nodeId, slotName)
+    if (!ticket) return
+    connectionReturnController?.abort()
+    const controller = connectionReturnController = new AbortController(), request = ++connectionReturnRequest
+    connectionReturnMessage.value = undefined
+    connectionReturn.value = { ticket, request, ...(connectionId ? { connectionId } : {}) }
+    try {
+      const data = await client.query<Record<string, never>, WorkbenchConnectionsIndex>(workbenchConnectionsIndexQueryRef, {}, controller.signal)
+      if (!controller.signal.aborted && connectionReturn.value?.request === request) connectionReturn.value = { ...connectionReturn.value, data }
+    } catch { if (!controller.signal.aborted) { connectionReturnMessage.value = 'workbench.focus.return.failed'; connectionReturn.value = undefined } }
+  }
+  const returnFromConnection = async (request: number, connectionId?: string) => {
+    const current = connectionReturn.value, client = props.consoleClient
+    if (!current || current.request !== request || !client) return
+    connectionProtection.value = false
+    if (!connectionId) { connectionReturn.value = undefined; refreshInsertCatalog(); return }
+    const controller = connectionReturnController = new AbortController()
+    try {
+      const catalog = await client.query<Record<string, never>, WorkbenchAutomationInsertCatalog>(workbenchAutomationInsertCatalogQueryRef, {}, controller.signal)
+      if (controller.signal.aborted || connectionReturn.value?.request !== request) return
+      const document = authoring.document
+      const error = !document || !editable.value || !authoring.canEdit ? 'targetChanged' : connectionReturnError(current.ticket, document.automationId, document.source, catalog, catalog.connections.find(item => item.id === connectionId))
+      if (error) connectionReturnMessage.value = `workbench.focus.return.${error}`
+      else {
+        authoring.setCapabilityConnection(current.ticket.nodeId, current.ticket.slotName, connectionId)
+        authoring.selectNode(current.ticket.nodeId, false)
+        fieldFocus.value = { nodeId: current.ticket.nodeId, fieldPath: `connections.${current.ticket.slotName}`, request: Date.now() }
+        if (!focusedNodeId.value) props.onInspectorOpenChange(true)
+        focusConnectionSlot(current.ticket)
+      }
+      // Keep the mounted Slot through refresh; foreground reload removes the catalog and its focused field.
+      connectionReturn.value = undefined; connectionProtection.value = false; refreshInsertCatalog()
+    } catch { if (!controller.signal.aborted) { connectionReturnMessage.value = 'workbench.focus.return.failed'; connectionReturn.value = undefined; connectionProtection.value = false } }
+  }
+  const inspectorProperties = (): InspectorProps => ({
+    activeStepId: focusedNodeId.value ? `source:${focusedNodeId.value}` : activeStepId.value,
+    open: !!focusedNodeId.value || props.inspectorOpen, canEdit: editable.value && authoring.canEdit,
+    ...(localizedCatalogState.value.status === 'READY' ? { catalog: localizedCatalogState.value.data } : {}),
+    ...(variableCatalogState.status === 'READY' ? { variableCatalog: variableCatalogState.data } : {}),
+    ...(fieldFocus.value ? { fieldFocus: fieldFocus.value } : {}), problems: authoring.problems,
+    ...(authoring.document ? { source: authoring.document.source } : {}), ...(props.consoleClient ? { steps: steps.value } : {}),
+    onClose: () => props.onInspectorOpenChange(false),
+    onCapabilityConnectionChange: (nodeId, slotName, connectionId) => { if (editable.value) authoring.setCapabilityConnection(nodeId, slotName, connectionId) },
+    onConfigureConnection: (nodeId, slotName, connectionId) => { void configureConnection(nodeId, slotName, connectionId) },
+    ...(authoring.document?.source.flow.type === 'graph' && !focusedNodeId.value ? { onFocusNode: focusNode } : {}),
+    onCapabilityInputChange: (nodeId, fieldName, expression) => { if (editable.value) authoring.setCapabilityInput(nodeId, fieldName, expression) },
+    onInvocationPolicyChange: (nodeId, policy) => { if (editable.value) authoring.edit({ type: 'SET_INVOCATION_POLICY', nodeId, ...(policy ? { policy } : {}) }) },
+    onTriggerConfigChange: (nodeId, fieldName, value) => { if (editable.value) authoring.setTriggerConfig(nodeId, fieldName, value) },
+    onExtensionInputChange: (nodeId, fieldName, expression) => { if (editable.value) authoring.setExtensionInput(nodeId, fieldName, expression) },
+    onControlExpressionChange: (nodeId, field, expression) => { if (editable.value) authoring.setControlExpression(nodeId, field, expression) },
+    onWaitExpressionChange: (nodeId, field, expression) => { if (editable.value) authoring.setWaitExpression(nodeId, field, expression) },
+    onSourceCommand: command => editable.value && allowInputChange() && authoring.edit(command),
+    ...(props.schemaUI ? { schemaUI: props.schemaUI } : {}),
+  })
   const workspace = computed<AutomationEditorProps>(() => ({
+    onFocusNode: focusNode,
+    ...(focusedNodeId.value && authoring.document ? { nodeFocus: h(GraphNodeFocus, {
+      key: `${authoring.document.automationId}:${focusedNodeId.value}`, automationId: authoring.document.automationId, nodeId: focusedNodeId.value,
+      source: authoring.document.source, draftVersion: authoring.document.version, draftDirty: authoring.savePhase !== 'CLEAN', canEdit: editable.value && authoring.canEdit,
+      ...(props.consoleClient ? { client: props.consoleClient } : {}),
+      ...(localizedCatalogState.value.status === 'READY' ? { catalog: localizedCatalogState.value.data } : {}),
+      ...(variableCatalogState.status === 'READY' ? { variableCatalog: variableCatalogState.data } : {}),
+      parameters: h(Inspector, inspectorProperties()), onClose: closeFocus,
+      ...(props.consoleClient && authoring.document.source.flow.type === 'graph' && authoring.document.source.flow.nodes.some(node => node.id === focusedNodeId.value && node.type === 'capability') ? { localTest: h(GraphLocalTestPanel, {
+        client: props.consoleClient, automationId: authoring.document.automationId, nodeId: focusedNodeId.value, source: authoring.document.source,
+        draftVersion: authoring.document.version, canEdit: editable.value && authoring.canEdit, prepareDraft: prepareDraftTest,
+        onRun: (runId: string) => props.navigation?.navigate(coreWorkbenchRunFlowRoute, { parameters: { id: runId } }),
+      }) } : {}),
+      onReference: (fieldName: string, path: string, dependencyNodeId?: string) => {
+        if (!editable.value || !allowInputChange() || !focusedNodeId.value || !authoring.document) return false
+        const graph = graphContainingNode(authoring.document.source, focusedNodeId.value)
+        if (dependencyNodeId && graph) return authoring.edit({ type: 'GRAPH_SET_INPUT_WITH_DEPENDENCY', graphId: graph.id, nodeId: focusedNodeId.value, fieldName, expression: { type: 'ref', path }, edge: {
+          id: allocateGraphEdgeId(graph), from: { nodeId: dependencyNodeId, port: 'out' }, to: { nodeId: focusedNodeId.value, port: 'in' },
+        } })
+        return authoring.edit({ type: 'SET_CAPABILITY_INPUT', nodeId: focusedNodeId.value, fieldName, expression: { type: 'ref', path } })
+      },
+    }) } : {}),
+    ...(props.consoleClient && authoring.document && authoring.document.source.flow.type !== 'graph' ? { graphConversion: h(GraphConversionPanel, {
+      key: authoring.document.automationId, client: props.consoleClient, document: authoring.document, name: effectiveDetail.value?.automation.name ?? 'Automation', canConvert: editable.value && authoring.canEdit,
+      beforeConvert: allowInputChange, onOpenCopy: (id: string) => {
+        if (!allowDocumentLeave()) return
+        confirmedAutomationId.value = id; requestedAutomationId.value = id; activeTab.value = 'Editor'; refreshIndex()
+      },
+    }) } : {}),
     ...(automationId.value ? { automationId: automationId.value } : {}),
     activeStepId: activeStepId.value,
     activeTab: activeTab.value,
@@ -411,6 +545,10 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
         if (!allowInputChange() || (expectedSource && authoring.document?.source !== expectedSource)) return false
         return authoring.edit(command)
       },
+        onGraphPositions: (graphId, positions, expectedSource) => {
+          if (!allowInputChange() || (expectedSource && authoring.document?.source !== expectedSource)) return false
+          return authoring.setGraphPositions(positions, graphId, expectedSource)
+        },
         onCopyStep: authoring.copyStep, onCutStep: authoring.cutStep, onPaste: target => allowInputChange() && authoring.paste(target),
         onToggleCollapse: authoring.toggleCollapse,
         onSetCollapsed: authoring.setCollapsed,
@@ -497,8 +635,8 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
     const view = workspace.value
     const source = authoring.document?.source
     const selected = steps.value.find(step => step.id === activeStepId.value)?.sourceId
-    const options = source ? automationStepEditOptions(source, selected) : undefined
-    const target = source && selected ? automationRelativeInsertTarget(source, selected, 'after') : undefined
+    const options = source && source.flow.type !== 'graph' ? automationStepEditOptions(source, selected) : undefined
+    const target = source && source.flow.type !== 'graph' && selected ? automationRelativeInsertTarget(source, selected, 'after') : undefined
     const locked = !editable.value || !authoring.canEdit
     const reason = (allowed: boolean | undefined, fallback = 'workbench.commands.unavailableSelection') => locked ? t('workbench.commands.readOnly') : allowed ? undefined : t(fallback)
     const edit = (id: string, label: string, allowed: boolean | undefined, execute: () => void | boolean, shortcut?: import('./commands.js').CommandShortcut, fallback?: string) => ({
@@ -578,27 +716,23 @@ export const AutomationPageChrome = defineSetupComponent<WorkbenchPageChromeProp
         ...(props.schemaUI ? { schemaUI: props.schemaUI } : {}),
         ...(props.navigation ? { navigation: props.navigation } : {}),
       })}
-      <Inspector
-        key={automationId.value}
-        activeStepId={activeStepId.value}
-        canEdit={editable.value && authoring.canEdit}
-        {...(localizedCatalogState.value.status === 'READY' ? { catalog: localizedCatalogState.value.data } : {})}
-        {...(variableCatalogState.status === 'READY' ? { variableCatalog: variableCatalogState.data } : {})}
-        {...(fieldFocus.value ? { fieldFocus: fieldFocus.value } : {})}
-        open={props.inspectorOpen}
-        problems={authoring.problems}
-        {...(authoring.document ? { source: authoring.document.source } : {})}
-        {...(props.consoleClient ? { steps: steps.value } : {})}
-        onClose={() => props.onInspectorOpenChange(false)}
-        onCapabilityConnectionChange={(nodeId, slotName, connectionId) => { if (editable.value) authoring.setCapabilityConnection(nodeId, slotName, connectionId) }}
-        onCapabilityInputChange={(nodeId, fieldName, expression) => { if (editable.value) authoring.setCapabilityInput(nodeId, fieldName, expression) }}
-        onInvocationPolicyChange={(nodeId, policy) => { if (editable.value) authoring.edit({ type: 'SET_INVOCATION_POLICY', nodeId, ...(policy ? { policy } : {}) }) }}
-        onTriggerConfigChange={(nodeId, fieldName, value) => { if (editable.value) authoring.setTriggerConfig(nodeId, fieldName, value) }}
-        onExtensionInputChange={(nodeId, fieldName, expression) => { if (editable.value) authoring.setExtensionInput(nodeId, fieldName, expression) }}
-        onControlExpressionChange={(nodeId, field, expression) => { if (editable.value) authoring.setControlExpression(nodeId, field, expression) }}
-        onWaitExpressionChange={(nodeId, field, expression) => { if (editable.value) authoring.setWaitExpression(nodeId, field, expression) }}
-        {...(props.schemaUI ? { schemaUI: props.schemaUI } : {})}
-      />
+      {!focusedNodeId.value ? h(Inspector, { key: automationId.value ?? 'preview', ...inspectorProperties() }) : null}
+      {connectionReturnMessage.value ? <p class="automation-connection-return-message" role="status">{t(connectionReturnMessage.value)}</p> : null}
+      {connectionReturn.value ? <section class="automation-connection-overlay" role="dialog" aria-modal="true" aria-label={t('workbench.connectionConfiguration')}>
+        {connectionReturn.value.data && authoring.document && localizedCatalogState.value.status === 'READY'
+          ? connectionReturn.value.connectionId && !connectionReturn.value.data.items.some(item => item.id === connectionReturn.value!.connectionId)
+            ? <div class="connection-config-panel"><p role="alert">{t('workbench.focus.return.failed')}</p><Button onClick={closeConnection} type="button">{t('workbench.focus.connectionClose')}</Button></div>
+            : h(ConnectionConfigurationPanel, {
+              key: connectionReturn.value.request,
+              ...(props.consoleClient ? { client: props.consoleClient } : {}), ...(props.schemaUI ? { schemaUI: props.schemaUI } : {}),
+              adapters: connectionReturnAdapters(connectionReturn.value.ticket, authoring.document.source, localizedCatalogState.value.data, connectionReturn.value.data.adapters),
+              ...(connectionReturn.value.connectionId ? { connection: connectionReturn.value.data.items.find(item => item.id === connectionReturn.value!.connectionId)! } : {}),
+              onClose: closeConnection,
+              onChanged: ((request: number) => (id?: string) => returnFromConnection(request, id))(connectionReturn.value.request),
+              onProtectionChange: ((request: number) => (protect: boolean) => { if (connectionReturn.value?.request === request) connectionProtection.value = protect })(connectionReturn.value.request),
+            })
+          : <div class="connection-config-panel"><p role="status">{t('workbench.focus.connectionPending')}</p><Button onClick={closeConnection} type="button">{t('workbench.focus.connectionClose')}</Button></div>}
+      </section> : null}
       <AutomationPanel
         {...(props.consoleClient ? { consoleClient: props.consoleClient } : {})}
         {...(automationId.value ? { automationId: automationId.value } : {})}
